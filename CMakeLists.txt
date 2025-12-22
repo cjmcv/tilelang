@@ -204,6 +204,8 @@ elseif(USE_ROCM)
   list(APPEND TILE_LANG_INCLUDES ${ROCM_INCLUDE_DIRS})
 elseif(USE_CUDA)
   set(CMAKE_CUDA_STANDARD 17)
+  set(CUDA_CUDART_LIBRARY /usr/local/cuda-12.8/lib64/libcudart.so  CACHE FILEPATH "") # cjm !! hardcode
+
   find_package(CUDAToolkit REQUIRED)
   set(CMAKE_CUDA_COMPILER "${CUDAToolkit_BIN_DIR}/nvcc")
   add_compile_definitions("CUDA_MAJOR_VERSION=${CUDAToolkit_VERSION_MAJOR}")
