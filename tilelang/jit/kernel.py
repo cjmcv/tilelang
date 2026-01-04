@@ -60,7 +60,7 @@ class JITKernel(Generic[_P, _T]):
         self,
         func: PrimFunc = None,
         out_idx: list[int] | int = None,
-        execution_backend: Literal["tvm_ffi", "ctypes"] = "tvm_ffi",
+        execution_backend: Literal["tvm_ffi"] = "tvm_ffi",
         target: str | Target = "auto",
         target_host: str | Target = None,
         verbose: bool = False,
@@ -108,7 +108,6 @@ class JITKernel(Generic[_P, _T]):
         # Validate the execution backend.
         assert execution_backend in [
             "tvm_ffi",
-            "ctypes",
         ], f"Invalid execution backend. {execution_backend}"
         
         if from_database:
@@ -146,7 +145,7 @@ class JITKernel(Generic[_P, _T]):
         target: str | Target,
         target_host: str | Target,
         out_idx: list[int] | int,
-        execution_backend: Literal["tvm_ffi", "ctypes"],
+        execution_backend: Literal["tvm_ffi"],
         pass_configs: dict[str, Any] | None = None,
         compile_flags: list[str] | None = None,
     ):
@@ -341,7 +340,7 @@ class JITKernel(Generic[_P, _T]):
         str
             The source code of the compiled kernel function.
         """
-        if self.execution_backend in {"ctypes", "tvm_ffi"}:
+        if self.execution_backend in {"tvm_ffi"}:
             return self.adapter.get_kernel_source(kernel_only=kernel_only)
         return self.artifact.kernel_source
 
@@ -349,7 +348,7 @@ class JITKernel(Generic[_P, _T]):
         """
         Returns the source code of the host function.
         """
-        if self.execution_backend in {"ctypes", "tvm_ffi"}:
+        if self.execution_backend in {"tvm_ffi"}:
             return self.adapter.get_host_source()
         assert self.artifact.host_mod is not None, "host_mod is not available"
         return str(self.artifact.host_mod)

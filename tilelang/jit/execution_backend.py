@@ -29,7 +29,7 @@ def allowed_backends_for_target(target: Target, *, include_unavailable: bool = T
     include_unavailable: if False, this will filter out backends that are known
     to be unavailable at runtime (e.g., NVRTC without cuda-python installed).
     """
-    allowed = ["ctypes", "tvm_ffi"]
+    allowed = ["tvm_ffi"]
 
     return allowed
 
