@@ -405,18 +405,18 @@ def PersistThreadblock():
     return _ffi_api.PersistThreadblock()  # type: ignore
 
 
-def AlignDynamicSharedMemoryAllocations(align_bytes: int = 16):
-    """AlignDynamicSharedMemoryAllocations
+# def AlignDynamicSharedMemoryAllocations(align_bytes: int = 16):
+#     """AlignDynamicSharedMemoryAllocations
 
-    Parameters
-    ----------
-    align_bytes: int
-        The alignment bytes.
+#     Parameters
+#     ----------
+#     align_bytes: int
+#         The alignment bytes.
 
-    Returns
-    -------
-    """
-    return _ffi_api.AlignDynamicSharedMemoryAllocations(align_bytes)  # type: ignore
+#     Returns
+#     -------
+#     """
+#     return _ffi_api.AlignDynamicSharedMemoryAllocations(align_bytes)  # type: ignore
 
 
 def LowerSharedBarrier():

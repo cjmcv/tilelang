@@ -19,9 +19,9 @@ from tilelang.jit.adapter import (
     BaseKernelAdapter,
     CtypesKernelAdapter,
     CythonKernelAdapter,
-    CuTeDSLKernelAdapter,
+    # CuTeDSLKernelAdapter,
     TVMFFIKernelAdapter,
-    MetalKernelAdapter,
+    # MetalKernelAdapter,
 )
 from tilelang.profiler import Profiler, TensorSupplyType
 from tilelang.utils.target import determine_target
