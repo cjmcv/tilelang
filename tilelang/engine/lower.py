@@ -214,16 +214,16 @@ def device_codegen_without_compile(device_mod: tvm.IRModule, target: Target) -> 
     if target.kind.name == "cuda":
         global_func = "target.build.tilelang_" + ("cutedsl" if "cutedsl" in target.keys else "cuda") + "_without_compile"
         device_mod = tvm.ffi.get_global_func(global_func)(device_mod, target)
-    elif target.kind.name == "hip":
-        device_mod = tvm.ffi.get_global_func("target.build.tilelang_hip_without_compile")(device_mod, target)
-    elif target.kind.name == "c":
-        device_mod = tvm.ffi.get_global_func("target.build.tilelang_cpp")(device_mod, target)
-    elif target.kind.name == "llvm":
-        device_mod = tvm.ffi.get_global_func("target.build.llvm")(device_mod, target)
-    elif target.kind.name == "webgpu":
-        device_mod = tvm.ffi.get_global_func("target.build.webgpu")(device_mod, target)
-    elif target.kind.name == "metal":
-        device_mod = tvm.ffi.get_global_func("target.build.metal")(device_mod, target)
+    # elif target.kind.name == "hip":
+    #     device_mod = tvm.ffi.get_global_func("target.build.tilelang_hip_without_compile")(device_mod, target)
+    # elif target.kind.name == "c":
+    #     device_mod = tvm.ffi.get_global_func("target.build.tilelang_cpp")(device_mod, target)
+    # elif target.kind.name == "llvm":
+    #     device_mod = tvm.ffi.get_global_func("target.build.llvm")(device_mod, target)
+    # elif target.kind.name == "webgpu":
+    #     device_mod = tvm.ffi.get_global_func("target.build.webgpu")(device_mod, target)
+    # elif target.kind.name == "metal":
+    #     device_mod = tvm.ffi.get_global_func("target.build.metal")(device_mod, target)
     else:
         raise ValueError(f"Target {target.kind.name} is not supported")
 
