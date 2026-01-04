@@ -90,11 +90,11 @@ def compile(
 
     # Resolve execution backend (handles aliases, auto, validation per target)
     requested_backend = execution_backend
-    from tilelang.jit.execution_backend import resolve_execution_backend, allowed_backends_for_target
+    # from tilelang.jit.execution_backend import resolve_execution_backend, allowed_backends_for_target
 
-    execution_backend = resolve_execution_backend(requested_backend, target)
+    execution_backend = "tvm_ffi" # resolve_execution_backend(requested_backend, target)
     if verbose:
-        allowed_now = allowed_backends_for_target(target, include_unavailable=False)
+        allowed_now = ["tvm_ffi"] # allowed_backends_for_target(target, include_unavailable=False)
         logger.info(
             "Execution backend resolved -> '%s' (requested='%s', target='%s', allowed: %s)",
             execution_backend,

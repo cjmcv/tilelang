@@ -143,13 +143,13 @@ class KernelCache:
         """
         # Normalize target and resolve execution backend before proceeding
         from tilelang.utils.target import determine_target as _determine_target
-        from tilelang.jit.execution_backend import resolve_execution_backend, allowed_backends_for_target
+        # from tilelang.jit.execution_backend import resolve_execution_backend, allowed_backends_for_target
 
         norm_target = Target(_determine_target(target)) if isinstance(target, str) else target
         requested_backend = execution_backend
-        execution_backend = resolve_execution_backend(requested_backend, norm_target)
+        execution_backend = "tvm_ffi" # resolve_execution_backend(requested_backend, norm_target)
         if verbose:
-            allowed_now = allowed_backends_for_target(norm_target, include_unavailable=False)
+            allowed_now = ["tvm_ffi"] # allowed_backends_for_target(norm_target, include_unavailable=False)
             # Avoid duplicate logs when caller already resolved explicitly
             if requested_backend in (None, "auto") or requested_backend != execution_backend:
                 self.logger.info(

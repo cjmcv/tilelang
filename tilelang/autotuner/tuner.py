@@ -164,9 +164,9 @@ class AutoTuner:
         """
         # Normalize target to a concrete TVM Target and resolve execution backend
         t = Target(determine_target(target))
-        from tilelang.jit.execution_backend import resolve_execution_backend
+        # from tilelang.jit.execution_backend import resolve_execution_backend
 
-        resolved_backend = resolve_execution_backend(execution_backend, t)
+        resolved_backend = "tvm_ffi" # resolve_execution_backend(execution_backend, t)
 
         self.compile_args = CompileArgs(
             out_idx=out_idx,
