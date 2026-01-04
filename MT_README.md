@@ -26,7 +26,7 @@ ln -s $PWD/3rdparty/tvm/build/libtvm_runtime.so  build/tvm/
 ln -s $PWD/3rdparty/tvm/build/libtvm.so          build/tvm/
 ln -s $PWD/3rdparty/tvm/build/lib/libtvm_ffi.so  build/tvm/
 
-cmake -B build -G Ninja && cmake --build build --parallel 6
+cmake -B build -G Ninja && cmake --build build --parallel 8
 
 # 3. 使用
 export PYTHONPATH=/home/cjmcv/project/tilelang:$PYTHONPATH
