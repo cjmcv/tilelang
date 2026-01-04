@@ -19,7 +19,7 @@ def cached(
     *args,
     target: str | Target = "auto",
     target_host: str | Target = None,
-    execution_backend: Literal["auto", "tvm_ffi", "ctypes", "cython"] | None = "auto",
+    execution_backend: Literal["auto", "tvm_ffi", "ctypes"] | None = "auto",
     verbose: bool | None = False,
     pass_configs: dict | None = None,
     compile_flags: list[str] | str | None = None,

@@ -17,11 +17,7 @@ from tilelang import env
 from tilelang.engine.param import CompiledArtifact, KernelParam
 from tilelang.jit.adapter import (
     BaseKernelAdapter,
-    CtypesKernelAdapter,
-    CythonKernelAdapter,
-    # CuTeDSLKernelAdapter,
     TVMFFIKernelAdapter,
-    # MetalKernelAdapter,
 )
 from tilelang.profiler import Profiler, TensorSupplyType
 from tilelang.utils.target import determine_target
@@ -64,7 +60,7 @@ class JITKernel(Generic[_P, _T]):
         self,
         func: PrimFunc = None,
         out_idx: list[int] | int = None,
-        execution_backend: Literal["tvm_ffi", "ctypes", "cython"] = "tvm_ffi",
+        execution_backend: Literal["tvm_ffi", "ctypes"] = "tvm_ffi",
         target: str | Target = "auto",
         target_host: str | Target = None,
         verbose: bool = False,
@@ -113,13 +109,8 @@ class JITKernel(Generic[_P, _T]):
         assert execution_backend in [
             "tvm_ffi",
             "ctypes",
-            "cython",
         ], f"Invalid execution backend. {execution_backend}"
-        if execution_backend == "cython":
-            from tilelang.contrib.cc import get_cplus_compiler
-
-            assert get_cplus_compiler() is not None, "Cython backend requires a C++ compiler, please install or use other backends."
-
+        
         if from_database:
             return
 
@@ -155,7 +146,7 @@ class JITKernel(Generic[_P, _T]):
         target: str | Target,
         target_host: str | Target,
         out_idx: list[int] | int,
-        execution_backend: Literal["tvm_ffi", "ctypes", "cython"],
+        execution_backend: Literal["tvm_ffi", "ctypes"],
         pass_configs: dict[str, Any] | None = None,
         compile_flags: list[str] | None = None,
     ):
@@ -266,32 +257,6 @@ class JITKernel(Generic[_P, _T]):
                 pass_configs=pass_configs,
                 compile_flags=compile_flags,
             )
-        elif execution_backend == "ctypes":
-            adapter = CtypesKernelAdapter(
-                params=artifact.params,
-                result_idx=out_idx,
-                target=target,
-                func_or_mod=tilelang_func,
-                host_mod=artifact.host_mod,
-                device_mod=artifact.device_mod,
-                device_kernel_source=artifact.kernel_source,
-                verbose=verbose,
-                pass_configs=pass_configs,
-                compile_flags=compile_flags,
-            )
-        elif execution_backend == "cython":
-            adapter = CythonKernelAdapter(
-                params=artifact.params,
-                result_idx=out_idx,
-                target=target,
-                func_or_mod=tilelang_func,
-                host_mod=artifact.host_mod,
-                device_mod=artifact.device_mod,
-                device_kernel_source=artifact.kernel_source,
-                verbose=verbose,
-                pass_configs=pass_configs,
-                compile_flags=compile_flags,
-            )
         else:
             # Handle invalid backend.
             raise ValueError(f"Invalid execution backend: {execution_backend}")
@@ -325,29 +290,6 @@ class JITKernel(Generic[_P, _T]):
                 kernel_lib_path=kernel_lib_path,
                 pass_configs=pass_configs,
                 compile_flags=compile_flags,
-            )
-        elif execution_backend == "ctypes":
-            adapter = CtypesKernelAdapter.from_database(
-                params=params,
-                result_idx=result_idx,
-                target=target,
-                func_or_mod=func_or_mod,
-                host_kernel_source=host_kernel_source,
-                device_kernel_source=device_kernel_source,
-                kernel_lib_path=kernel_lib_path,
-                pass_configs=pass_configs,
-                compile_flags=compile_flags,
-            )
-        elif execution_backend == "cython":
-            adapter = CythonKernelAdapter.from_database(
-                params=params,
-                result_idx=result_idx,
-                target=target,
-                func_or_mod=func_or_mod,
-                host_kernel_source=host_kernel_source,
-                device_kernel_source=device_kernel_source,
-                kernel_lib_path=kernel_lib_path,
-                pass_configs=pass_configs,
             )
         else:
             # Handle invalid backend.
@@ -399,7 +341,7 @@ class JITKernel(Generic[_P, _T]):
         str
             The source code of the compiled kernel function.
         """
-        if self.execution_backend in {"ctypes", "cython", "tvm_ffi"}:
+        if self.execution_backend in {"ctypes", "tvm_ffi"}:
             return self.adapter.get_kernel_source(kernel_only=kernel_only)
         return self.artifact.kernel_source
 
@@ -407,7 +349,7 @@ class JITKernel(Generic[_P, _T]):
         """
         Returns the source code of the host function.
         """
-        if self.execution_backend in {"ctypes", "cython", "tvm_ffi"}:
+        if self.execution_backend in {"ctypes", "tvm_ffi"}:
             return self.adapter.get_host_source()
         assert self.artifact.host_mod is not None, "host_mod is not available"
         return str(self.artifact.host_mod)

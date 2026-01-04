@@ -49,7 +49,7 @@ _Ret = TypeVar("_Ret")
 def compile(
     func: PrimFunc[_KP, _T] = None,
     out_idx: list[int] | int | None = None,
-    execution_backend: Literal["auto", "tvm_ffi", "ctypes", "cython"] = "auto",
+    execution_backend: Literal["auto", "tvm_ffi", "ctypes"] = "auto",
     target: str | Target = "auto",
     target_host: str | Target | None = None,
     verbose: bool = False,
@@ -118,7 +118,7 @@ def compile(
 def par_compile(
     funcs: Iterable[PrimFunc[_KP, _T]],
     out_idx: list[int] | int | None = None,
-    execution_backend: Literal["auto", "tvm_ffi", "ctypes", "cython"] = "auto",
+    execution_backend: Literal["auto", "tvm_ffi", "ctypes"] = "auto",
     target: str | Target = "auto",
     target_host: str | Target | None = None,
     verbose: bool = False,
@@ -256,7 +256,7 @@ class JITImpl(Generic[_P, _KP, _T, _Ret]):
     """
 
     out_idx: list[int] | int | None
-    execution_backend: Literal["auto", "tvm_ffi", "ctypes", "cython"]
+    execution_backend: Literal["auto", "tvm_ffi", "ctypes"]
     target: str | Target
     target_host: str | Target
     verbose: bool
@@ -424,7 +424,7 @@ class JITImpl(Generic[_P, _KP, _T, _Ret]):
             return kernel
 
 
-ExecutionBackend = Literal["auto", "tvm_ffi", "ctypes", "cython"]
+ExecutionBackend = Literal["auto", "tvm_ffi", "ctypes"]
 
 
 @overload

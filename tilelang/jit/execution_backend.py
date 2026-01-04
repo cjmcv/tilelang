@@ -29,13 +29,7 @@ def allowed_backends_for_target(target: Target, *, include_unavailable: bool = T
     include_unavailable: if False, this will filter out backends that are known
     to be unavailable at runtime (e.g., NVRTC without cuda-python installed).
     """
-    kind = _target_kind(target)
-
-    if kind == "cuda":
-        allowed = ["tvm_ffi", "cython", "ctypes"]
-    else:
-        # Fallback: prefer portable hosts
-        allowed = ["cython", "ctypes", "tvm_ffi"]
+    allowed = ["ctypes", "tvm_ffi"]
 
     return allowed
 
@@ -73,14 +67,7 @@ def resolve_execution_backend(requested: str | None, target: Target) -> str:
 
     # Default selection for auto/None
     if req in (None, "auto"):
-        kind = _target_kind(target)
-        if kind == "cuda":
-            choice = "tvm_ffi"
-        else:
-            choice = "cython"
-        # If the chosen default is not available (very rare), fall back to first available
-        if choice not in allowed_avail and allowed_avail:
-            choice = allowed_avail[0]
+        choice = "tvm_ffi"
         return choice
 
     # Validate against allowed
