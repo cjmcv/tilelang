@@ -5,7 +5,7 @@ from .utils import (
 
 from .mma_macro_generator import (
     TensorCoreIntrinEmitter,  # noqa: F401
-    TensorCoreIntrinEmitterWithLadderTransform,  # noqa: F401
+    # TensorCoreIntrinEmitterWithLadderTransform,  # noqa: F401
 )
 
 from .mma_layout import get_swizzle_layout  # noqa: F401
