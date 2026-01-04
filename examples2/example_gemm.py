@@ -47,9 +47,9 @@ def main():
     # print("All check passed.")
 
     # Get CUDA Source
-    util.save_to_file(kernel.get_kernel_source(), "./gemm.cu")
-    # util.save_to_file(kernel.get_host_source(), "./gemm.cpp")
-    kernel.export_sources(kernel_path="./gen/gemm.cu", host_path="./gen/gemm.cpp")
+    util.save_to_file(kernel.get_kernel_source(), "./gen/gemm.cu")
+    util.save_to_file(kernel.get_host_source(), "./gen/gemm.cpp")
+    # kernel.export_sources(kernel_path="./gen/gemm.cu", host_path="./gen/gemm.cpp")
     
     # benchmark
     profiler = kernel.get_profiler()
