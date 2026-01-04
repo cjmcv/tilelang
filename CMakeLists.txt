@@ -111,11 +111,11 @@ set(PREBUILD_CYTHON ON)
 
 include(cmake/load_tvm.cmake)
 
-if(EXISTS ${TVM_SOURCE}/cmake/config.cmake)
-  include(${TVM_SOURCE}/cmake/config.cmake)
-else()
-  message(FATAL_ERROR "Nor tvm provided or submodule checkout-ed.")
-endif()
+# if(EXISTS ${TVM_SOURCE}/cmake/config.cmake)
+#   include(${TVM_SOURCE}/cmake/config.cmake)
+# else()
+#   message(FATAL_ERROR "Nor tvm provided or submodule checkout-ed.")
+# endif()
 # Re-apply TileLang's preferred backend settings after TVM's config may have
 # overridden the USE_* cache entries.
 foreach(BACKEND IN LISTS TILELANG_BACKENDS)
@@ -184,8 +184,11 @@ if(USE_Z3 AND USE_PYPI_Z3)
 endif()
 
 # Include tvm after configs have been populated
-add_subdirectory(${TVM_SOURCE} tvm EXCLUDE_FROM_ALL)
-
+# add_subdirectory(${TVM_SOURCE} tvm EXCLUDE_FROM_ALL)
+set(TVM_BUILD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/tvm/build")
+find_library(TVM_RUNTIME_LIB tvm_runtime PATHS ${TVM_BUILD_DIR} NO_DEFAULT_PATH REQUIRED)
+find_library(TVM_LIB tvm PATHS ${TVM_BUILD_DIR} NO_DEFAULT_PATH REQUIRED)
+             
 # Resolve compile warnings in tvm
 add_compile_definitions(DMLC_USE_LOGGING_LIBRARY=<tvm/runtime/logging.h>)
 
@@ -202,8 +205,8 @@ target_include_directories(tilelang_objs PRIVATE ${TILE_LANG_INCLUDES})
 
 add_library(tilelang SHARED $<TARGET_OBJECTS:tilelang_objs>)
 add_library(tilelang_module SHARED $<TARGET_OBJECTS:tilelang_objs>)
-target_link_libraries(tilelang PUBLIC tvm_runtime tvm)
-target_link_libraries(tilelang_module PUBLIC tvm)
+target_link_libraries(tilelang PUBLIC ${TVM_RUNTIME_LIB} ${TVM_LIB})
+target_link_libraries(tilelang_module PUBLIC ${TVM_LIB})
 
 # Place dev build outputs under build/lib for consistency
 set_target_properties(tilelang PROPERTIES
@@ -249,19 +252,19 @@ install(TARGETS tilelang_cython_wrapper
         RUNTIME DESTINATION tilelang/lib
         ARCHIVE DESTINATION tilelang/lib)
 
-# add python z3 lib path to rpath for running tests and dev in current folder
-if(USE_Z3 AND USE_PYPI_Z3)
-  set_property(TARGET tvm APPEND PROPERTY BUILD_RPATH ${Python3_SITELIB}/z3/lib)
-  set_property(TARGET tvm APPEND PROPERTY BUILD_RPATH ${Python3_SITELIB}/z3/bin)
-endif()
+# # add python z3 lib path to rpath for running tests and dev in current folder
+# if(USE_Z3 AND USE_PYPI_Z3)
+#   set_property(TARGET tvm APPEND PROPERTY BUILD_RPATH ${Python3_SITELIB}/z3/lib)
+#   set_property(TARGET tvm APPEND PROPERTY BUILD_RPATH ${Python3_SITELIB}/z3/bin)
+# endif()
 
 # let libtilelang to search tvm/tvm_runtime in same dir
 set_target_properties(tilelang        PROPERTIES INSTALL_RPATH "${TILELANG_INSTALL_RPATH}")
 set_target_properties(tilelang_module PROPERTIES INSTALL_RPATH "${TILELANG_INSTALL_RPATH}")
-set_target_properties(tvm             PROPERTIES INSTALL_RPATH "${TILELANG_INSTALL_RPATH}")
-set_target_properties(tvm_runtime     PROPERTIES INSTALL_RPATH "${TILELANG_INSTALL_RPATH}")
-
+# set_target_properties(tvm             PROPERTIES INSTALL_RPATH "${TILELANG_INSTALL_RPATH}")
+# set_target_properties(tvm_runtime     PROPERTIES INSTALL_RPATH "${TILELANG_INSTALL_RPATH}")
+# tvm tvm_runtime 
 install(
-  TARGETS tvm tvm_runtime tilelang_module tilelang
+  TARGETS tilelang_module tilelang
   LIBRARY DESTINATION tilelang/lib
 )

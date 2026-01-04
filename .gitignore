@@ -5,6 +5,7 @@
 *.so
 *.obj
 *.pyc
+a.out
 
 # Precompiled Headers
 *.gch
