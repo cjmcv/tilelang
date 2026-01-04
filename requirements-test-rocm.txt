@@ -1,8 +1,0 @@
-# Lint requirements
---requirement requirements-lint.txt
-
-# Common test requirements
---requirement requirements-test.txt
-
-# ROCm specific requirements
-# Currently: none
