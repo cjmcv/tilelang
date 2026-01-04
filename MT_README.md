@@ -20,10 +20,20 @@ echo "set(USE_CUDA   ON)" >> config.cmake
 cmake .. && make -j6
 
 # 2. 添加软连接并编译tilelang
-mkdir -p build/tvm
+rm -rf build && mkdir -p build/tvm
 
 ln -s $PWD/3rdparty/tvm/build/libtvm_runtime.so  build/tvm/
 ln -s $PWD/3rdparty/tvm/build/libtvm.so          build/tvm/
 ln -s $PWD/3rdparty/tvm/build/lib/libtvm_ffi.so  build/tvm/
 
 cmake -B build -G Ninja && cmake --build build --parallel 6
+
+# 3. 使用
+export PYTHONPATH=/home/cjmcv/project/tilelang:$PYTHONPATH
+
+# 清submodule
+git submodule deinit -f 3rdparty/composable_kernel/
+git rm -f 3rdparty/composable_kernel/
+rm -rf .git/modules/3rdparty/composable_kernel/
+
+git submodule add https://github.com/apache/tvm.git 3rdparty/tvm

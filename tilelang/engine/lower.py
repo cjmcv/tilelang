@@ -125,30 +125,30 @@ def tilelang_callback_cuda_compile(code, target, pass_config=None):
     return ptx
 
 
-@tvm_ffi.register_global_func("tilelang_callback_hip_compile", override=True)
-def tilelang_callback_hip_compile(code, target):
-    project_root = osp.join(osp.dirname(__file__), "../..")
-    tl_template_path = osp.abspath(osp.join(project_root, "src"))
+# @tvm_ffi.register_global_func("tilelang_callback_hip_compile", override=True)
+# def tilelang_callback_hip_compile(code, target):
+#     project_root = osp.join(osp.dirname(__file__), "../..")
+#     tl_template_path = osp.abspath(osp.join(project_root, "src"))
 
-    # TODO(lei): actually this indeed should be renamed into
-    # TL_COMPOSABLE_KERNEL_INCLUDE_PATH in the future
-    if "TL_COMPOSABLE_KERNEL_PATH" in os.environ:
-        ck_path = os.environ["TL_COMPOSABLE_KERNEL_PATH"]
-    else:
-        ck_path = osp.abspath(osp.join(project_root, "3rdparty/composable_kernel/include"))
+#     # TODO(lei): actually this indeed should be renamed into
+#     # TL_COMPOSABLE_KERNEL_INCLUDE_PATH in the future
+#     if "TL_COMPOSABLE_KERNEL_PATH" in os.environ:
+#         ck_path = os.environ["TL_COMPOSABLE_KERNEL_PATH"]
+#     else:
+#         ck_path = osp.abspath(osp.join(project_root, "3rdparty/composable_kernel/include"))
 
-    hsaco = hipcc.compile_hip(
-        code,
-        target_format="hsaco",
-        options=[
-            "-std=c++17",
-            "-I" + tl_template_path,
-            "-I" + ck_path,
-        ],
-        verbose=False,
-    )
+#     hsaco = hipcc.compile_hip(
+#         code,
+#         target_format="hsaco",
+#         options=[
+#             "-std=c++17",
+#             "-I" + tl_template_path,
+#             "-I" + ck_path,
+#         ],
+#         verbose=False,
+#     )
 
-    return hsaco
+#     return hsaco
 
 
 def extrac_params(func: tir.PrimFunc) -> list[KernelParam]:
