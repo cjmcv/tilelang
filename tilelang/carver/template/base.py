@@ -86,14 +86,14 @@ class BaseTemplate(ABC):
         """
         return is_ampere_arch(self._arch) if self._arch is not None else False
 
-    def is_cdna_arch(self) -> bool:
-        """
-        Checks if the current architecture is a CDNA architecture.
+    # def is_cdna_arch(self) -> bool:
+    #     """
+    #     Checks if the current architecture is a CDNA architecture.
 
-        Returns:
-            bool: True if the architecture is CDNA, False otherwise.
-        """
-        return is_cdna_arch(self._arch) if self._arch is not None else False
+    #     Returns:
+    #         bool: True if the architecture is CDNA, False otherwise.
+    #     """
+    #     return is_cdna_arch(self._arch) if self._arch is not None else False
 
     def equivalent_function(self) -> PrimFunc:
         """

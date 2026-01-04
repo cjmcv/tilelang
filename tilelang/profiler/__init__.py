@@ -261,7 +261,7 @@ class Profiler:
 
             assert target in ["cuda", "hip"], f"Unknown target: {target}"
 
-            device = tvm.cuda(0) if target == "cuda" else tvm.rocm(0)
+            device = tvm.cuda(0) # if target == "cuda" else tvm.rocm(0)
             time_evaluator = self.mod.time_evaluator(self.mod.entry_name, device, number=rep, repeat=n_repeat)
             # Transform Latency to ms
             return time_evaluator(*ins).mean * 1e3

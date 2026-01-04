@@ -89,8 +89,8 @@ def get_cplus_compiler():
     return None
 
 
-def is_darwin():
-    return platform.system() == "Darwin"
+# def is_darwin():
+#     return platform.system() == "Darwin"
 
 
 def create_shared(output, objects, options=None, cc=None, cwd=None, ccache_env=None):

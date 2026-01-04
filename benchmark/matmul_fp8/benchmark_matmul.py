@@ -51,11 +51,11 @@ def get_configs(args, kwargs):
     if with_roller:
         from tilelang.carver.template import MatmulTemplate
         from tilelang.carver.arch import CUDA
-        from tilelang.carver.arch import CDNA
+        # from tilelang.carver.arch import CDNA
         from tilelang.carver.roller.rasterization import NoRasterization
         import torch
 
-        arch = CDNA("hip") if torch.version.hip is not None else CUDA("cuda")
+        arch = CUDA("cuda") # CDNA("hip") if torch.version.hip is not None else CUDA("cuda")
 
         topk = 10
 

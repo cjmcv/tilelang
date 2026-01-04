@@ -17,10 +17,10 @@ def get_arch(target: str | Target = "cuda") -> TileDevice:
         return CUDA(target)
     elif target.kind.name == "llvm":
         return CPU(target)
-    elif target.kind.name == "hip":
-        return CDNA(target)
-    elif target.kind.name == "metal":
-        return METAL(target)
+    # elif target.kind.name == "hip":
+    #     return CDNA(target)
+    # elif target.kind.name == "metal":
+    #     return METAL(target)
     else:
         raise ValueError(f"Unsupported target: {target.kind.name}")
 

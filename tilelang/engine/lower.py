@@ -11,7 +11,7 @@ from tvm import tir
 import tvm_ffi
 from tvm.ir import CallingConv
 from tvm.target import Target
-from tilelang.contrib import hipcc, nvcc
+from tilelang.contrib import nvcc
 from tilelang.transform import PassConfigKey
 from tilelang.utils.deprecated import deprecated_warning
 from tilelang.engine.param import KernelParam, CompiledArtifact

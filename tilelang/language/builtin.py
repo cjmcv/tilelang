@@ -5,13 +5,13 @@ from __future__ import annotations
 from tilelang import tvm as tvm
 from tilelang.language import ptx_arrive_barrier, evaluate
 from tilelang.language.kernel import get_thread_bindings, get_block_extents
-from tilelang.utils.target import check_hip_availability
+# from tilelang.utils.target import check_hip_availability
 from tvm import DataType, tir
 from tvm.runtime import convert
 from typing import Any
 from tvm.tir import PrimExpr, Var, Call, BufferLoad, BufferRegion
 
-_IS_HIP_AVAILABLE = check_hip_availability()
+# _IS_HIP_AVAILABLE = check_hip_availability()
 
 
 def _normalize_index_arg(value: int | PrimExpr | None) -> PrimExpr | None:
@@ -667,10 +667,10 @@ def shfl_xor(value: int | PrimExpr | tir.Call, offset: int | PrimExpr | tir.Call
     Returns:
         tir.Call: A handle to the shuffle operation
     """
-    if _IS_HIP_AVAILABLE:
-        return tir.call_extern(value.dtype, "__shfl_xor", value, offset)
-    else:
-        return tir.call_extern(value.dtype, "__shfl_xor_sync", 0xFFFFFFFF, value, offset)
+    # if _IS_HIP_AVAILABLE:
+    #     return tir.call_extern(value.dtype, "__shfl_xor", value, offset)
+    # else:
+    return tir.call_extern(value.dtype, "__shfl_xor_sync", 0xFFFFFFFF, value, offset)
 
 
 def shfl_down(value: int | PrimExpr | tir.Call, offset: int | PrimExpr | tir.Call):
@@ -680,10 +680,10 @@ def shfl_down(value: int | PrimExpr | tir.Call, offset: int | PrimExpr | tir.Cal
         value: Optional[int, PrimExpr]
             The value to shuffle
     """
-    if _IS_HIP_AVAILABLE:
-        return tir.call_extern(value.dtype, "__shfl_down", value, offset)
-    else:
-        return tir.call_extern(value.dtype, "__shfl_down_sync", 0xFFFFFFFF, value, offset)
+    # if _IS_HIP_AVAILABLE:
+    #     return tir.call_extern(value.dtype, "__shfl_down", value, offset)
+    # else:
+    return tir.call_extern(value.dtype, "__shfl_down_sync", 0xFFFFFFFF, value, offset)
 
 
 def shfl_up(value: int | PrimExpr | tir.Call, offset: int | PrimExpr | tir.Call):
@@ -693,10 +693,10 @@ def shfl_up(value: int | PrimExpr | tir.Call, offset: int | PrimExpr | tir.Call)
         value: Optional[int, PrimExpr]
             The value to shuffle
     """
-    if _IS_HIP_AVAILABLE:
-        return tir.call_extern(value.dtype, "__shfl_up", value, offset)
-    else:
-        return tir.call_extern(value.dtype, "__shfl_up_sync", 0xFFFFFFFF, value, offset)
+    # if _IS_HIP_AVAILABLE:
+    #     return tir.call_extern(value.dtype, "__shfl_up", value, offset)
+    # else:
+    return tir.call_extern(value.dtype, "__shfl_up_sync", 0xFFFFFFFF, value, offset)
 
 
 def sync_threads(barrier_id: int = None, arrive_count: int = None):

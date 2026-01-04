@@ -4,7 +4,7 @@ from typing import Literal
 from tilelang import tvm as tvm
 from tilelang import _ffi_api
 from tvm.target import Target
-from tvm.contrib import rocm
+# from tvm.contrib import rocm
 from tilelang.contrib import nvcc
 
 SUPPORTED_TARGETS: dict[str, str] = {
@@ -39,17 +39,17 @@ def check_cuda_availability() -> bool:
         return False
 
 
-def check_hip_availability() -> bool:
-    """
-    Check if HIP (ROCm) is available on the system by locating the ROCm path.
-    Returns:
-        bool: True if HIP is available, False otherwise.
-    """
-    try:
-        rocm.find_rocm_path()
-        return True
-    except Exception:
-        return False
+# def check_hip_availability() -> bool:
+#     """
+#     Check if HIP (ROCm) is available on the system by locating the ROCm path.
+#     Returns:
+#         bool: True if HIP is available, False otherwise.
+#     """
+#     try:
+#         rocm.find_rocm_path()
+#         return True
+#     except Exception:
+#         return False
 
 
 def check_metal_availability() -> bool:
@@ -85,15 +85,15 @@ def determine_target(target: str | Target | Literal["auto"] = "auto", return_obj
             return target
         # Check for CUDA and HIP availability
         is_cuda_available = check_cuda_availability()
-        is_hip_available = check_hip_availability()
+        # is_hip_available = check_hip_availability()
 
         # Determine the target based on availability
         if is_cuda_available:
             return_var = "cuda"
-        elif is_hip_available:
-            return_var = "hip"
-        elif check_metal_availability():
-            return_var = "metal"
+        # elif is_hip_available:
+        #     return_var = "hip"
+        # elif check_metal_availability():
+        #     return_var = "metal"
         else:
             raise ValueError("No CUDA or HIP or MPS available on this system.")
     elif isinstance(target, str) and target.startswith("cutedsl"):

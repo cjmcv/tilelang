@@ -3,16 +3,16 @@ from typing import Optional
 import tilelang.language as T
 import tilelang.testing
 import torch
-from tilelang.utils.target import check_hip_availability
+# from tilelang.utils.target import check_hip_availability
 
-_IS_HIP_AVAILABLE = check_hip_availability()
+# _IS_HIP_AVAILABLE = check_hip_availability()
 _DEFAULT_WARPS_PER_GROUP = 4
 
 
 def _resolve_warp_size(warp_size: Optional[int]) -> int:
     if warp_size is not None:
         return int(warp_size)
-    return 64 if _IS_HIP_AVAILABLE else 32
+    return 32 # 64 if _IS_HIP_AVAILABLE else 32
 
 
 def _resolve_warps_per_group(warps_per_group: Optional[int]) -> int:

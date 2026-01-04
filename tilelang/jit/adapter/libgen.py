@@ -11,7 +11,7 @@ from tvm.target import Target
 from tilelang import tvm as tvm
 from tilelang.transform import PassConfigKey
 from tilelang.contrib.nvcc import get_nvcc_compiler, get_target_arch, get_target_compute_version
-from tilelang.contrib.rocm import find_rocm_path, get_rocm_arch
+# from tilelang.contrib.rocm import find_rocm_path, get_rocm_arch
 from tilelang.env import TILELANG_TEMPLATE_PATH
 from tilelang.utils.deprecated import deprecated_warning
 
@@ -98,24 +98,6 @@ class LibraryGenerator:
                 "-I" + CUTLASS_INCLUDE_DIR,
             ]
 
-        elif is_hip_target(target):
-            from tilelang.env import COMPOSABLE_KERNEL_INCLUDE_DIR
-
-            src = tempfile.NamedTemporaryFile(mode="w", suffix=".cpp", delete=False)  # noqa: SIM115
-            libpath = src.name.replace(".cpp", ".so")
-            rocm_path = find_rocm_path()
-            arch = get_rocm_arch(rocm_path)
-            command = [
-                "hipcc",
-                "-std=c++17",
-                "-fPIC",
-                f"--offload-arch={arch}",
-                "--shared",
-                src.name,
-            ]
-            command += [
-                "-I" + COMPOSABLE_KERNEL_INCLUDE_DIR,
-            ]
         elif is_cpu_target(target):
             from tilelang.contrib.cc import get_cplus_compiler
 
