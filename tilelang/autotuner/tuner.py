@@ -143,7 +143,7 @@ class AutoTuner:
     def set_compile_args(
         self,
         out_idx: list[int] | int | None = None,
-        target: Literal["auto", "cuda", "hip", "metal"] = "auto",
+        target: Literal["auto", "cuda"] = "auto",
         execution_backend: Literal["auto", "tvm_ffi", "ctypes", "cython", "nvrtc", "torch"] = "auto",
         target_host: str | Target = None,
         verbose: bool = False,

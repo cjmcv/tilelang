@@ -7,7 +7,7 @@ try:
 except ImportError:  # Python < 3.10
     from typing_extensions import ParamSpec
 
-from tilelang.jit.adapter.utils import is_cutedsl_target, is_metal_target, is_cuda_target
+from tilelang.jit.adapter.utils import is_cuda_target
 from tvm.target import Target
 from tvm.tir import PrimFunc
 
@@ -299,34 +299,6 @@ class JITKernel(Generic[_P, _T]):
             from tilelang.jit.adapter import NVRTCKernelAdapter
 
             adapter = NVRTCKernelAdapter(
-                params=artifact.params,
-                result_idx=out_idx,
-                target=target,
-                func_or_mod=tilelang_func,
-                host_mod=artifact.host_mod,
-                device_mod=artifact.device_mod,
-                device_kernel_source=artifact.kernel_source,
-                verbose=verbose,
-                pass_configs=pass_configs,
-                compile_flags=compile_flags,
-            )
-        elif execution_backend == "torch":
-            assert is_metal_target(target)
-            adapter = MetalKernelAdapter(
-                params=artifact.params,
-                result_idx=out_idx,
-                # target=target,
-                func_or_mod=tilelang_func,
-                # host_mod=artifact.host_mod,
-                device_mod=artifact.device_mod,
-                kernel_global_source=artifact.kernel_source,
-                verbose=verbose,
-                # pass_configs=pass_configs,
-                # compile_flags=compile_flags,
-            )
-        elif execution_backend == "cutedsl":
-            assert is_cutedsl_target(target)
-            adapter = CuTeDSLKernelAdapter(
                 params=artifact.params,
                 result_idx=out_idx,
                 target=target,

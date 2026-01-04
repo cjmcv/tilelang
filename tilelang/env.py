@@ -84,21 +84,6 @@ def _find_cuda_home() -> str:
 
     return cuda_home if cuda_home is not None else ""
 
-
-# def _find_rocm_home() -> str:
-#     """Find the ROCM install path."""
-#     rocm_home = os.environ.get("ROCM_PATH") or os.environ.get("ROCM_HOME")
-#     if rocm_home is None:
-#         rocmcc_path = shutil.which("hipcc")
-#         if rocmcc_path is not None:
-#             rocm_home = os.path.dirname(os.path.dirname(rocmcc_path))
-#         else:
-#             rocm_home = "/opt/rocm"
-#             if not os.path.exists(rocm_home):
-#                 rocm_home = None
-#     return rocm_home if rocm_home is not None else ""
-
-
 # Cache control
 class CacheState:
     """Class to manage global kernel caching state."""
@@ -210,8 +195,6 @@ class Environment:
 
     # CUDA/ROCm home directories
     CUDA_HOME = _find_cuda_home()
-    # ROCM_HOME = _find_rocm_home()
-
     # Path to the TileLang package root
     TILELANG_PACKAGE_PATH = pathlib.Path(__file__).resolve().parent
 

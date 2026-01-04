@@ -98,23 +98,6 @@ def match_declare_kernel_cpu(source: str, annotation: str = "int32_t") -> int:
 def is_cuda_target(target: Target) -> bool:
     return target.kind.name == "cuda"
 
-
-def is_hip_target(target: Target) -> bool:
-    return target.kind.name == "hip"
-
-
-def is_cpu_target(target: Target) -> bool:
-    return target.kind.name in ["c"]
-
-
-def is_metal_target(target: Target) -> bool:
-    return target.kind.name == "metal"
-
-
-def is_cutedsl_target(target: Target) -> bool:
-    return target.kind.name == "cuda" and "cutedsl" in target.keys
-
-
 def get_annotated_mod(
     func_or_mod: tir.PrimFunc | tvm.IRModule,
     target: str | Target = "auto",

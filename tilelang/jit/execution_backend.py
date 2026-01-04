@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from tvm.target import Target
-from tilelang.jit.adapter.utils import is_cutedsl_target
 from tilelang.env import env as _env
 
 # Canonical names for execution backends used internally
@@ -32,16 +31,8 @@ def allowed_backends_for_target(target: Target, *, include_unavailable: bool = T
     """
     kind = _target_kind(target)
 
-    if is_cutedsl_target(target):
-        return ["cutedsl"]
-    elif kind == "cuda":
+    if kind == "cuda":
         allowed = ["tvm_ffi", "nvrtc", "cython", "ctypes"]
-    elif kind == "hip":
-        allowed = ["tvm_ffi", "cython", "ctypes"]
-    elif kind == "metal":
-        allowed = ["torch"]
-    elif kind == "c":  # CPU C backend
-        allowed = ["cython", "ctypes", "tvm_ffi"]
     else:
         # Fallback: prefer portable hosts
         allowed = ["cython", "ctypes", "tvm_ffi"]
@@ -93,14 +84,9 @@ def resolve_execution_backend(requested: str | None, target: Target) -> str:
 
     # Default selection for auto/None
     if req in (None, "auto"):
-        if is_cutedsl_target(target):
-            _require_gemm_v1_for_cutedsl()
-            return "cutedsl"
         kind = _target_kind(target)
         if kind == "cuda":
             choice = "tvm_ffi"
-        elif kind == "metal":
-            choice = "torch"
         else:
             choice = "cython"
         # If the chosen default is not available (very rare), fall back to first available

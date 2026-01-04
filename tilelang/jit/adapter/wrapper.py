@@ -6,13 +6,8 @@ from tvm import IRModule
 from tvm.target import Target
 
 from .utils import (
-    is_metal_target,
-    is_cutedsl_target,
     match_declare_kernel,
-    match_declare_kernel_cpu,
     is_cuda_target,
-    is_hip_target,
-    is_cpu_target,
     get_annotated_mod,
     pythonic_expr,
     parse_function_call_args,
@@ -859,12 +854,6 @@ class TLWrapper(BaseWrapper):
         assert self.scheduled_ir_module is not None, "Please assign optimized module first."
         if is_cuda_target(self.target):
             wrapper_class = TLCUDASourceWrapper
-        # elif is_hip_target(self.target):
-        #     wrapper_class = TLHIPSourceWrapper
-        # elif is_cpu_target(self.target):
-        #     wrapper_class = TLCPUSourceWrapper
-        # elif is_metal_target(self.target):
-        #     wrapper_class = TLMetalSourceWrapper
         else:
             raise ValueError(f"Unsupported platform: {self.arch.platform}")
         wrapper = wrapper_class(
@@ -884,11 +873,7 @@ class TLPyWrapper(TLWrapper):
 
     def wrap(self, py_source: str):
         # assert self.scheduled_ir_module is not None, "Please assign optimized module first."
-        if is_cutedsl_target(self.target):
-            from tilelang.jit.adapter.cutedsl import TLCuTeDSLSourceWrapper
-
-            wrapper_class = TLCuTeDSLSourceWrapper
-        elif is_cuda_target(self.target):
+        if is_cuda_target(self.target):
             from tilelang.jit.adapter.nvrtc import TLNVRTCSourceWrapper
 
             wrapper_class = TLNVRTCSourceWrapper

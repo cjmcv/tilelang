@@ -15,7 +15,7 @@ from tilelang.contrib.nvcc import get_nvcc_compiler, get_target_arch, get_target
 from tilelang.env import TILELANG_TEMPLATE_PATH
 from tilelang.utils.deprecated import deprecated_warning
 
-from .utils import is_cpu_target, is_cuda_target, is_hip_target
+from .utils import is_cuda_target
 
 logger = logging.getLogger(__name__)
 

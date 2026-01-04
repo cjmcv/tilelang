@@ -5,7 +5,6 @@ from ..arch import (  # Import architecture-related utilities and classes
     TileDevice,
     is_volta_arch,
     is_ampere_arch,
-    is_cdna_arch,
     auto_infer_current_arch,
 )
 from ..roller.hint import Hint  # Import the Hint class
@@ -85,15 +84,6 @@ class BaseTemplate(ABC):
             bool: True if the architecture is Ampere, False otherwise.
         """
         return is_ampere_arch(self._arch) if self._arch is not None else False
-
-    # def is_cdna_arch(self) -> bool:
-    #     """
-    #     Checks if the current architecture is a CDNA architecture.
-
-    #     Returns:
-    #         bool: True if the architecture is CDNA, False otherwise.
-    #     """
-    #     return is_cdna_arch(self._arch) if self._arch is not None else False
 
     def equivalent_function(self) -> PrimFunc:
         """

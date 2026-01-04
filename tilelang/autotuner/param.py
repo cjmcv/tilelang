@@ -50,7 +50,7 @@ class CompileArgs:
 
     out_idx: list[int] | int | None = None
     execution_backend: Literal["auto", "tvm_ffi", "ctypes", "cython", "nvrtc", "torch"] = "auto"
-    target: Literal["auto", "cuda", "hip"] = "auto"
+    target: Literal["auto", "cuda"] = "auto"
     target_host: str | Target = None
     verbose: bool = False
     pass_configs: dict[str, Any] | None = None

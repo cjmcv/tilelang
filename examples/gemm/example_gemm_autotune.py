@@ -46,7 +46,7 @@ def get_configs(M, N, K, with_roller=False, topk=20):
         ValueError: if with_roller is True but the roller returns no hints.
     """
     if with_roller:
-        arch = CUDA("cuda") # if torch.version.hip is None else CDNA("hip")
+        arch = CUDA("cuda")
         carve_template = MatmulTemplate(
             M=M,
             N=N,

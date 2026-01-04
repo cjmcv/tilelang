@@ -15,12 +15,6 @@ def get_arch(target: str | Target = "cuda") -> TileDevice:
 
     if target.kind.name == "cuda":
         return CUDA(target)
-    elif target.kind.name == "llvm":
-        return CPU(target)
-    # elif target.kind.name == "hip":
-    #     return CDNA(target)
-    # elif target.kind.name == "metal":
-    #     return METAL(target)
     else:
         raise ValueError(f"Unsupported target: {target.kind.name}")
 
@@ -28,12 +22,8 @@ def get_arch(target: str | Target = "cuda") -> TileDevice:
 def auto_infer_current_arch() -> TileDevice:
     # TODO(lei): This is a temporary solution to infer the current architecture
     # Can be replaced by a more sophisticated method in the future
-    if torch.version.hip is not None:
-        return get_arch("hip")
     if torch.cuda.is_available():
         return get_arch("cuda")
-    elif torch.mps.is_available():
-        return get_arch("metal")
     else:
         return get_arch("llvm")
 
