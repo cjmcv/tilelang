@@ -48,7 +48,7 @@ class KernelCache:
     _instance = None  # For implementing singleton pattern
     _lock = threading.Lock()  # For thread safety
     _memory_cache = {}  # In-memory cache dictionary
-    execution_backend: Literal["tvm_ffi", "ctypes", "cython", "nvrtc", "torch", "cutedsl"] = "tvm_ffi"
+    execution_backend: Literal["tvm_ffi", "ctypes", "cython"] = "tvm_ffi"
 
     def __new__(cls):
         """
@@ -77,7 +77,7 @@ class KernelCache:
         self,
         func: Callable,
         out_idx: list[int],
-        execution_backend: Literal["tvm_ffi", "ctypes", "cython", "nvrtc", "torch", "cutedsl"] = "tvm_ffi",
+        execution_backend: Literal["tvm_ffi", "ctypes", "cython"] = "tvm_ffi",
         args=None,
         target: str | Target = "auto",
         target_host: str | Target = None,
@@ -123,7 +123,7 @@ class KernelCache:
         *args,
         target: str | Target = "auto",
         target_host: str | Target = None,
-        execution_backend: Literal["auto", "tvm_ffi", "ctypes", "cython", "nvrtc", "torch", "cutedsl"] = "auto",
+        execution_backend: Literal["auto", "tvm_ffi", "ctypes", "cython"] = "auto",
         verbose: bool = False,
         pass_configs: dict = None,
         compile_flags: list[str] | str | None = None,
@@ -343,23 +343,12 @@ class KernelCache:
                     KernelCache._safe_write_file(launcher_cpp_path, "w", lambda file: file.write(kernel.adapter.launcher_cpp_code))
 
             else:
-                if self.execution_backend == "nvrtc":
-                    kernel_lib_path = KERNEL_CUBIN_PATH
-                elif self.execution_backend == "tvm_ffi":
+                if self.execution_backend == "tvm_ffi":
                     kernel_lib_path = EXECUTABLE_PATH
                 else:
                     kernel_lib_path = KERNEL_LIB_PATH
                 kernel_lib_path = os.path.join(cache_path, kernel_lib_path)
-
-                # Save an extra Python file for NVRTC
-                if self.execution_backend == "nvrtc":
-                    src_lib_path = kernel.adapter.libpath
-                    kernel_py_path = os.path.join(cache_path, KERNEL_PY_PATH)
-                    src_lib_path = src_lib_path.replace(".cubin", ".py")
-                    if verbose:
-                        self.logger.debug(f"Saving kernel nvrtc python code to file: {kernel_py_path}")
-                    KernelCache._safe_write_file(kernel_py_path, "wb", lambda file: file.write(KernelCache._load_binary(src_lib_path)))
-
+                
                 if self.execution_backend == "tvm_ffi":
                     executable = kernel.adapter.executable
                     if verbose:
@@ -414,12 +403,8 @@ class KernelCache:
         cache_path = self._get_cache_path(key)
         device_kernel_path = os.path.join(cache_path, DEVICE_KERNEL_PATH)
         host_kernel_path = os.path.join(cache_path, HOST_KERNEL_PATH)
-        if self.execution_backend == "nvrtc":
-            kernel_lib_path = KERNEL_CUBIN_PATH
-        elif self.execution_backend == "tvm_ffi":
+        if self.execution_backend == "tvm_ffi":
             kernel_lib_path = EXECUTABLE_PATH
-        elif self.execution_backend == "cutedsl":
-            kernel_lib_path = KERNEL_PY_PATH
         else:
             kernel_lib_path = KERNEL_LIB_PATH
         kernel_lib_path = os.path.join(cache_path, kernel_lib_path)

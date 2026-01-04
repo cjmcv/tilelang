@@ -49,7 +49,7 @@ class CompileArgs:
     """
 
     out_idx: list[int] | int | None = None
-    execution_backend: Literal["auto", "tvm_ffi", "ctypes", "cython", "nvrtc", "torch"] = "auto"
+    execution_backend: Literal["auto", "tvm_ffi", "ctypes", "cython"] = "auto"
     target: Literal["auto", "cuda"] = "auto"
     target_host: str | Target = None
     verbose: bool = False
@@ -216,27 +216,14 @@ class AutotuneResult:
 
         # Save kernel library (backend-specific)
         try:
-            if kernel.execution_backend == "nvrtc":
-                kernel_lib_file = KERNEL_CUBIN_PATH
-            elif kernel.execution_backend == "tvm_ffi":
+            if kernel.execution_backend == "tvm_ffi":
                 kernel_lib_file = EXECUTABLE_PATH
             else:
                 kernel_lib_file = KERNEL_LIB_PATH
 
             kernel_lib_path = os.path.join(cache_path, kernel_lib_file)
 
-            if kernel.execution_backend == "nvrtc":
-                # Save cubin and python helper file
-                src_lib_path = kernel.adapter.libpath
-                kernel_py_path = os.path.join(cache_path, KERNEL_PY_PATH)
-                py_src_path = src_lib_path.replace(".cubin", ".py")
-                if verbose:
-                    logger.debug(f"Saving kernel nvrtc python code to file: {kernel_py_path}")
-                self._safe_write_file(kernel_py_path, "wb", lambda f: f.write(self._load_binary(py_src_path)))
-                if verbose:
-                    logger.debug(f"Saving kernel library to file: {kernel_lib_path}")
-                self._safe_write_file(kernel_lib_path, "wb", lambda f: f.write(self._load_binary(src_lib_path)))
-            elif kernel.execution_backend == "tvm_ffi":
+            if kernel.execution_backend == "tvm_ffi":
                 executable = kernel.adapter.executable
                 if verbose:
                     logger.debug(f"Saving kernel executable to file: {kernel_lib_path}")
@@ -265,7 +252,7 @@ class AutotuneResult:
         target: str | Target = "auto",
         target_host: str | Target = None,
         out_idx: list[int] | int | None = None,
-        execution_backend: Literal["tvm_ffi", "ctypes", "cython", "nvrtc", "torch"] = "tvm_ffi",
+        execution_backend: Literal["tvm_ffi", "ctypes", "cython"] = "tvm_ffi",
         pass_configs: dict = None,
         compile_flags: list[str] | str | None = None,
         func: Callable = None,
@@ -292,9 +279,7 @@ class AutotuneResult:
             return None
 
         # Resolve backend to pick correct file names
-        if execution_backend == "nvrtc":
-            kernel_lib_file = KERNEL_CUBIN_PATH
-        elif execution_backend == "tvm_ffi":
+        if execution_backend == "tvm_ffi":
             kernel_lib_file = EXECUTABLE_PATH
         else:
             kernel_lib_file = KERNEL_LIB_PATH

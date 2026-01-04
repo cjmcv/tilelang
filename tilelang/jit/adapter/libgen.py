@@ -98,16 +98,6 @@ class LibraryGenerator:
                 "-I" + CUTLASS_INCLUDE_DIR,
             ]
 
-        elif is_cpu_target(target):
-            from tilelang.contrib.cc import get_cplus_compiler
-
-            src = tempfile.NamedTemporaryFile(mode="w", suffix=".cpp", delete=False)  # noqa: SIM115
-            libpath = src.name.replace(".cpp", ".so")
-
-            command = [get_cplus_compiler(), "-std=c++17", "-fPIC", "-shared", src.name]
-            command += [
-                "-I" + TILELANG_TEMPLATE_PATH,
-            ]
         else:
             raise ValueError(f"Unsupported target: {target}")
 

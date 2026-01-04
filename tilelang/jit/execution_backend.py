@@ -32,21 +32,10 @@ def allowed_backends_for_target(target: Target, *, include_unavailable: bool = T
     kind = _target_kind(target)
 
     if kind == "cuda":
-        allowed = ["tvm_ffi", "nvrtc", "cython", "ctypes"]
+        allowed = ["tvm_ffi", "cython", "ctypes"]
     else:
         # Fallback: prefer portable hosts
         allowed = ["cython", "ctypes", "tvm_ffi"]
-
-    if not include_unavailable:
-        # Drop NVRTC if not importable
-        try:
-            from tilelang.jit.adapter.nvrtc import is_nvrtc_available  # lazy
-
-            if not is_nvrtc_available and "nvrtc" in allowed:
-                allowed = [b for b in allowed if b != "nvrtc"]
-        except Exception:
-            # Be conservative and keep nvrtc if detection itself fails
-            pass
 
     return allowed
 
