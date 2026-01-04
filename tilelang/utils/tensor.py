@@ -67,12 +67,11 @@ def map_torch_type(intype) -> torch.dtype:
 
 def get_tensor_supply(supply_type: TensorSupplyType = TensorSupplyType.Integer):
     from tilelang.engine.param import KernelParam
-    from .device import get_current_device
 
     def get_tensor(param: KernelParam) -> torch.Tensor:
         # Convert tvm.DataType to torch.dtype for tensor creation
         dtype: torch.dtype = param.torch_dtype()
-        device = get_current_device()
+        device = torch.cuda.current_device()
 
         if hasattr(param, "shape") and not param.shape:
             raise ValueError(

@@ -14,9 +14,6 @@ namespace tl {
 bool TargetIsCuda(Target target) {
   return target->GetTargetDeviceType() == kDLCUDA;
 }
-bool TargetIsRocm(Target target) {
-  return target->GetTargetDeviceType() == kDLROCM;
-}
 
 int GetArchInt(Target target) {
   auto s = target->GetAttr<tvm::ffi::String>("arch");
@@ -70,32 +67,10 @@ bool TargetIsSM120(Target target) {
   return arch >= 120 && arch < 130;
 }
 
-bool TargetIsCDNA(Target target) {
-  if (!TargetIsRocm(target))
-    return false;
-  if (target->attrs.count("mcpu")) {
-    std::string mcpu = Downcast<tvm::ffi::String>(target->attrs.at("mcpu"));
-    // if mcpu start with "gfx9", it is CDNA
-    return mcpu.find("gfx9") == 0;
-  }
-  return false;
-}
-
 bool TargetHasAsyncCopy(Target target) {
   if (TargetIsCuda(target)) {
     int arch = GetArchInt(target);
     return arch >= 80;
-  } else if (TargetIsCDNA(target)) {
-    if (target->attrs.count("mcpu")) {
-      std::string mcpu = Downcast<tvm::ffi::String>(target->attrs.at("mcpu"));
-      if (mcpu.rfind("gfx9", 0) == 0) {
-        int gfx_version = std::stoi(mcpu.substr(3, 2));
-        return gfx_version >= 94;
-      }
-      return false;
-    } else {
-      return false;
-    }
   }
 
   return false;
@@ -129,8 +104,6 @@ bool TargetHasBulkCopy(Target target) {
 
 int TargetGetWarpSize(Target target) {
   int res = 32;
-  if (TargetIsCDNA(target))
-    res = 64;
   return res;
 }
 
@@ -139,8 +112,6 @@ TVM_FFI_STATIC_INIT_BLOCK() {
   refl::GlobalDef()
       .def("tl.TargetIsCuda",
            [](Target target) { return TargetIsCuda(target); })
-      .def("tl.TargetIsRocm",
-           [](Target target) { return TargetIsRocm(target); })
       .def("tl.TargetIsVolta",
            [](Target target) { return TargetIsVolta(target); })
       .def("tl.TargetIsTuring",
@@ -151,8 +122,6 @@ TVM_FFI_STATIC_INIT_BLOCK() {
            [](Target target) { return TargetIsHopper(target); })
       .def("tl.TargetIsSM120",
            [](Target target) { return TargetIsSM120(target); })
-      .def("tl.TargetIsCDNA",
-           [](Target target) { return TargetIsCDNA(target); })
       .def("tl.TargetHasAsyncCopy",
            [](Target target) { return TargetHasAsyncCopy(target); })
       .def("tl.TargetHasLdmatrix",

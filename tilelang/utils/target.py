@@ -113,11 +113,6 @@ def determine_target(target: str | Target | Literal["auto"] = "auto", return_obj
 def target_is_cuda(target: Target) -> bool:
     return _ffi_api.TargetIsCuda(target)
 
-
-def target_is_hip(target: Target) -> bool:
-    return _ffi_api.TargetIsRocm(target)
-
-
 def target_is_volta(target: Target) -> bool:
     return _ffi_api.TargetIsVolta(target)
 
@@ -136,10 +131,6 @@ def target_is_hopper(target: Target) -> bool:
 
 def target_is_sm120(target: Target) -> bool:
     return _ffi_api.TargetIsSM120(target)
-
-
-def target_is_cdna(target: Target) -> bool:
-    return _ffi_api.TargetIsCDNA(target)
 
 
 def target_has_async_copy(target: Target) -> bool:

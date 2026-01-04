@@ -11,19 +11,19 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def get_rasterization_code(pannel_width: int = 8) -> str:
-    return f"""
-        const int MAX_BLOCK_N = {pannel_width};
-        const auto baseBlockIdx = blockIdx.x + gridDim.x *blockIdx.y;
-        const auto totalPanel = (gridDim.x * gridDim.y +MAX_BLOCK_N * gridDim.x - 1) / (MAX_BLOCK_N * gridDim.x);
-        const auto totalBlock = gridDim.x * gridDim.y;
-        const auto panelIdx = baseBlockIdx / (MAX_BLOCK_N *gridDim.x);
-        const auto strideLd = panelIdx + 1 < totalPanel ?MAX_BLOCK_N : (totalBlock - panelIdx * (MAX_BLOCK_N *gridDim.x)) / gridDim.x;
-        const auto bx = (panelIdx & 1) ? gridDim.x -(baseBlockIdx - panelIdx * MAX_BLOCK_N * gridDim.x) /strideLd - 1 : (baseBlockIdx - panelIdx * MAX_BLOCK_N *gridDim.x) / strideLd;
-        const auto by = (baseBlockIdx - panelIdx * MAX_BLOCK_N *gridDim.x) % strideLd + panelIdx * MAX_BLOCK_N;
-        const auto bz = blockIdx.z;
-        const dim3 blockIdx(bx, by, bz);
-    """
+# def get_rasterization_code(pannel_width: int = 8) -> str:
+#     return f"""
+#         const int MAX_BLOCK_N = {pannel_width};
+#         const auto baseBlockIdx = blockIdx.x + gridDim.x *blockIdx.y;
+#         const auto totalPanel = (gridDim.x * gridDim.y +MAX_BLOCK_N * gridDim.x - 1) / (MAX_BLOCK_N * gridDim.x);
+#         const auto totalBlock = gridDim.x * gridDim.y;
+#         const auto panelIdx = baseBlockIdx / (MAX_BLOCK_N *gridDim.x);
+#         const auto strideLd = panelIdx + 1 < totalPanel ?MAX_BLOCK_N : (totalBlock - panelIdx * (MAX_BLOCK_N *gridDim.x)) / gridDim.x;
+#         const auto bx = (panelIdx & 1) ? gridDim.x -(baseBlockIdx - panelIdx * MAX_BLOCK_N * gridDim.x) /strideLd - 1 : (baseBlockIdx - panelIdx * MAX_BLOCK_N *gridDim.x) / strideLd;
+#         const auto by = (baseBlockIdx - panelIdx * MAX_BLOCK_N *gridDim.x) % strideLd + panelIdx * MAX_BLOCK_N;
+#         const auto bz = blockIdx.z;
+#         const dim3 blockIdx(bx, by, bz);
+#     """
 
 
 def get_roller_hints_from_func(

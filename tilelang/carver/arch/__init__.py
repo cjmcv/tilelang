@@ -2,9 +2,6 @@ from __future__ import annotations
 
 from .arch_base import TileDevice
 from .cuda import *
-from .cpu import *
-from .cdna import *
-from .metal import *
 from tvm.target import Target
 import torch
 
@@ -37,10 +34,5 @@ __all__ = [
     "is_hopper_arch",
     "is_tensorcore_supported_precision",
     "has_mma_support",
-    "is_cdna_arch",
-    "is_metal_arch",
     "CUDA",
-    "CDNA",
-    "METAL",
-    "CPU",
 ]

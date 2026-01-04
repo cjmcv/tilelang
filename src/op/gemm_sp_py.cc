@@ -106,8 +106,6 @@ GemmInst GemmSPPyNode::GetGemmInst(int block_size, Target target) const {
                      (num_warps % 4 == 0) && CheckWGMMA();
   if (allow_wgmma) {
     return GemmInst::kWGMMA;
-  } else if (TargetIsCDNA(target)) {
-    return GemmInst::kMFMA;
   } else if (TargetIsCuda(target)) {
     return GemmInst::kMMA;
   } else {

@@ -131,8 +131,6 @@ GemmInst GemmNode::getGemmInst(int block_size, Target target) const {
     return GemmInst::kTCGEN5MMA;
   } else if (allowWgmma(block_size, target)) {
     return GemmInst::kWGMMA;
-  } else if (TargetIsCDNA(target)) {
-    return GemmInst::kMFMA;
   } else if (TargetIsCuda(target)) {
     return GemmInst::kMMA;
   } else {
@@ -543,10 +541,7 @@ Stmt GemmNode::Lower(const LowerArgs &T, arith::Analyzer *analyzer) const {
     ss << ", " << strideA_ << ", " << strideB_;
     ss << ", " << offsetA_ << ", " << offsetB_;
   }
-  if (TargetIsCDNA(T.target)) {
-    // for cdna gemm, we need to specify kPack
-    ss << ", " << kPack_;
-  } else if (TargetIsHopper(T.target)) {
+  if (TargetIsHopper(T.target)) {
     ss << ", " << (gemm_inst == GemmInst::kWGMMA ? "true" : "false");
   }
 
@@ -772,43 +767,6 @@ LayoutMap GemmNode::InferLayout(const LayoutInferArgs &T,
       results.Set(c_, res);
     }
   } 
-  // else if (TargetIsCDNA(T.target)) {
-  //   ICHECK(c_.scope() == "local.fragment")
-  //       << "CDNA gemm (FMMA) only supports C in local.fragment scope, got "
-  //       << c_.scope();
-  //   auto fragment = makeGemmFragmentCCDNA(m_, n_, m_ / warp_m, n_ / warp_n,
-  //                                         c_->dtype.bits());
-  //   results.Set(c_, fragment->BindThreadRange(thread_range));
-
-  //   if (a_.scope() == "shared" || a_.scope() == "shared.dyn") {
-  //     int dim_A = a_->shape.size();
-  //     auto shared_layout = makeGemmABLayoutCDNA(
-  //         *as_const_int(a_->shape[dim_A - 2]),
-  //         *as_const_int(a_->shape[dim_A - 1]), a_->dtype.bits(), kPack_);
-  //     results.Set(a_, shared_layout);
-  //   } else if (a_.scope() == "local.fragment") {
-  //     auto fragment =
-  //         makeGemmFragmentACDNA(m_, n_, k_, m_ / warp_m, n_ / warp_n,
-  //                               a_->dtype.bits(), kPack_, transA_);
-  //     results.Set(a_, fragment->BindThreadRange(thread_range));
-  //   } else {
-  //     ICHECK(0);
-  //   }
-  //   if (b_.scope() == "shared" || b_.scope() == "shared.dyn") {
-  //     int dim_B = b_->shape.size();
-  //     auto shared_layout = makeGemmABLayoutCDNA(
-  //         *as_const_int(b_->shape[dim_B - 2]),
-  //         *as_const_int(b_->shape[dim_B - 1]), b_->dtype.bits(), kPack_);
-
-  //     results.Set(b_, shared_layout);
-  //   } else if (b_.scope() == "local.fragment") {
-  //     auto fragment =
-  //         makeGemmFragmentB(m_, n_, k_, m_ / warp_m, n_ / warp_n, transB_);
-  //     results.Set(b_, fragment->BindThreadRange(thread_range));
-  //   } else {
-  //     ICHECK(0);
-  //   }
-  // } 
   else {
     ICHECK(0) << "Not supported " << T.target->str();
   }

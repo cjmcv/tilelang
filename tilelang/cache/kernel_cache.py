@@ -32,7 +32,7 @@ PARAMS_PATH = "params.pkl"
 # CuTeDSL C++ launcher specific
 LAUNCHER_LIB_PATH = "launcher_lib.so"
 LAUNCHER_CPP_PATH = "launcher.cpp"
-CUTEDSL_CUBIN_PATH = "kernel.cubin"
+# CUTEDSL_CUBIN_PATH = "kernel.cubin"
 
 
 class KernelCache:
