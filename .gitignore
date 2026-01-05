@@ -6,6 +6,7 @@
 *.obj
 *.pyc
 a.out
+gen/
 
 # Precompiled Headers
 *.gch
