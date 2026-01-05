@@ -30,8 +30,8 @@ def tl_sparse_mla_topk_reducesum_impl(
     num_stages=2,
     threads=128,
 ):
-    assert dim == tilelang.math.next_power_of_2(dim), f"haven't check padding correctness yet, dim={dim}"
-    assert tail_dim == tilelang.math.next_power_of_2(tail_dim), f"haven't check padding correctness yet, dim={tail_dim}"
+    assert dim == tilelang.next_power_of_2(dim), f"haven't check padding correctness yet, dim={dim}"
+    assert tail_dim == tilelang.next_power_of_2(tail_dim), f"haven't check padding correctness yet, dim={tail_dim}"
     assert topk % block_I == 0, "otherwise will load some index=0 thus causing wrong kv to be loaded"
     if sm_scale is None:
         sm_scale = (1.0 / (dim + tail_dim)) ** 0.5
@@ -47,7 +47,7 @@ def tl_sparse_mla_topk_reducesum_impl(
 
     G = kv_group
     H = head_kv
-    padded_H = max(tilelang.math.next_power_of_2(head_kv), 16)
+    padded_H = max(tilelang.next_power_of_2(head_kv), 16)
     if padded_H != H:
         assert kv_group == 1, (
             "here we solve the H padding automatically, other wise you should handle Q copy and Output copy with your mask (when kv_group == 1, use g_i * padded_H:(g_i+1) * padded_H would be handled automatically)"

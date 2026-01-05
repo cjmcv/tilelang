@@ -124,7 +124,7 @@ def bwd(
     assert accum_dtype == T.float32
 
     H = H_kv
-    padded_H = max(tilelang.math.next_power_of_2(H_kv), 16)
+    padded_H = max(tilelang.next_power_of_2(H_kv), 16)
     BS = block_size
     NS = tilelang.cdiv(topk, block_size)
 

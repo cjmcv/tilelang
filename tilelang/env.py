@@ -12,8 +12,6 @@ logger = logging.getLogger(__name__)
 # SETUP ENVIRONMENT VARIABLES
 CUTLASS_NOT_FOUND_MESSAGE = "CUTLASS is not installed or found in the expected path"
 ", which may lead to compilation bugs when utilize tilelang backend."
-COMPOSABLE_KERNEL_NOT_FOUND_MESSAGE = "Composable Kernel is not installed or found in the expected path"
-", which may lead to compilation bugs when utilize tilelang backend."
 TL_TEMPLATE_NOT_FOUND_MESSAGE = "TileLang is not installed or found in the expected path"
 ", which may lead to compilation bugs when utilize tilelang backend."
 TVM_LIBRARY_NOT_FOUND_MESSAGE = "TVM is not installed or found in the expected path"
@@ -237,7 +235,8 @@ class Environment:
         Detect target CUDA architecture and set TORCH_CUDA_ARCH_LIST
         to ensure PyTorch extensions are built for the proper GPU arch.
         """
-        from tilelang.contrib import nvcc
+        # from tilelang.contrib import nvcc
+        from tvm.contrib import nvcc
         from tilelang.utils.target import determine_target
 
         target = determine_target(return_object=True)  # get target GPU
@@ -316,14 +315,6 @@ if os.environ.get("TL_CUTLASS_PATH", None) is None:
         os.environ["TL_CUTLASS_PATH"] = env.CUTLASS_INCLUDE_DIR = cutlass_inc_path
     else:
         logger.warning(CUTLASS_NOT_FOUND_MESSAGE)
-
-# # Initialize COMPOSABLE_KERNEL paths
-# if os.environ.get("TL_COMPOSABLE_KERNEL_PATH", None) is None:
-#     ck_inc_path = os.path.join(THIRD_PARTY_ROOT, "composable_kernel", "include")
-#     if os.path.exists(ck_inc_path):
-#         os.environ["TL_COMPOSABLE_KERNEL_PATH"] = env.COMPOSABLE_KERNEL_INCLUDE_DIR = ck_inc_path
-#     else:
-#         logger.warning(COMPOSABLE_KERNEL_NOT_FOUND_MESSAGE)
 
 # Initialize TL_TEMPLATE_PATH
 if os.environ.get("TL_TEMPLATE_PATH", None) is None:

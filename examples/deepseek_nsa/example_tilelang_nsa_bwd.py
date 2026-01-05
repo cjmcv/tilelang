@@ -53,7 +53,7 @@ def tilelang_kernel_fwd(
     dtype = T.float16
     accum_dtype = T.float32
     block_S = block_size
-    block_T = min(128, tilelang.math.next_power_of_2(dim))
+    block_T = min(128, tilelang.next_power_of_2(dim))
 
     NK = tilelang.cdiv(dim, block_T)
     NV = tilelang.cdiv(dim, block_T)

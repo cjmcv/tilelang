@@ -6,7 +6,8 @@ import tvm
 import tilelang.language as T
 import warnings
 
-from tilelang.contrib import nvcc
+# from tilelang.contrib import nvcc
+from tvm.contrib import nvcc
 from math import prod
 
 

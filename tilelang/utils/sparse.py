@@ -2,7 +2,8 @@ from __future__ import annotations
 import os
 import torch
 import warnings
-from tilelang.contrib import nvcc
+# from tilelang.contrib import nvcc
+from tvm.contrib import nvcc
 from tilelang.utils.tensor import is_float8_dtype, fp8_remove_negative_zeros_
 from torch.utils.cpp_extension import load, _import_module_from_library
 from tilelang import env

@@ -7,6 +7,24 @@ import warnings
 from pathlib import Path
 from tqdm.auto import tqdm
 
+# math
+def cdiv(a: int, b: int) -> int:
+    return (a + b - 1) // b
+
+# def next_power_of_2(x: int) -> int:
+#     return 1 << (x - 1).bit_length()
+
+def next_power_of_2(n: int):
+    """Return the smallest power of 2 greater than or equal to n"""
+    n -= 1
+    n |= n >> 1
+    n |= n >> 2
+    n |= n >> 4
+    n |= n >> 8
+    n |= n >> 16
+    n |= n >> 32
+    n += 1
+    return n
 
 def _compute_version() -> str:
     """Return the package version without being polluted by unrelated installs.
@@ -102,19 +120,23 @@ import tvm
 import tvm.base  # noqa: F401
 from tvm import DataType  # noqa: F401
 
-# Setup tvm search path before importing tvm
-from . import libinfo
-
-
+def find_lib_path(name: str, py_ext=False):
+    from .env import TL_LIBS
+    lib_name = f"lib{name}.so"
+    for lib_root in TL_LIBS:
+        lib_dll_path = os.path.join(lib_root, lib_name)
+        if os.path.exists(lib_dll_path) and os.path.isfile(lib_dll_path):
+            return lib_dll_path
+    else:
+        message = f"Cannot find libraries: {lib_name}\n" + "List of candidates:\n" + "\n".join(TL_LIBS)
+        raise RuntimeError(message)
+    
 def _load_tile_lang_lib():
     """Load Tile Lang lib"""
-    if sys.platform.startswith("win32") and sys.version_info >= (3, 8):
-        for path in libinfo.get_dll_directories():
-            os.add_dll_directory(path)
     # pylint: disable=protected-access
     lib_name = "tilelang" if tvm.base._RUNTIME_ONLY else "tilelang_module"
     # pylint: enable=protected-access
-    lib_path = libinfo.find_lib_path(lib_name)
+    lib_path = find_lib_path(lib_name)
     return ctypes.CDLL(lib_path), lib_path
 
 
@@ -139,7 +161,7 @@ from . import (
     transform,  # noqa: F401
     language,  # noqa: F401
     engine,  # noqa: F401
-    tools,  # noqa: F401
+    # tools,  # noqa: F401
 )
 from .language.v2 import dtypes  # noqa: F401
 from .autotuner import autotune  # noqa: F401
@@ -147,7 +169,7 @@ from .transform import PassConfigKey  # noqa: F401
 
 from .engine import lower, register_cuda_postproc #, register_hip_postproc  # noqa: F401
 
-from .math import *  # noqa: F403
+# from .math import *  # noqa: F403
 
 from . import ir  # noqa: F401
 

@@ -3,8 +3,25 @@ from tvm import tir, IRModule
 from tvm.target import Target
 import tilelang
 from tilelang.transform import PassContext
-from tilelang.contrib.nvcc import have_tma, is_hopper
+# from tilelang.contrib.nvcc import have_tma, is_hopper
+import torch
 
+def is_hopper(target):
+    if target.kind.name != "cuda":
+        return False
+    props = torch.cuda.get_device_properties(0)
+    compute_capability = props.major, props.minor
+    return compute_capability == (9, 0)
+
+def have_tma(target):
+    if target.kind.name != "cuda":
+        return False
+    props = torch.cuda.get_device_properties(0)
+    major, minor = props.major, props.minor
+    # TMA is supported in Ada Lovelace (9.0) or later architectures.
+    conditions = [False]
+    conditions.append(major >= 9)
+    return any(conditions)
 
 def allow_warp_specialized(pass_ctx: PassContext | None = None, target: Target | None = None) -> bool:
     # avoid circular import

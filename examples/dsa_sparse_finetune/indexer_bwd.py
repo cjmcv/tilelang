@@ -30,7 +30,7 @@ def tl_indexer_bwd_impl(
     num_threads: int = 128,
 ):
     assert num_stages == 0
-    assert topk == tl.math.next_power_of_2(topk)
+    assert topk == tl.next_power_of_2(topk)
     assert topk % block_I == 0
     assert heads <= 64 and heads % 8 == 0
     batch_plus_one = T.symbolic("batch_plus_one")

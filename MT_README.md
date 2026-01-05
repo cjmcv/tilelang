@@ -30,6 +30,7 @@ cmake -B build -G Ninja && cmake --build build --parallel 8
 
 # 3. 使用
 export PYTHONPATH=/home/cjmcv/project/tilelang:$PYTHONPATH
+pushd examples2/ && python example_gemm.py && popd
 
 # 清submodule
 git submodule deinit -f 3rdparty/composable_kernel/

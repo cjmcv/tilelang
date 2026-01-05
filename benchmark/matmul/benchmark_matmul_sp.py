@@ -8,7 +8,8 @@ import tilelang
 import tilelang.language as T
 from tilelang.autotuner import autotune
 from tilelang import jit
-from tilelang.contrib import nvcc
+# from tilelang.contrib import nvcc
+from tvm.contrib import nvcc
 from tilelang.layout import make_cutlass_metadata_layout
 
 # Configure logger

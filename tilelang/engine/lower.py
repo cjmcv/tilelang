@@ -11,7 +11,8 @@ from tvm import tir
 import tvm_ffi
 from tvm.ir import CallingConv
 from tvm.target import Target
-from tilelang.contrib import nvcc
+# from tilelang.contrib import nvcc
+from tvm.contrib import nvcc # CJM
 from tilelang.transform import PassConfigKey
 from tilelang.utils.deprecated import deprecated_warning
 from tilelang.engine.param import KernelParam, CompiledArtifact
@@ -22,6 +23,22 @@ from tilelang.engine.phase import (
     OptimizeForTarget,
 )
 
+def parse_compute_version(compute_version) -> tuple[int, int]:
+    split_ver = compute_version.split(".")
+    try:
+        major = int(split_ver[0])
+        minor = int(split_ver[1])
+        return major, minor
+    except (IndexError, ValueError) as err:
+        # pylint: disable=raise-missing-from
+        raise RuntimeError("Compute version parsing error") from err
+    
+def get_target_arch(compute_version) -> str:
+    major, minor = parse_compute_version(compute_version)
+    target_arch = str(major * 10 + minor)
+    if major >= 9:
+        target_arch += "a"
+    return target_arch
 
 def is_cpu_device_backend(target: Target):
     return target.kind.name == "c"
@@ -69,7 +86,7 @@ def tilelang_callback_cuda_compile(code, target, pass_config=None):
         cutlass_path = os.environ["TL_CUTLASS_PATH"]
     else:
         cutlass_path = osp.abspath(osp.join(project_root, "3rdparty/cutlass/include"))
-    target_arch = nvcc.get_target_arch(nvcc.get_target_compute_version(target))
+    target_arch = get_target_arch(nvcc.get_target_compute_version(target))
 
     arch = [f"-arch=sm_{target_arch}"]
     compile_format = "cubin"
@@ -119,7 +136,6 @@ def tilelang_callback_cuda_compile(code, target, pass_config=None):
         compile_format,
         arch,
         options=options,
-        verbose=False,
     )
 
     return ptx

@@ -21,7 +21,7 @@ from tilelang.jit.adapter import (
 )
 from tilelang.profiler import Profiler, TensorSupplyType
 from tilelang.utils.target import determine_target
-from tilelang.contrib import nvcc as tl_nvcc
+# from tilelang.contrib import nvcc as tl_nvcc
 from tilelang.transform import PassConfigKey
 import logging
 import os
@@ -536,128 +536,128 @@ class JITKernel(Generic[_P, _T]):
         # Export the compiled kernel function to a shared library file.
         self.rt_module.export_library(kernel_file)
 
-    def _get_ptx(self, verbose: bool | None = None) -> str:
-        """
-        Compile and return PTX for the current kernel (CUDA only).
+    # def _get_ptx(self, verbose: bool | None = None) -> str:
+    #     """
+    #     Compile and return PTX for the current kernel (CUDA only).
 
-        Parameters
-        ----------
-        verbose : Optional[bool]
-            Whether to enable verbose NVRTC logs. Defaults to self.verbose.
+    #     Parameters
+    #     ----------
+    #     verbose : Optional[bool]
+    #         Whether to enable verbose NVRTC logs. Defaults to self.verbose.
 
-        Returns
-        -------
-        str
-            The compiled PTX text.
-        """
-        if not is_cuda_target(self.target):
-            raise ValueError("PTX is only available for CUDA targets.")
-        # Prefer NVCC for PTX generation via contrib helper
-        code = self.get_kernel_source()
-        if verbose is None:
-            verbose = self.verbose
-        # Ensure target is set so nvcc picks correct arch via Target.current()
-        with self.target:
-            return tl_nvcc.get_ptx_from_source(code, compile_flags=self.compile_flags, verbose=verbose)
+    #     Returns
+    #     -------
+    #     str
+    #         The compiled PTX text.
+    #     """
+    #     if not is_cuda_target(self.target):
+    #         raise ValueError("PTX is only available for CUDA targets.")
+    #     # Prefer NVCC for PTX generation via contrib helper
+    #     code = self.get_kernel_source()
+    #     if verbose is None:
+    #         verbose = self.verbose
+    #     # Ensure target is set so nvcc picks correct arch via Target.current()
+    #     with self.target:
+    #         return tl_nvcc.get_ptx_from_source(code, compile_flags=self.compile_flags, verbose=verbose)
 
-    def show_ptx(self) -> None:
-        """
-        Print compiled PTX for the kernel (CUDA only).
+    # def show_ptx(self) -> None:
+    #     """
+    #     Print compiled PTX for the kernel (CUDA only).
 
-        Examples
-        --------
-        >>> jit_kernel.show_ptx()
-        """
-        try:
-            ptx = self._get_ptx()
-            print(ptx)
-        except Exception as e:
-            logger.error(f"Failed to show PTX: {e}")
+    #     Examples
+    #     --------
+    #     >>> jit_kernel.show_ptx()
+    #     """
+    #     try:
+    #         ptx = self._get_ptx()
+    #         print(ptx)
+    #     except Exception as e:
+    #         logger.error(f"Failed to show PTX: {e}")
 
-    def export_ptx(self, path: str) -> None:
-        """
-        Export compiled PTX to a file (CUDA only).
+    # def export_ptx(self, path: str) -> None:
+    #     """
+    #     Export compiled PTX to a file (CUDA only).
 
-        Parameters
-        ----------
-        path : str
-            Destination file path to write PTX.
+    #     Parameters
+    #     ----------
+    #     path : str
+    #         Destination file path to write PTX.
 
-        Examples
-        --------
-        >>> jit_kernel.export_ptx("/tmp/kernel.ptx")
-        """
-        if not path:
-            raise ValueError("path must be provided to export PTX")
-        try:
-            ptx = self._get_ptx()
-            dir_path = os.path.dirname(path)
-            if dir_path:
-                os.makedirs(dir_path, exist_ok=True)
-            with open(path, "w") as f:
-                f.write(ptx)
-            logger.info(f"PTX saved to {os.path.abspath(path)}")
-        except Exception as e:
-            logger.error(f"Failed to export PTX: {e}")
+    #     Examples
+    #     --------
+    #     >>> jit_kernel.export_ptx("/tmp/kernel.ptx")
+    #     """
+    #     if not path:
+    #         raise ValueError("path must be provided to export PTX")
+    #     try:
+    #         ptx = self._get_ptx()
+    #         dir_path = os.path.dirname(path)
+    #         if dir_path:
+    #             os.makedirs(dir_path, exist_ok=True)
+    #         with open(path, "w") as f:
+    #             f.write(ptx)
+    #         logger.info(f"PTX saved to {os.path.abspath(path)}")
+    #     except Exception as e:
+    #         logger.error(f"Failed to export PTX: {e}")
 
-    def _get_sass(self, verbose: bool | None = None) -> str:
-        """
-        Compile and return SASS for the current kernel (CUDA only).
+    # def _get_sass(self, verbose: bool | None = None) -> str:
+    #     """
+    #     Compile and return SASS for the current kernel (CUDA only).
 
-        Parameters
-        ----------
-        verbose : Optional[bool]
-            Whether to enable verbose tool logs. Defaults to self.verbose.
+    #     Parameters
+    #     ----------
+    #     verbose : Optional[bool]
+    #         Whether to enable verbose tool logs. Defaults to self.verbose.
 
-        Returns
-        -------
-        str
-            The disassembled SASS text.
-        """
-        if not is_cuda_target(self.target):
-            raise ValueError("SASS is only available for CUDA targets.")
-        code = self.get_kernel_source()
-        if verbose is None:
-            verbose = self.verbose
-        with self.target:
-            return tl_nvcc.get_sass_from_source(code, compile_flags=self.compile_flags, verbose=verbose)
+    #     Returns
+    #     -------
+    #     str
+    #         The disassembled SASS text.
+    #     """
+    #     if not is_cuda_target(self.target):
+    #         raise ValueError("SASS is only available for CUDA targets.")
+    #     code = self.get_kernel_source()
+    #     if verbose is None:
+    #         verbose = self.verbose
+    #     with self.target:
+    #         return tl_nvcc.get_sass_from_source(code, compile_flags=self.compile_flags, verbose=verbose)
 
-    def show_sass(self) -> None:
-        """
-        Print disassembled SASS for the kernel (CUDA only).
+    # def show_sass(self) -> None:
+    #     """
+    #     Print disassembled SASS for the kernel (CUDA only).
 
-        Examples
-        --------
-        >>> jit_kernel.show_sass()
-        """
-        try:
-            sass = self._get_sass()
-            print(sass)
-        except Exception as e:
-            logger.error(f"Failed to show SASS: {e}")
+    #     Examples
+    #     --------
+    #     >>> jit_kernel.show_sass()
+    #     """
+    #     try:
+    #         sass = self._get_sass()
+    #         print(sass)
+    #     except Exception as e:
+    #         logger.error(f"Failed to show SASS: {e}")
 
-    def export_sass(self, path: str) -> None:
-        """
-        Export disassembled SASS to a file (CUDA only).
+    # def export_sass(self, path: str) -> None:
+    #     """
+    #     Export disassembled SASS to a file (CUDA only).
 
-        Parameters
-        ----------
-        path : str
-            Destination file path to write SASS.
+    #     Parameters
+    #     ----------
+    #     path : str
+    #         Destination file path to write SASS.
 
-        Examples
-        --------
-        >>> jit_kernel.export_sass("/tmp/kernel.sass")
-        """
-        if not path:
-            raise ValueError("path must be provided to export SASS")
-        try:
-            sass = self._get_sass()
-            dir_path = os.path.dirname(path)
-            if dir_path:
-                os.makedirs(dir_path, exist_ok=True)
-            with open(path, "w") as f:
-                f.write(sass)
-            logger.info(f"SASS saved to {os.path.abspath(path)}")
-        except Exception as e:
-            logger.error(f"Failed to export SASS: {e}")
+    #     Examples
+    #     --------
+    #     >>> jit_kernel.export_sass("/tmp/kernel.sass")
+    #     """
+    #     if not path:
+    #         raise ValueError("path must be provided to export SASS")
+    #     try:
+    #         sass = self._get_sass()
+    #         dir_path = os.path.dirname(path)
+    #         if dir_path:
+    #             os.makedirs(dir_path, exist_ok=True)
+    #         with open(path, "w") as f:
+    #             f.write(sass)
+    #         logger.info(f"SASS saved to {os.path.abspath(path)}")
+    #     except Exception as e:
+    #         logger.error(f"Failed to export SASS: {e}")

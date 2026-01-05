@@ -2,7 +2,8 @@ import torch
 import torch.nn.functional as F
 import tilelang
 import tilelang.language as T
-from tilelang.contrib import nvcc
+# from tilelang.contrib import nvcc
+from tvm.contrib import nvcc
 import argparse
 from einops import rearrange, repeat
 from bert_padding import pad_input, unpad_input

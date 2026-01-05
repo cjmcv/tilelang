@@ -32,7 +32,7 @@ def tl_indexer_topk_reducesum_impl(
     num_stages: int = 0,
     num_threads: int = 128,
 ):
-    assert topk == tl.math.next_power_of_2(topk)
+    assert topk == tl.next_power_of_2(topk)
     assert topk % block_K == 0
     assert heads <= 64 and heads % 8 == 0
     assert num_stages == 0

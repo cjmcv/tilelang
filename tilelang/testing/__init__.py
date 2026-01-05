@@ -4,7 +4,8 @@ import pytest
 import random
 import torch
 import numpy as np
-from tilelang.contrib import nvcc
+# from tilelang.contrib import nvcc
+from tvm.contrib import nvcc
 from tvm.testing.utils import requires_cuda, requires_package, _compose
 
 from tilelang.utils.tensor import torch_assert_close as torch_assert_close
