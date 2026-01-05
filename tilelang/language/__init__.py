@@ -8,7 +8,7 @@ from __future__ import annotations
 # TODO(lei): remove this import once the
 # upstream tir script is fully compatible
 from tvm.script.parser.tir import *
-from . import overrides as _overrides  # noqa: F401
+# from . import overrides as _overrides  # noqa: F401
 
 # from .tir import prim_func, macro,  # noqa: F401
 from .v2 import *  # noqa: F401

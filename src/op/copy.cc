@@ -1818,212 +1818,212 @@ Array<PrimExpr> TMADesc::EncodeCallArgs() const {
   return args;
 }
 
-/**
- * @brief Construct a Conv2DIm2ColOp node.
- *
- * Initializes a Conv2DIm2ColOpNode from raw TL-call arguments and a buffer map.
- * The constructor extracts source and destination Buffers from vmap and reads
- * convolution parameters encoded in args:
- * - args[0]: source tensor access pointer
- * - args[1]: destination tensor access pointer
- * - args[2]: nhw_step (PrimExpr)
- * - args[3]: c_step (PrimExpr)
- * - args[4]: kernel (IntImm)
- * - args[5]: stride (IntImm)
- * - args[6]: dilation (IntImm)
- * - args[7]: padding (IntImm)
- * - args[8]: eviction_policy (IntImm)
- *
- * The created node stores these values (src, dst, nhw_step, c_step, kernel,
- * stride, dilation, padding, eviction_policy) for later lowering to TMA-based
- * GPU intrinsics.
- *
- * @param args Array of PrimExpr TL-call arguments (see list above).
- */
-Conv2DIm2ColOp::Conv2DIm2ColOp(Array<PrimExpr> args) {
-  ObjectPtr<Conv2DIm2ColOpNode> node =
-      tvm::ffi::make_object<Conv2DIm2ColOpNode>();
-  node->srcRegion_ = NormalizeToBufferRegion(args[0]);
-  node->dstRegion_ = NormalizeToBufferRegion(args[1]);
-  node->src_ = node->srcRegion_->buffer;
-  node->dst_ = node->dstRegion_->buffer;
-  node->nhw_step_ = args[2];
-  node->c_step_ = args[3];
-  node->kernel_ = args[4].as<IntImm>().value()->value;
-  node->stride_ = args[5].as<IntImm>().value()->value;
-  node->dilation_ = args[6].as<IntImm>().value()->value;
-  node->padding_ = args[7].as<IntImm>().value()->value;
-  node->eviction_policy_ = args[8].as<IntImm>().value()->value;
-  data_ = std::move(node);
-}
+// /**
+//  * @brief Construct a Conv2DIm2ColOp node.
+//  *
+//  * Initializes a Conv2DIm2ColOpNode from raw TL-call arguments and a buffer map.
+//  * The constructor extracts source and destination Buffers from vmap and reads
+//  * convolution parameters encoded in args:
+//  * - args[0]: source tensor access pointer
+//  * - args[1]: destination tensor access pointer
+//  * - args[2]: nhw_step (PrimExpr)
+//  * - args[3]: c_step (PrimExpr)
+//  * - args[4]: kernel (IntImm)
+//  * - args[5]: stride (IntImm)
+//  * - args[6]: dilation (IntImm)
+//  * - args[7]: padding (IntImm)
+//  * - args[8]: eviction_policy (IntImm)
+//  *
+//  * The created node stores these values (src, dst, nhw_step, c_step, kernel,
+//  * stride, dilation, padding, eviction_policy) for later lowering to TMA-based
+//  * GPU intrinsics.
+//  *
+//  * @param args Array of PrimExpr TL-call arguments (see list above).
+//  */
+// Conv2DIm2ColOp::Conv2DIm2ColOp(Array<PrimExpr> args) {
+//   ObjectPtr<Conv2DIm2ColOpNode> node =
+//       tvm::ffi::make_object<Conv2DIm2ColOpNode>();
+//   node->srcRegion_ = NormalizeToBufferRegion(args[0]);
+//   node->dstRegion_ = NormalizeToBufferRegion(args[1]);
+//   node->src_ = node->srcRegion_->buffer;
+//   node->dst_ = node->dstRegion_->buffer;
+//   node->nhw_step_ = args[2];
+//   node->c_step_ = args[3];
+//   node->kernel_ = args[4].as<IntImm>().value()->value;
+//   node->stride_ = args[5].as<IntImm>().value()->value;
+//   node->dilation_ = args[6].as<IntImm>().value()->value;
+//   node->padding_ = args[7].as<IntImm>().value()->value;
+//   node->eviction_policy_ = args[8].as<IntImm>().value()->value;
+//   data_ = std::move(node);
+// }
 
-/**
- * @brief Create a shallow copy of this Conv2DIm2ColOpNode wrapped as a
- * TileOperator.
- *
- * Produces a new Conv2DIm2ColOp that owns a freshly allocated
- * Conv2DIm2ColOpNode initialized from this node (member-wise copy). This is
- * used to duplicate the operator node for compiler passes that require
- * independent operator instances.
- *
- * @return TileOperator A TileOperator containing the cloned Conv2DIm2ColOpNode.
- */
-TileOperator Conv2DIm2ColOpNode::Clone() const {
-  auto op = tvm::ffi::make_object<Conv2DIm2ColOpNode>(*this);
-  return Conv2DIm2ColOp(op);
-}
+// /**
+//  * @brief Create a shallow copy of this Conv2DIm2ColOpNode wrapped as a
+//  * TileOperator.
+//  *
+//  * Produces a new Conv2DIm2ColOp that owns a freshly allocated
+//  * Conv2DIm2ColOpNode initialized from this node (member-wise copy). This is
+//  * used to duplicate the operator node for compiler passes that require
+//  * independent operator instances.
+//  *
+//  * @return TileOperator A TileOperator containing the cloned Conv2DIm2ColOpNode.
+//  */
+// TileOperator Conv2DIm2ColOpNode::Clone() const {
+//   auto op = tvm::ffi::make_object<Conv2DIm2ColOpNode>(*this);
+//   return Conv2DIm2ColOp(op);
+// }
 
-/**
- * @brief Lower Conv2D im2col into a TMA-backed PTX sequence for Hopper.
- *
- * Constructs a TMA im2col descriptor from the Conv2DIm2ColOp parameters
- * (kernel, stride, dilation, padding, channel/image tiling, dtype and shapes),
- * emits a call to create the im2col descriptor, and returns a statement that
- * invokes the corresponding tma_load_im2col builtin guarded to a single
- * thread. The lowering assumes the destination resides in shared memory and the
- * source in global memory and uses the provided layout information (when
- * available) to select the appropriate shared-memory swizzle.
- *
- * Preconditions (checked with ICHECK):
- * - Target is Hopper.
- * - src.scope() == "global" and dst.scope() is "shared.dyn" or "shared".
- * - src->shape has rank 4 and dst->shape has rank 2.
- * - src and dst have the same dtype.
- * - When a shared layout is supplied it must match a recognized TMA swizzle
- *   pattern (32B/64B/128B) or an ICHECK will fail.
- *
- * @param T Lowering context (target, layout map, thread_var, thread_bounds,
- *          buffer remapping, etc.). Used to fetch target/layout and to emit a
- *          thread-guarded TMA call.
- * @param analyzer Arithmetic analyzer used to prove divisibility and simplify
- *                 expressions required by descriptor construction.
- * @return Stmt A TIR statement that performs a tma_load_im2col call wrapped in
- *              a thread-min guard (IfThenElse). The returned statement is ready
- *              to be inserted into the lowered TIR.
- */
-Stmt Conv2DIm2ColOpNode::Lower(const LowerArgs &T,
-                               arith::Analyzer *analyzer) const {
-  ICHECK(TargetIsHopper(T.target));
-  ICHECK(src_.scope() == "global" &&
-         (dst_.scope() == "shared.dyn" || dst_.scope() == "shared"));
-  ICHECK(src_->shape.size() == 4);
-  ICHECK(dst_->shape.size() == 2);
-  ICHECK(src_->dtype == dst_->dtype);
-  Layout shared_layout;
-  if (T.layout_map.count(dst_)) {
-    shared_layout = T.layout_map[dst_];
-  }
+// /**
+//  * @brief Lower Conv2D im2col into a TMA-backed PTX sequence for Hopper.
+//  *
+//  * Constructs a TMA im2col descriptor from the Conv2DIm2ColOp parameters
+//  * (kernel, stride, dilation, padding, channel/image tiling, dtype and shapes),
+//  * emits a call to create the im2col descriptor, and returns a statement that
+//  * invokes the corresponding tma_load_im2col builtin guarded to a single
+//  * thread. The lowering assumes the destination resides in shared memory and the
+//  * source in global memory and uses the provided layout information (when
+//  * available) to select the appropriate shared-memory swizzle.
+//  *
+//  * Preconditions (checked with ICHECK):
+//  * - Target is Hopper.
+//  * - src.scope() == "global" and dst.scope() is "shared.dyn" or "shared".
+//  * - src->shape has rank 4 and dst->shape has rank 2.
+//  * - src and dst have the same dtype.
+//  * - When a shared layout is supplied it must match a recognized TMA swizzle
+//  *   pattern (32B/64B/128B) or an ICHECK will fail.
+//  *
+//  * @param T Lowering context (target, layout map, thread_var, thread_bounds,
+//  *          buffer remapping, etc.). Used to fetch target/layout and to emit a
+//  *          thread-guarded TMA call.
+//  * @param analyzer Arithmetic analyzer used to prove divisibility and simplify
+//  *                 expressions required by descriptor construction.
+//  * @return Stmt A TIR statement that performs a tma_load_im2col call wrapped in
+//  *              a thread-min guard (IfThenElse). The returned statement is ready
+//  *              to be inserted into the lowered TIR.
+//  */
+// Stmt Conv2DIm2ColOpNode::Lower(const LowerArgs &T,
+//                                arith::Analyzer *analyzer) const {
+//   ICHECK(TargetIsHopper(T.target));
+//   ICHECK(src_.scope() == "global" &&
+//          (dst_.scope() == "shared.dyn" || dst_.scope() == "shared"));
+//   ICHECK(src_->shape.size() == 4);
+//   ICHECK(dst_->shape.size() == 2);
+//   ICHECK(src_->dtype == dst_->dtype);
+//   Layout shared_layout;
+//   if (T.layout_map.count(dst_)) {
+//     shared_layout = T.layout_map[dst_];
+//   }
 
-  TMAIm2ColDesc desc;
-  desc.rank = src_->shape.size();
-  desc.data_type = to_CUtensorMapDataType(src_->dtype);
-  desc.global_addr = src_->data;
-  desc.global_shape = ReverseArray(src_->shape);
+//   TMAIm2ColDesc desc;
+//   desc.rank = src_->shape.size();
+//   desc.data_type = to_CUtensorMapDataType(src_->dtype);
+//   desc.global_addr = src_->data;
+//   desc.global_shape = ReverseArray(src_->shape);
 
-  if (!src_->strides.empty()) {
-    desc.global_stride = ReverseArray(src_->strides);
-  } else {
-    // Create stride from shape
-    PrimExpr stride = 1;
-    desc.global_stride.reserve(desc.rank);
-    for (size_t i = 0; i < desc.rank; i++) {
-      desc.global_stride.push_back(stride);
-      stride *= desc.global_shape[i];
-    }
-  }
-  // The first stride element should be 1
-  ICHECK(is_one(desc.global_stride[0])) << desc.global_stride;
-  // Make global stride in bytes
-  desc.global_stride = desc.global_stride.Map([&](PrimExpr e) {
-    return cast(DataType::Int(64), e) * src_->dtype.bytes();
-  });
-  desc.elem_stride = {1, stride_, stride_, 1};
-  desc.lower_corner = {-padding_, -padding_};
-  desc.upper_corner = {-padding_, -padding_};
-  desc.smem_box_pixel = Downcast<IntImm>(dst_->shape[0])->value;
-  desc.smem_box_channel = Downcast<IntImm>(dst_->shape[1])->value;
-  desc.l2_promotion = static_cast<int>(CU_TENSOR_MAP_L2_PROMOTION_L2_128B);
-  desc.oob_fill = static_cast<int>(CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE);
-  desc.interleave = static_cast<int>(CU_TENSOR_MAP_INTERLEAVE_NONE);
-  if (!shared_layout.defined()) {
-    desc.swizzle = static_cast<int>(CU_TENSOR_MAP_SWIZZLE_NONE);
-  } else {
-    ICHECK(shared_layout->InputDim() == 2) << "Cannot detect TMA layout.";
-    auto stride = as_const_int(shared_layout->InputShape()[0]);
-    auto continuous = as_const_int(shared_layout->InputShape()[1]);
-    ICHECK(stride != nullptr && continuous != nullptr);
+//   if (!src_->strides.empty()) {
+//     desc.global_stride = ReverseArray(src_->strides);
+//   } else {
+//     // Create stride from shape
+//     PrimExpr stride = 1;
+//     desc.global_stride.reserve(desc.rank);
+//     for (size_t i = 0; i < desc.rank; i++) {
+//       desc.global_stride.push_back(stride);
+//       stride *= desc.global_shape[i];
+//     }
+//   }
+//   // The first stride element should be 1
+//   ICHECK(is_one(desc.global_stride[0])) << desc.global_stride;
+//   // Make global stride in bytes
+//   desc.global_stride = desc.global_stride.Map([&](PrimExpr e) {
+//     return cast(DataType::Int(64), e) * src_->dtype.bytes();
+//   });
+//   desc.elem_stride = {1, stride_, stride_, 1};
+//   desc.lower_corner = {-padding_, -padding_};
+//   desc.upper_corner = {-padding_, -padding_};
+//   desc.smem_box_pixel = Downcast<IntImm>(dst_->shape[0])->value;
+//   desc.smem_box_channel = Downcast<IntImm>(dst_->shape[1])->value;
+//   desc.l2_promotion = static_cast<int>(CU_TENSOR_MAP_L2_PROMOTION_L2_128B);
+//   desc.oob_fill = static_cast<int>(CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE);
+//   desc.interleave = static_cast<int>(CU_TENSOR_MAP_INTERLEAVE_NONE);
+//   if (!shared_layout.defined()) {
+//     desc.swizzle = static_cast<int>(CU_TENSOR_MAP_SWIZZLE_NONE);
+//   } else {
+//     ICHECK(shared_layout->InputDim() == 2) << "Cannot detect TMA layout.";
+//     auto stride = as_const_int(shared_layout->InputShape()[0]);
+//     auto continuous = as_const_int(shared_layout->InputShape()[1]);
+//     ICHECK(stride != nullptr && continuous != nullptr);
 
-    if (StructuralEqual()(shared_layout,
-                          makeQuarterBankSwizzleLayout(*stride, *continuous,
-                                                       dst_->dtype.bits()))) {
-      desc.swizzle = static_cast<int>(CU_TENSOR_MAP_SWIZZLE_32B);
-    } else if (StructuralEqual()(shared_layout, makeHalfBankSwizzleLayout(
-                                                    *stride, *continuous,
-                                                    dst_->dtype.bits()))) {
-      desc.swizzle = static_cast<int>(CU_TENSOR_MAP_SWIZZLE_64B);
-    } else if (StructuralEqual()(shared_layout, makeFullBankSwizzleLayout(
-                                                    *stride, *continuous,
-                                                    dst_->dtype.bits()))) {
-      desc.swizzle = static_cast<int>(CU_TENSOR_MAP_SWIZZLE_128B);
-    } else {
-      ICHECK(0) << "Cannot detect TMA layout.";
-    }
-  }
+//     if (StructuralEqual()(shared_layout,
+//                           makeQuarterBankSwizzleLayout(*stride, *continuous,
+//                                                        dst_->dtype.bits()))) {
+//       desc.swizzle = static_cast<int>(CU_TENSOR_MAP_SWIZZLE_32B);
+//     } else if (StructuralEqual()(shared_layout, makeHalfBankSwizzleLayout(
+//                                                     *stride, *continuous,
+//                                                     dst_->dtype.bits()))) {
+//       desc.swizzle = static_cast<int>(CU_TENSOR_MAP_SWIZZLE_64B);
+//     } else if (StructuralEqual()(shared_layout, makeFullBankSwizzleLayout(
+//                                                     *stride, *continuous,
+//                                                     dst_->dtype.bits()))) {
+//       desc.swizzle = static_cast<int>(CU_TENSOR_MAP_SWIZZLE_128B);
+//     } else {
+//       ICHECK(0) << "Cannot detect TMA layout.";
+//     }
+//   }
 
-  Call create_desc = Call(DataType::Handle(), create_tma_im2col_descriptor(),
-                          desc.EncodeCallArgs());
+//   Call create_desc = Call(DataType::Handle(), create_tma_im2col_descriptor(),
+//                           desc.EncodeCallArgs());
 
-  Array<PrimExpr> global_coords; // c, w, h, n
-  Array<PrimExpr> image_offset;  // w, h
-  global_coords.reserve(desc.rank);
+//   Array<PrimExpr> global_coords; // c, w, h, n
+//   Array<PrimExpr> image_offset;  // w, h
+//   global_coords.reserve(desc.rank);
 
-  ICHECK(analyzer->CanProveEqual(
-      FloorMod(desc.global_shape[0], desc.smem_box_channel), 0))
-      << "Currently can only support divisible channel case";
+//   ICHECK(analyzer->CanProveEqual(
+//       FloorMod(desc.global_shape[0], desc.smem_box_channel), 0))
+//       << "Currently can only support divisible channel case";
 
-  global_coords.push_back(
-      FloorMod(c_step_ * desc.smem_box_channel, desc.global_shape[0]));
-  image_offset.push_back(
-      dilation_ *
-      FloorMod(FloorDiv(c_step_ * desc.smem_box_channel, desc.global_shape[0]),
-               kernel_));
-  image_offset.push_back(dilation_ * FloorDiv(c_step_ * desc.smem_box_channel,
-                                              desc.global_shape[0] * kernel_));
+//   global_coords.push_back(
+//       FloorMod(c_step_ * desc.smem_box_channel, desc.global_shape[0]));
+//   image_offset.push_back(
+//       dilation_ *
+//       FloorMod(FloorDiv(c_step_ * desc.smem_box_channel, desc.global_shape[0]),
+//                kernel_));
+//   image_offset.push_back(dilation_ * FloorDiv(c_step_ * desc.smem_box_channel,
+//                                               desc.global_shape[0] * kernel_));
 
-  PrimExpr h_dim =
-      FloorDiv(src_->shape[1] + 2 * padding_ - (kernel_ - 1) * dilation_ - 1,
-               stride_) +
-      1;
-  PrimExpr w_dim =
-      FloorDiv(src_->shape[2] + 2 * padding_ - (kernel_ - 1) * dilation_ - 1,
-               stride_) +
-      1;
-  global_coords.push_back(
-      stride_ * FloorMod(nhw_step_ * desc.smem_box_pixel, w_dim) - padding_);
-  global_coords.push_back(
-      stride_ *
-          FloorMod(FloorDiv(nhw_step_ * desc.smem_box_pixel, w_dim), h_dim) -
-      padding_);
-  global_coords.push_back(
-      FloorDiv(nhw_step_ * desc.smem_box_pixel, w_dim * h_dim));
+//   PrimExpr h_dim =
+//       FloorDiv(src_->shape[1] + 2 * padding_ - (kernel_ - 1) * dilation_ - 1,
+//                stride_) +
+//       1;
+//   PrimExpr w_dim =
+//       FloorDiv(src_->shape[2] + 2 * padding_ - (kernel_ - 1) * dilation_ - 1,
+//                stride_) +
+//       1;
+//   global_coords.push_back(
+//       stride_ * FloorMod(nhw_step_ * desc.smem_box_pixel, w_dim) - padding_);
+//   global_coords.push_back(
+//       stride_ *
+//           FloorMod(FloorDiv(nhw_step_ * desc.smem_box_pixel, w_dim), h_dim) -
+//       padding_);
+//   global_coords.push_back(
+//       FloorDiv(nhw_step_ * desc.smem_box_pixel, w_dim * h_dim));
 
-  Array<PrimExpr> args;
-  args.reserve(desc.rank * 2 + 2);
-  args.push_back(create_desc);
-  args.push_back(0); // mbar placeholder
-  auto dst_buffer = T.buffer_remap.count(dst_) ? T.buffer_remap[dst_] : dst_;
-  auto shared_addr = dst_buffer.access_ptr(2);
-  args.push_back(shared_addr);
-  for (auto coord : global_coords)
-    args.push_back(coord);
-  for (auto offset : image_offset)
-    args.push_back(offset);
-  args.push_back(this->eviction_policy_);
-  Stmt tma_copy =
-      IfThenElse(EQ(T.thread_var, T.thread_bounds->min),
-                 Evaluate(Call(DataType::Handle(), tma_load_im2col(), args)));
-  return tma_copy;
-}
+//   Array<PrimExpr> args;
+//   args.reserve(desc.rank * 2 + 2);
+//   args.push_back(create_desc);
+//   args.push_back(0); // mbar placeholder
+//   auto dst_buffer = T.buffer_remap.count(dst_) ? T.buffer_remap[dst_] : dst_;
+//   auto shared_addr = dst_buffer.access_ptr(2);
+//   args.push_back(shared_addr);
+//   for (auto coord : global_coords)
+//     args.push_back(coord);
+//   for (auto offset : image_offset)
+//     args.push_back(offset);
+//   args.push_back(this->eviction_policy_);
+//   Stmt tma_copy =
+//       IfThenElse(EQ(T.thread_var, T.thread_bounds->min),
+//                  Evaluate(Call(DataType::Handle(), tma_load_im2col(), args)));
+//   return tma_copy;
+// }
 
 /*!
  * \brief Encode the TMA im2col descriptor into an array of PrimExpr.
@@ -2095,34 +2095,34 @@ TIR_REGISTER_TL_TILE_OP(Copy, copy)
     .set_attr<TCallEffectKind>("TCallEffectKind",
                                Integer(CallEffectKind::kOpaque));
 
-/**
- * @brief Layout inference hook for Conv2DIm2ColOpNode.
- *
- * This operator does not provide any layout inference; the function
- * intentionally returns an empty LayoutMap to indicate no layout suggestions.
- *
- * @param T Context for layout inference (ignored).
- * @param level Inference level (ignored).
- * @return LayoutMap An empty map.
- */
-LayoutMap Conv2DIm2ColOpNode::InferLayout(const LayoutInferArgs &T,
-                                          InferLevel level) const {
-  return {};
-}
+// /**
+//  * @brief Layout inference hook for Conv2DIm2ColOpNode.
+//  *
+//  * This operator does not provide any layout inference; the function
+//  * intentionally returns an empty LayoutMap to indicate no layout suggestions.
+//  *
+//  * @param T Context for layout inference (ignored).
+//  * @param level Inference level (ignored).
+//  * @return LayoutMap An empty map.
+//  */
+// LayoutMap Conv2DIm2ColOpNode::InferLayout(const LayoutInferArgs &T,
+//                                           InferLevel level) const {
+//   return {};
+// }
 
-// Register the Conv2DIm2Col operation with TVM's TIR system
-// This operation performs im2col transformation for 2D convolutions using TMA
-// - Takes 9 inputs: src_buffer, dst_buffer, nhw_step, c_step, kernel, stride,
-// dilation, padding, eviction_policy
-// - Marked as opaque since it has side effects (memory writes)
-TIR_REGISTER_TL_TILE_OP(Conv2DIm2ColOp, c2d_im2col)
-    .set_num_inputs(9)
-    .set_attr<TCallEffectKind>("TCallEffectKind",
-                               Integer(CallEffectKind::kOpaque));
+// // Register the Conv2DIm2Col operation with TVM's TIR system
+// // This operation performs im2col transformation for 2D convolutions using TMA
+// // - Takes 9 inputs: src_buffer, dst_buffer, nhw_step, c_step, kernel, stride,
+// // dilation, padding, eviction_policy
+// // - Marked as opaque since it has side effects (memory writes)
+// TIR_REGISTER_TL_TILE_OP(Conv2DIm2ColOp, c2d_im2col)
+//     .set_num_inputs(9)
+//     .set_attr<TCallEffectKind>("TCallEffectKind",
+//                                Integer(CallEffectKind::kOpaque));
 
 TVM_FFI_STATIC_INIT_BLOCK() {
   CopyNode::RegisterReflection();
-  Conv2DIm2ColOpNode::RegisterReflection();
+  // Conv2DIm2ColOpNode::RegisterReflection();
 }
 } // namespace tl
 } // namespace tvm

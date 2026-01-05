@@ -316,61 +316,61 @@ public:
  * This operator converts input image layout into columnar format suitable
  * for matrix multiplication-based convolution lowering.
  */
-class Conv2DIm2ColOpNode : public TileOperatorNode {
-public:
-  BufferRegion srcRegion_, dstRegion_;
-  Buffer src_,
-      dst_;      // Source (input feature map) and destination (im2col matrix)
-  int stride_;   // Stride for convolution
-  int padding_;  // Padding amount
-  int dilation_; // Dilation factor
-  int kernel_;   // Kernel size
-  int eviction_policy_; // Cache eviction policy
-  PrimExpr nhw_step_;   // Step size in NHW dimensions
-  PrimExpr c_step_;     // Step size in channel dimension
+// class Conv2DIm2ColOpNode : public TileOperatorNode {
+// public:
+//   BufferRegion srcRegion_, dstRegion_;
+//   Buffer src_,
+//       dst_;      // Source (input feature map) and destination (im2col matrix)
+//   int stride_;   // Stride for convolution
+//   int padding_;  // Padding amount
+//   int dilation_; // Dilation factor
+//   int kernel_;   // Kernel size
+//   int eviction_policy_; // Cache eviction policy
+//   PrimExpr nhw_step_;   // Step size in NHW dimensions
+//   PrimExpr c_step_;     // Step size in channel dimension
 
-  TVM_FFI_DECLARE_OBJECT_INFO_FINAL("tl.Conv2DIm2Col", Conv2DIm2ColOpNode,
-                                    TileOperatorNode);
+//   TVM_FFI_DECLARE_OBJECT_INFO_FINAL("tl.Conv2DIm2Col", Conv2DIm2ColOpNode,
+//                                     TileOperatorNode);
 
-  static void RegisterReflection() {
-    namespace refl = tvm::ffi::reflection;
-    refl::ObjectDef<Conv2DIm2ColOpNode>()
-        .def_ro("srcRegion", &Conv2DIm2ColOpNode::srcRegion_)
-        .def_ro("dstRegion", &Conv2DIm2ColOpNode::dstRegion_)
-        .def_ro("src", &Conv2DIm2ColOpNode::src_)
-        .def_ro("dst", &Conv2DIm2ColOpNode::dst_)
-        .def_ro("stride", &Conv2DIm2ColOpNode::stride_)
-        .def_ro("padding", &Conv2DIm2ColOpNode::padding_)
-        .def_ro("dilation", &Conv2DIm2ColOpNode::dilation_)
-        .def_ro("kernel", &Conv2DIm2ColOpNode::kernel_)
-        .def_ro("eviction_policy", &Conv2DIm2ColOpNode::eviction_policy_);
-  }
+//   static void RegisterReflection() {
+//     namespace refl = tvm::ffi::reflection;
+//     refl::ObjectDef<Conv2DIm2ColOpNode>()
+//         .def_ro("srcRegion", &Conv2DIm2ColOpNode::srcRegion_)
+//         .def_ro("dstRegion", &Conv2DIm2ColOpNode::dstRegion_)
+//         .def_ro("src", &Conv2DIm2ColOpNode::src_)
+//         .def_ro("dst", &Conv2DIm2ColOpNode::dst_)
+//         .def_ro("stride", &Conv2DIm2ColOpNode::stride_)
+//         .def_ro("padding", &Conv2DIm2ColOpNode::padding_)
+//         .def_ro("dilation", &Conv2DIm2ColOpNode::dilation_)
+//         .def_ro("kernel", &Conv2DIm2ColOpNode::kernel_)
+//         .def_ro("eviction_policy", &Conv2DIm2ColOpNode::eviction_policy_);
+//   }
 
-  /*!
-   * \brief Lower to TIR statement.
-   */
-  Stmt Lower(const LowerArgs &T, arith::Analyzer *analyzer) const override;
+//   /*!
+//    * \brief Lower to TIR statement.
+//    */
+//   Stmt Lower(const LowerArgs &T, arith::Analyzer *analyzer) const override;
 
-  /*!
-   * \brief Infer layout for this operator.
-   */
-  LayoutMap InferLayout(const LayoutInferArgs &T,
-                        InferLevel level) const override;
+//   /*!
+//    * \brief Infer layout for this operator.
+//    */
+//   LayoutMap InferLayout(const LayoutInferArgs &T,
+//                         InferLevel level) const override;
 
-  /*!
-   * \brief Get TVM Op handle.
-   */
-  static const Op &Get();
-  TileOperator Clone() const;
-};
+//   /*!
+//    * \brief Get TVM Op handle.
+//    */
+//   static const Op &Get();
+//   TileOperator Clone() const;
+// };
 
-class Conv2DIm2ColOp : public TileOperator {
-public:
-  TVM_FFI_DEFINE_OBJECT_REF_METHODS_NULLABLE(Conv2DIm2ColOp, TileOperator,
-                                             Conv2DIm2ColOpNode);
-  TVM_DLL Conv2DIm2ColOp(Array<PrimExpr> args);
-  static const Op &Get();
-};
+// class Conv2DIm2ColOp : public TileOperator {
+// public:
+//   TVM_FFI_DEFINE_OBJECT_REF_METHODS_NULLABLE(Conv2DIm2ColOp, TileOperator,
+//                                              Conv2DIm2ColOpNode);
+//   TVM_DLL Conv2DIm2ColOp(Array<PrimExpr> args);
+//   static const Op &Get();
+// };
 
 } // namespace tl
 } // namespace tvm

@@ -1924,7 +1924,7 @@ call_end281:                                      ; preds = %handle_init_end277
   %813 = getelementptr inbounds %0, ptr %stack_ffi_any375, i64 5, i32 0, !dbg !15
   store <2 x i32> <i32 1, i32 0>, ptr %813, align 8, !dbg !15
   %814 = getelementptr inbounds %0, ptr %stack_ffi_any375, i64 5, i32 2, !dbg !15
-  store i64 128, ptr %814, align 8, !dbg !15
+  store i64 256, ptr %814, align 8, !dbg !15
   %815 = getelementptr inbounds %0, ptr %stack_ffi_any375, i64 6, i32 0, !dbg !15
   store <2 x i32> <i32 1, i32 0>, ptr %815, align 8, !dbg !15
   %816 = getelementptr inbounds %0, ptr %stack_ffi_any375, i64 6, i32 2, !dbg !15

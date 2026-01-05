@@ -4,7 +4,7 @@ from tvm.target import Target
 from tilelang.utils.target import target_is_hopper, target_have_tma
 import tilelang
 from tilelang.transform import PassContext
-
+from . import analysis
 # from tilelang.contrib.nvcc import have_tma, is_hopper
 
 def allow_warp_specialized(pass_ctx: PassContext | None = None, target: Target | None = None) -> bool:
@@ -101,7 +101,7 @@ def LayoutVisual(mod: IRModule) -> None:
     """Apply layout visualization pass if enabled."""
     if should_enable_layout_visual():
         formats = get_layout_visual_formats()
-        tilelang.engine.analysis.LayoutVisual(formats=formats)(mod)
+        analysis.LayoutVisual(formats=formats)(mod)
 
 
 def PreLowerSemanticCheck(mod: IRModule) -> None:
@@ -112,11 +112,11 @@ def PreLowerSemanticCheck(mod: IRModule) -> None:
     """
 
     # Debug
-    # tilelang.engine.analysis.ASTPrinter()(mod)
+    # analysis.ASTPrinter()(mod)
     # Check if there are any invalid nested loops.
-    tilelang.engine.analysis.NestedLoopChecker()(mod)
+    analysis.NestedLoopChecker()(mod)
     # Check if there are any invalid symbolic T.Parallel + fragment access.
-    tilelang.engine.analysis.FragmentLoopChecker()(mod)
+    analysis.FragmentLoopChecker()(mod)
 
 
 def LowerAndLegalize(mod: IRModule, target: Target) -> IRModule:
