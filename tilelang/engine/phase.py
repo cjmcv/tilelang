@@ -1,35 +1,16 @@
 from __future__ import annotations
 from tvm import tir, IRModule
 from tvm.target import Target
+from tilelang.utils.target import target_is_hopper, target_have_tma
 import tilelang
 from tilelang.transform import PassContext
 # from tilelang.contrib.nvcc import have_tma, is_hopper
-import torch
-
-def is_hopper(target):
-    if target.kind.name != "cuda":
-        return False
-    props = torch.cuda.get_device_properties(0)
-    compute_capability = props.major, props.minor
-    return compute_capability == (9, 0)
-
-def have_tma(target):
-    if target.kind.name != "cuda":
-        return False
-    props = torch.cuda.get_device_properties(0)
-    major, minor = props.major, props.minor
-    # TMA is supported in Ada Lovelace (9.0) or later architectures.
-    conditions = [False]
-    conditions.append(major >= 9)
-    return any(conditions)
 
 def allow_warp_specialized(pass_ctx: PassContext | None = None, target: Target | None = None) -> bool:
     # avoid circular import
-    from tilelang.jit.adapter.utils import is_cuda_target
-
     if pass_ctx is None:
         pass_ctx = tilelang.transform.get_pass_context()
-    if (not is_cuda_target(target)) or (not have_tma(target)):
+    if (not target.kind.name == "cuda") or (not target_have_tma(target)):
         return False
     disable_warp_specialized = pass_ctx.config.get("tl.disable_warp_specialized", False)
     return not disable_warp_specialized
@@ -38,14 +19,14 @@ def allow_warp_specialized(pass_ctx: PassContext | None = None, target: Target |
 def allow_tma_and_warp_specialized(pass_ctx: PassContext | None = None, target: Target | None = None) -> bool:
     if pass_ctx is None:
         pass_ctx = tilelang.transform.get_pass_context()
-    if not have_tma(target):
+    if not target_have_tma(target):
         return False
     disable_tma_lower = pass_ctx.config.get("tl.disable_tma_lower", False)
     return not disable_tma_lower and allow_warp_specialized(pass_ctx=pass_ctx, target=target)
 
 
 def allow_fence_proxy(target: Target | None = None) -> bool:
-    return have_tma(target)
+    return target_have_tma(target)
 
 
 def allow_vectorize(pass_ctx: PassContext | None = None) -> bool:
@@ -217,7 +198,7 @@ def OptimizeForTarget(mod: IRModule, target: Target) -> IRModule:
         # so we need to lower the opaque block first
         mod = tilelang.transform.LowerOpaqueBlock()(mod)
         mod = tilelang.transform.MergeIfStmt()(mod)
-        if is_hopper(target):
+        if target_is_hopper(target):
             mod = tilelang.transform.RewriteWgmmaSync()(mod)
         mod = tilelang.transform.InjectFenceProxy()(mod)
     else:

@@ -1,1 +1,1 @@
-from .adapter import CythonKernelAdapter  # noqa: F401
+# from .adapter import CythonKernelAdapter  # noqa: F401

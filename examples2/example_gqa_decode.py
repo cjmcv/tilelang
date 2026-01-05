@@ -11,7 +11,6 @@ from typing import Tuple, Dict
 
 torch.random.manual_seed(0)
 
-
 def get_configs():
     block_N = [64, 128]
     block_H = [64]

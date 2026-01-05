@@ -7,7 +7,7 @@ try:
 except ImportError:  # Python < 3.10
     from typing_extensions import ParamSpec
 
-from tilelang.jit.adapter.utils import is_cuda_target
+# from tilelang.jit.adapter.utils import is_cuda_target
 from tvm.target import Target
 from tvm.tir import PrimFunc
 

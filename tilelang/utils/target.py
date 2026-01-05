@@ -34,14 +34,6 @@ def check_cuda_availability() -> bool:
         return False
 
 
-def check_metal_availability() -> bool:
-    mac_release, _, arch = mac_ver()
-    if not mac_release:
-        return False
-    # todo: check torch version?
-    return arch == "arm64"
-
-
 def determine_target(target: str | Target | Literal["auto"] = "auto", return_object: bool = False) -> str | Target:
     """
     Determine the appropriate target for compilation (CUDA, HIP, or manual selection).
@@ -110,6 +102,32 @@ def determine_target(target: str | Target | Literal["auto"] = "auto", return_obj
         return Target(return_var)
     return return_var
 
+
+def parse_compute_version(compute_version) -> tuple[int, int]:
+    split_ver = compute_version.split(".")
+    try:
+        major = int(split_ver[0])
+        minor = int(split_ver[1])
+        return major, minor
+    except (IndexError, ValueError) as err:
+        # pylint: disable=raise-missing-from
+        raise RuntimeError("Compute version parsing error") from err
+    
+def get_target_arch(compute_version) -> str:
+    major, minor = parse_compute_version(compute_version)
+    target_arch = str(major * 10 + minor)
+    if major >= 9:
+        target_arch += "a"
+    return target_arch
+
+def target_have_tma(target):
+    if target.kind.name != "cuda":
+        return False
+    major, minor = parse_compute_version(nvcc.get_target_compute_version(target))
+    # TMA is supported in Ada Lovelace (9.0) or later architectures.
+    conditions = [False]
+    conditions.append(major >= 9)
+    return any(conditions)
 
 def target_is_cuda(target: Target) -> bool:
     return _ffi_api.TargetIsCuda(target)

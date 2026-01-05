@@ -22,23 +22,7 @@ from tilelang.engine.phase import (
     LowerAndLegalize,
     OptimizeForTarget,
 )
-
-def parse_compute_version(compute_version) -> tuple[int, int]:
-    split_ver = compute_version.split(".")
-    try:
-        major = int(split_ver[0])
-        minor = int(split_ver[1])
-        return major, minor
-    except (IndexError, ValueError) as err:
-        # pylint: disable=raise-missing-from
-        raise RuntimeError("Compute version parsing error") from err
-    
-def get_target_arch(compute_version) -> str:
-    major, minor = parse_compute_version(compute_version)
-    target_arch = str(major * 10 + minor)
-    if major >= 9:
-        target_arch += "a"
-    return target_arch
+from tilelang.utils.target import get_target_arch
 
 def is_cpu_device_backend(target: Target):
     return target.kind.name == "c"
