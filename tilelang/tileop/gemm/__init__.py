@@ -10,7 +10,7 @@ from .gemm_mma import GemmMMA
 from .gemm_mma_sm70 import GemmMMASm70
 from .gemm_wgmma import GemmWGMMA
 from .gemm_tcgen05 import GemmTCGEN5
-from .gemm_mfma import GemmMFMA
+# from .gemm_mfma import GemmMFMA
 from tilelang import _ffi_api
 from tilelang.utils.target import target_is_volta
 
@@ -34,7 +34,6 @@ class GemmInst(IntEnum):
     MMA = 0
     WGMMA = 1
     TCGEN5MMA = 2
-    MFMA = 3
 
     def is_mma(self) -> bool:
         return self == GemmInst.MMA
@@ -44,9 +43,6 @@ class GemmInst(IntEnum):
 
     def is_tcgen5mma(self) -> bool:
         return self == GemmInst.TCGEN5MMA
-
-    def is_mfma(self) -> bool:
-        return self == GemmInst.MFMA
 
     def __repr__(self) -> str:
         return self.name
@@ -184,8 +180,6 @@ class GemmPy(Node, Scriptable):
             return GemmWGMMA
         elif gemm_inst.is_tcgen5mma():
             return GemmTCGEN5
-        elif gemm_inst.is_mfma():
-            return GemmMFMA
         elif gemm_inst.is_tcgen5mma():
             raise NotImplementedError("TCGEN5MMA is not implemented")
         else:

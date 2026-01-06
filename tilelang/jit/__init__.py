@@ -33,7 +33,7 @@ from tilelang.utils.target import determine_target
 from tilelang.jit.cache import cached, clear_cache
 from os import path, makedirs
 from logging import getLogger
-from tilelang.jit.param import Kernel
+# from tilelang.jit.param import Kernel
 import concurrent.futures
 
 from tqdm.auto import tqdm

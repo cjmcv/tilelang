@@ -204,9 +204,6 @@ Fragment makeGemmFragmentC(const int block_m, const int block_n,
 Fragment makeGemmSparseFragmentC(const int block_m, const int block_n,
                                  const int warp_m, const int warp_n,
                                  const int element_size);
-Fragment makeGemmFragmentCCDNA(const int block_m, const int block_n,
-                               const int warp_m, const int warp_n,
-                               const int element_size);
 Fragment makeGemmFragmentCHopper(const int block_m, const int block_n,
                                  const int warp_m, const int warp_n,
                                  const int element_size);
@@ -218,11 +215,6 @@ Fragment makeGemmFragmentB(const int block_m, const int block_n,
                            const int block_k, const int warp_m,
                            const int warp_n, bool transposed = false);
 
-Fragment makeGemmFragmentACDNA(const int block_m, const int block_n,
-                               const int block_k, const int warp_m,
-                               const int warp_n, const int element_size,
-                               const int k_pack, bool transposed = false);
-
 // Default Memory Layout
 Layout makeGemmLayoutLinear(int stride, int continuous);
 Layout makeGemmABLayoutPadded(int stride, int continuous, int element_size);
@@ -233,8 +225,6 @@ Layout makeGemmABLayoutHopper(int mat_stride, int mat_continuous,
                               bool k_inner = true);
 Layout makeGemmABLayoutSm100(int mat_stride, int mat_continuous, int continuity,
                              int element_size, bool k_inner = true);
-Layout makeGemmABLayoutCDNA(int stride, int continuous, int element_size,
-                            int kPack);
 
 Fragment makeGemmVoltaFragmentC(const int block_m, const int block_n,
                                 const int warp_m, const int warp_n,

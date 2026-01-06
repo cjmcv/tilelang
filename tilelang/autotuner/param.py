@@ -30,8 +30,8 @@ DEVICE_KERNEL_PATH = "device_kernel.cu"
 HOST_KERNEL_PATH = "host_kernel.cu"
 EXECUTABLE_PATH = "executable.so"
 KERNEL_LIB_PATH = "kernel_lib.so"
-KERNEL_CUBIN_PATH = "kernel.cubin"
-KERNEL_PY_PATH = "kernel.py"
+# KERNEL_CUBIN_PATH = "kernel.cubin"
+# KERNEL_PY_PATH = "kernel.py"
 PARAMS_PATH = "params.pkl"
 
 
