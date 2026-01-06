@@ -38,3 +38,12 @@ git rm -f 3rdparty/composable_kernel/
 rm -rf .git/modules/3rdparty/composable_kernel/
 
 git submodule add https://github.com/apache/tvm.git 3rdparty/tvm
+
+
+# 备注
+
+@tilelang.testing.requires_cuda
+@tilelang.testing.requires_cuda_compute_version(9, 0)
+-> 改回使用tvm的，tvm的只是没有_ge, _lt等扩展，功能一致
+@tvm.testing.requires_cuda
+@tvm.testing.requires_cuda_compute_version(9, 0)
