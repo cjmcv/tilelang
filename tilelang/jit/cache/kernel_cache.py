@@ -25,13 +25,13 @@ DEVICE_KERNEL_PATH = "device_kernel.cu"
 HOST_KERNEL_PATH = "host_kernel.cu"
 EXECUTABLE_PATH = "executable.so"
 KERNEL_LIB_PATH = "kernel_lib.so"
-KERNEL_CUBIN_PATH = "kernel.cubin"
-KERNEL_PY_PATH = "kernel.py"
+# KERNEL_CUBIN_PATH = "kernel.cubin"
+# KERNEL_PY_PATH = "kernel.py"
 PARAMS_PATH = "params.pkl"
 
 # CuTeDSL C++ launcher specific
-LAUNCHER_LIB_PATH = "launcher_lib.so"
-LAUNCHER_CPP_PATH = "launcher.cpp"
+# LAUNCHER_LIB_PATH = "launcher_lib.so"
+# LAUNCHER_CPP_PATH = "launcher.cpp"
 # CUTEDSL_CUBIN_PATH = "kernel.cubin"
 
 
@@ -224,9 +224,6 @@ class KernelCache:
             if env.is_cache_enabled():
                 cache_path = self._get_cache_path(key)
                 self._save_kernel_to_disk(key, kernel, func, verbose)
-                # Set cache path on adapter so it can save cubin after first execution
-                if hasattr(kernel, "adapter") and execution_backend == "cutedsl":
-                    kernel.adapter._cache_path = cache_path
 
         # Store in memory cache after compilation
         self._memory_cache[key] = kernel
@@ -296,18 +293,17 @@ class KernelCache:
 
         # Save kernel source code
         try:
-            if self.execution_backend != "cutedsl":
-                device_kernel_path = os.path.join(cache_path, DEVICE_KERNEL_PATH)
-                if verbose:
-                    self.logger.debug(f"Saving kernel source code to file: {device_kernel_path}")
-                if kernel.kernel_source is not None:
-                    KernelCache._safe_write_file(device_kernel_path, "w", lambda file: file.write(kernel.kernel_source))
+            device_kernel_path = os.path.join(cache_path, DEVICE_KERNEL_PATH)
+            if verbose:
+                self.logger.debug(f"Saving kernel source code to file: {device_kernel_path}")
+            if kernel.kernel_source is not None:
+                KernelCache._safe_write_file(device_kernel_path, "w", lambda file: file.write(kernel.kernel_source))
         except Exception:
             self.logger.exception("Error saving kernel source code to disk")
 
         # Save wrapped kernel source code
         try:
-            host_kernel_path = os.path.join(cache_path, HOST_KERNEL_PATH if self.execution_backend != "cutedsl" else KERNEL_PY_PATH)
+            host_kernel_path = os.path.join(cache_path, HOST_KERNEL_PATH)
             if verbose:
                 self.logger.debug(f"Saving wrapped kernel source code to file: {host_kernel_path}")
             if self.execution_backend == "tvm_ffi":
@@ -319,46 +315,22 @@ class KernelCache:
 
         # Save the kernel library
         try:
-            # Save CUBIN or SO file
-            if self.execution_backend == "cutedsl":
-                # For CuTeDSL, kernel_lib_path is the Python module
-                kernel_lib_path = os.path.join(cache_path, KERNEL_PY_PATH)
-
-                # Save C++ launcher library if it exists
-                lib_gen = getattr(kernel.adapter, "lib_generator", None)
-                if lib_gen and hasattr(lib_gen, "launcher_libpath") and lib_gen.launcher_libpath:
-                    launcher_lib_path = os.path.join(cache_path, LAUNCHER_LIB_PATH)
-                    src_launcher_path = lib_gen.launcher_libpath
-                    if verbose:
-                        self.logger.debug(f"Saving C++ launcher library to cache: {src_launcher_path}")
-                    KernelCache._safe_write_file(
-                        launcher_lib_path, "wb", lambda file: file.write(KernelCache._load_binary(src_launcher_path))
-                    )
-
-                # Optionally save launcher C++ source for debugging
-                if hasattr(kernel.adapter, "launcher_cpp_code") and kernel.adapter.launcher_cpp_code:
-                    launcher_cpp_path = os.path.join(cache_path, LAUNCHER_CPP_PATH)
-                    if verbose:
-                        self.logger.debug(f"Saving C++ launcher source to: {launcher_cpp_path}")
-                    KernelCache._safe_write_file(launcher_cpp_path, "w", lambda file: file.write(kernel.adapter.launcher_cpp_code))
-
+            if self.execution_backend == "tvm_ffi":
+                kernel_lib_path = EXECUTABLE_PATH
             else:
-                if self.execution_backend == "tvm_ffi":
-                    kernel_lib_path = EXECUTABLE_PATH
-                else:
-                    kernel_lib_path = KERNEL_LIB_PATH
-                kernel_lib_path = os.path.join(cache_path, kernel_lib_path)
-                
-                if self.execution_backend == "tvm_ffi":
-                    executable = kernel.adapter.executable
-                    if verbose:
-                        self.logger.debug(f"Saving kernel executable to file: {executable}")
-                    KernelCache._safe_write_executable(executable, kernel_lib_path)
-                else:
-                    src_lib_path = kernel.adapter.libpath
-                    if verbose:
-                        self.logger.debug(f"Saving kernel library to file: {kernel_lib_path}")
-                    KernelCache._safe_write_file(kernel_lib_path, "wb", lambda file: file.write(KernelCache._load_binary(src_lib_path)))
+                kernel_lib_path = KERNEL_LIB_PATH
+            kernel_lib_path = os.path.join(cache_path, kernel_lib_path)
+            
+            if self.execution_backend == "tvm_ffi":
+                executable = kernel.adapter.executable
+                if verbose:
+                    self.logger.debug(f"Saving kernel executable to file: {executable}")
+                KernelCache._safe_write_executable(executable, kernel_lib_path)
+            else:
+                src_lib_path = kernel.adapter.libpath
+                if verbose:
+                    self.logger.debug(f"Saving kernel library to file: {kernel_lib_path}")
+                KernelCache._safe_write_file(kernel_lib_path, "wb", lambda file: file.write(KernelCache._load_binary(src_lib_path)))
 
         except Exception:
             self.logger.exception("Error saving kernel library to disk")
@@ -413,10 +385,6 @@ class KernelCache:
         # Check required files exist
         required_files = [kernel_lib_path, params_path]
 
-        # For CuTeDSL, also check launcher library
-        if self.execution_backend == "cutedsl":
-            required_files.append(os.path.join(cache_path, LAUNCHER_LIB_PATH))
-
         if not all([os.path.exists(file) for file in required_files]):
             return None
 
@@ -425,25 +393,21 @@ class KernelCache:
         kernel_params: list[KernelParam] | None = None
 
         # Load the kernel source file (optional)
-        if self.execution_backend != "cutedsl":
-            try:
-                if verbose:
-                    self.logger.debug(f"Loading kernel source code from file: {device_kernel_path}")
-                with open(device_kernel_path) as f:
-                    device_kernel_source = f.read()
-            except Exception:
-                self.logger.exception("Error loading kernel source code from disk")
-            try:
-                if verbose:
-                    self.logger.debug(f"Loading wrapped kernel source code from file: {host_kernel_path}")
-                with open(host_kernel_path) as f:
-                    host_kernel_source = f.read()
-            except Exception:
-                self.logger.exception("Error loading host kernel source code from disk")
-        else:
-            # For CuTeDSL, set empty strings since sources aren't loaded from cache
-            device_kernel_source = ""
-            host_kernel_source = ""
+        try:
+            if verbose:
+                self.logger.debug(f"Loading kernel source code from file: {device_kernel_path}")
+            with open(device_kernel_path) as f:
+                device_kernel_source = f.read()
+        except Exception:
+            self.logger.exception("Error loading kernel source code from disk")
+        try:
+            if verbose:
+                self.logger.debug(f"Loading wrapped kernel source code from file: {host_kernel_path}")
+            with open(host_kernel_path) as f:
+                host_kernel_source = f.read()
+        except Exception:
+            self.logger.exception("Error loading host kernel source code from disk")
+
 
         # Load kernel parameters
         try:
@@ -454,7 +418,7 @@ class KernelCache:
         except Exception:
             self.logger.exception("Error loading kernel parameters from disk")
 
-        if ((host_kernel_source and device_kernel_source) or self.execution_backend == "cutedsl") and kernel_params:
+        if (host_kernel_source and device_kernel_source) and kernel_params:
             return JITKernel.from_database(
                 func=func,
                 host_kernel_source=host_kernel_source,

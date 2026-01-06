@@ -95,48 +95,48 @@ def copy(
     return tir.call_intrin("handle", tir.op.Op.get("tl.tileop.copy"), src, dst, coalesced_width, disable_tma, eviction_policy)
 
 
-def c2d_im2col(
-    img: tir.Buffer,
-    col: tir.Buffer,
-    nhw_step: tir.PrimExpr,
-    c_step: tir.PrimExpr,
-    kernel: int,
-    stride: int,
-    dilation: int,
-    pad: int,
-    eviction_policy: Literal["evict_normal", "evict_first", "evict_last"] | None = None,
-):
-    """Perform im2col transformation for 2D convolution.
+# def c2d_im2col(
+#     img: tir.Buffer,
+#     col: tir.Buffer,
+#     nhw_step: tir.PrimExpr,
+#     c_step: tir.PrimExpr,
+#     kernel: int,
+#     stride: int,
+#     dilation: int,
+#     pad: int,
+#     eviction_policy: Literal["evict_normal", "evict_first", "evict_last"] | None = None,
+# ):
+#     """Perform im2col transformation for 2D convolution.
 
-    Args:
-        img (tir.Buffer): Input image buffer
-        col (tir.Buffer): Output column buffer
-        nhw_step (tir.PrimExpr): Step size for batch and spatial dimensions
-        c_step (tir.PrimExpr): Step size for channel dimension
-        kernel (int): Kernel size
-        stride (int): Stride of the convolution
-        dilation (int): Dilation rate
-        pad (int): Padding size
+#     Args:
+#         img (tir.Buffer): Input image buffer
+#         col (tir.Buffer): Output column buffer
+#         nhw_step (tir.PrimExpr): Step size for batch and spatial dimensions
+#         c_step (tir.PrimExpr): Step size for channel dimension
+#         kernel (int): Kernel size
+#         stride (int): Stride of the convolution
+#         dilation (int): Dilation rate
+#         pad (int): Padding size
 
-    Returns:
-        tir.Call: A handle to the im2col operation
-    """
-    if eviction_policy is None:
-        eviction_policy = 0
-    else:
-        eviction_policy = {"evict_normal": 0, "evict_first": 1, "evict_last": 2}[eviction_policy]
-    img_region = to_buffer_region(img, access_type="r")
-    col_region = to_buffer_region(col, access_type="w")
-    return tir.call_intrin(
-        "handle",
-        tir.op.Op.get("tl.tileop.c2d_im2col"),
-        img_region,
-        col_region,
-        nhw_step,
-        c_step,
-        kernel,
-        stride,
-        dilation,
-        pad,
-        eviction_policy,
-    )
+#     Returns:
+#         tir.Call: A handle to the im2col operation
+#     """
+#     if eviction_policy is None:
+#         eviction_policy = 0
+#     else:
+#         eviction_policy = {"evict_normal": 0, "evict_first": 1, "evict_last": 2}[eviction_policy]
+#     img_region = to_buffer_region(img, access_type="r")
+#     col_region = to_buffer_region(col, access_type="w")
+#     return tir.call_intrin(
+#         "handle",
+#         tir.op.Op.get("tl.tileop.c2d_im2col"),
+#         img_region,
+#         col_region,
+#         nhw_step,
+#         c_step,
+#         kernel,
+#         stride,
+#         dilation,
+#         pad,
+#         eviction_policy,
+#     )
