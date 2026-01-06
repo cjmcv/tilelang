@@ -222,35 +222,35 @@ set_target_properties(tilelang_module PROPERTIES
 # Build cython extension
 find_package(Python REQUIRED COMPONENTS Interpreter Development.Module ${SKBUILD_SABI_COMPONENT})
 
-add_custom_command(
-  OUTPUT "${CMAKE_BINARY_DIR}/tilelang_cython_wrapper.cpp"
-  COMMENT
-    "Cythoning tilelang/jit/adapter/cython/cython_wrapper.pyx"
-  COMMAND Python::Interpreter -m cython
-          "${CMAKE_CURRENT_SOURCE_DIR}/tilelang/jit/adapter/cython/cython_wrapper.pyx"
-          --module-name tilelang_cython_wrapper
-          --cplus --output-file "${CMAKE_BINARY_DIR}/tilelang_cython_wrapper.cpp"
-  DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tilelang/jit/adapter/cython/cython_wrapper.pyx"
-  VERBATIM)
+# add_custom_command(
+#   OUTPUT "${CMAKE_BINARY_DIR}/tilelang_cython_wrapper.cpp"
+#   COMMENT
+#     "Cythoning tilelang/jit/adapter/cython/cython_wrapper.pyx"
+#   COMMAND Python::Interpreter -m cython
+#           "${CMAKE_CURRENT_SOURCE_DIR}/tilelang/jit/adapter/cython/cython_wrapper.pyx"
+#           --module-name tilelang_cython_wrapper
+#           --cplus --output-file "${CMAKE_BINARY_DIR}/tilelang_cython_wrapper.cpp"
+#   DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tilelang/jit/adapter/cython/cython_wrapper.pyx"
+#   VERBATIM)
 
-if(NOT "${SKBUILD_SABI_VERSION}" STREQUAL "")
-  set(USE_SABI USE_SABI ${SKBUILD_SABI_VERSION})
-endif()
+# if(NOT "${SKBUILD_SABI_VERSION}" STREQUAL "")
+#   set(USE_SABI USE_SABI ${SKBUILD_SABI_VERSION})
+# endif()
 
-python_add_library(tilelang_cython_wrapper MODULE "${CMAKE_BINARY_DIR}/tilelang_cython_wrapper.cpp" ${USE_SABI} WITH_SOABI)
+# python_add_library(tilelang_cython_wrapper MODULE "${CMAKE_BINARY_DIR}/tilelang_cython_wrapper.cpp" ${USE_SABI} WITH_SOABI)
 
-# Ensure dev builds drop the extension into build/lib alongside other shared libs
-set_target_properties(tilelang_cython_wrapper PROPERTIES
-  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
-  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
-  ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
-)
+# # Ensure dev builds drop the extension into build/lib alongside other shared libs
+# set_target_properties(tilelang_cython_wrapper PROPERTIES
+#   LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+#   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+#   ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+# )
 
-# Install the extension into tilelang/lib inside the wheel
-install(TARGETS tilelang_cython_wrapper
-        LIBRARY DESTINATION tilelang/lib
-        RUNTIME DESTINATION tilelang/lib
-        ARCHIVE DESTINATION tilelang/lib)
+# # Install the extension into tilelang/lib inside the wheel
+# install(TARGETS tilelang_cython_wrapper
+#         LIBRARY DESTINATION tilelang/lib
+#         RUNTIME DESTINATION tilelang/lib
+#         ARCHIVE DESTINATION tilelang/lib)
 
 # # add python z3 lib path to rpath for running tests and dev in current folder
 # if(USE_Z3 AND USE_PYPI_Z3)
