@@ -84,7 +84,6 @@ public:
 
 class GemmNode : public TileOperatorNode {
 public:
-  bool checkWgmma() const;
   tir::Buffer a_, b_, c_;
   // BufferRegion for A, B and C
   BufferRegion aRegion_, bRegion_, cRegion_;
@@ -97,9 +96,6 @@ public:
   // only will be enabled under cdna mfma instructions
   int kPack_ = 1;
   int wgWait_ = 0;
-  BufferRegion mbarRegion_;
-  std::optional<tir::Buffer> mbar_; // mbar is optional, only used for TCGEN5MMA
-  Array<PrimExpr> cCoords_;
   mutable GemmWarpPolicy policy_;
   TVM_FFI_DECLARE_OBJECT_INFO_FINAL("tl.Gemm", GemmNode, TileOperatorNode);
 
@@ -126,26 +122,6 @@ public:
         .def_ro("wgWait", &GemmNode::wgWait_)
         .def_ro("policy", &GemmNode::policy_);
   }
-
-  Stmt Lower(const LowerArgs &T, arith::Analyzer *analyzer) const override;
-  LayoutMap InferLayout(const LayoutInferArgs &T,
-                        InferLevel level) const override;
-
-  TileOperator Clone() const;
-
-private:
-  GemmInst getGemmInst(int block_size, Target target) const;
-  bool allowTcgen5Mma(Target target) const;
-  bool allowWgmma(int block_size, Target target) const;
-
-  mutable bool completed_ = false;
-};
-
-class Gemm : public TileOperator {
-public:
-  TVM_FFI_DEFINE_OBJECT_REF_METHODS_NULLABLE(Gemm, TileOperator, GemmNode);
-  TVM_DLL Gemm(Array<PrimExpr> args);
-  static const Op &Get();
 };
 
 } // namespace tl

@@ -213,32 +213,32 @@ bool GemmPyNode::checkWgmma() const {
   }
 }
 
-/**
- * @brief Parse and return the numeric GPU architecture from a Target's "arch"
- * attribute.
- *
- * Examines the target's "arch" string and, if it matches the pattern
- * "sm_<num>", returns <num> as an int. If the attribute is present but does not
- * match that pattern, returns 0.
- *
- * Preconditions: the target must have an "arch" attribute (this is checked via
- * ICHECK).
- *
- * @return int The parsed architecture number (e.g., 80 for "sm_80"), or 0 if
- * the arch string does not match "sm_<num>".
- */
-static int GetArchInt(Target target) {
-  int arch_int = 0;
-  auto s = target->GetAttr<tvm::ffi::String>("arch");
-  ICHECK(s.has_value());
-  std::string arch = s.value();
-  if (arch.rfind("sm_", 0) == 0) {
-    arch_int = std::stoi(arch.substr(3));
-  } else {
-    arch_int = 0;
-  }
-  return arch_int;
-}
+// /**
+//  * @brief Parse and return the numeric GPU architecture from a Target's "arch"
+//  * attribute.
+//  *
+//  * Examines the target's "arch" string and, if it matches the pattern
+//  * "sm_<num>", returns <num> as an int. If the attribute is present but does not
+//  * match that pattern, returns 0.
+//  *
+//  * Preconditions: the target must have an "arch" attribute (this is checked via
+//  * ICHECK).
+//  *
+//  * @return int The parsed architecture number (e.g., 80 for "sm_80"), or 0 if
+//  * the arch string does not match "sm_<num>".
+//  */
+// static int GetArchInt(Target target) {
+//   int arch_int = 0;
+//   auto s = target->GetAttr<tvm::ffi::String>("arch");
+//   ICHECK(s.has_value());
+//   std::string arch = s.value();
+//   if (arch.rfind("sm_", 0) == 0) {
+//     arch_int = std::stoi(arch.substr(3));
+//   } else {
+//     arch_int = 0;
+//   }
+//   return arch_int;
+// }
 
 Stmt GemmPyNode::Lower(const LowerArgs &T, arith::Analyzer *analyzer) const {
   auto block_size = *as_const_int(T.thread_bounds->extent);

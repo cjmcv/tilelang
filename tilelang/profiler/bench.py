@@ -57,8 +57,8 @@ class suppress_stdout_stderr:
 
 
 IS_CUDA = torch.cuda.is_available()
-device = "cuda:0" if IS_CUDA else "mps:0"
-Event = torch.cuda.Event if IS_CUDA else torch.mps.Event
+device = "cuda:0"
+Event = torch.cuda.Event
 
 
 def do_bench(

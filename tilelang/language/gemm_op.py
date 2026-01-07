@@ -125,33 +125,33 @@ def _gemm_impl(
     )
 
 
-# Public wrappers
-def gemm_v1(
-    A: tir.Buffer | tir.Var,
-    B: tir.Buffer | tir.Var,
-    C: tir.Buffer | tir.Var,
-    transpose_A: bool = False,
-    transpose_B: bool = False,
-    policy: GemmWarpPolicy = GemmWarpPolicy.Square,
-    clear_accum: bool = False,
-    k_pack: int = 1,
-    wg_wait: int = 0,
-    mbar: tir.Buffer | None = None,
-):
-    """GEMM v1: use op tl.gemm."""
-    return _gemm_impl(
-        "tl.tileop.gemm",
-        A,
-        B,
-        C,
-        transpose_A,
-        transpose_B,
-        policy,
-        clear_accum,
-        k_pack,
-        wg_wait,
-        mbar,
-    )
+# # Public wrappers
+# def gemm_v1(
+#     A: tir.Buffer | tir.Var,
+#     B: tir.Buffer | tir.Var,
+#     C: tir.Buffer | tir.Var,
+#     transpose_A: bool = False,
+#     transpose_B: bool = False,
+#     policy: GemmWarpPolicy = GemmWarpPolicy.Square,
+#     clear_accum: bool = False,
+#     k_pack: int = 1,
+#     wg_wait: int = 0,
+#     mbar: tir.Buffer | None = None,
+# ):
+#     """GEMM v1: use op tl.gemm."""
+#     return _gemm_impl(
+#         "tl.tileop.gemm",
+#         A,
+#         B,
+#         C,
+#         transpose_A,
+#         transpose_B,
+#         policy,
+#         clear_accum,
+#         k_pack,
+#         wg_wait,
+#         mbar,
+#     )
 
 
 # experimental currently, for fast compilation
@@ -184,4 +184,5 @@ def gemm_v2(
 
 
 # Default to v2; allow forcing v1 via environment variable
-gemm = gemm_v1 if _env.use_gemm_v1() else gemm_v2
+# gemm = gemm_v1 if _env.use_gemm_v1() else gemm_v2
+gemm = gemm_v2
