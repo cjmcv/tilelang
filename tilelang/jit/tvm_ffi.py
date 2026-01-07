@@ -21,8 +21,6 @@ from tilelang.utils.language import retrieve_func_from_module
 from tilelang.engine.param import KernelParam
 
 
-
-
 class BaseKernelAdapter(ABC):
     func: Callable | None = None
 

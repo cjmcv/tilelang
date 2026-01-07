@@ -19,7 +19,7 @@ from tilelang.jit.tvm_ffi import (
     BaseKernelAdapter,
     TVMFFIKernelAdapter,
 )
-from tilelang.profiler import Profiler, TensorSupplyType
+from tilelang.utils.profiler import Profiler, TensorSupplyType
 from tilelang.utils.target import determine_target
 # from tilelang.contrib import nvcc as tl_nvcc
 from tilelang.transform import PassConfigKey
