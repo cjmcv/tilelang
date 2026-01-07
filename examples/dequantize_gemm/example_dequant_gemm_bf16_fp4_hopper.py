@@ -101,7 +101,7 @@ def matmul(
     B_dequantize_shared_shape = (block_N, block_K)
     assert K % (block_K * split) == 0
 
-    from tilelang.quantize import get_mxfp_intrin_group
+    from tilelang.intrinsics import get_mxfp_intrin_group
 
     # fast_dequant_bf16_fp4_twiddling
     # It requires that the 2 consecutive uint8 elements (16bits) contains 4 fp4 elements in a bit-twiddling way.

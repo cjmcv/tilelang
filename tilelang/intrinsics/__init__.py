@@ -12,3 +12,6 @@ from .mma_layout import get_swizzle_layout  # noqa: F401
 from .mma_layout import make_mma_swizzle_layout  # noqa: F401
 
 # from .mfma_layout import make_mfma_swizzle_layout  # noqa: F401
+
+from .quantize.lop3 import get_lop3_intrin_group  # noqa: F401
+from .quantize.mxfp import get_mxfp_intrin_group  # noqa: F401

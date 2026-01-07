@@ -17,11 +17,6 @@ class AtomicAdd(Node, Scriptable): ...
 @tvm_ffi.register_object("tl.Copy")
 class Copy(Node, Scriptable): ...
 
-
-# @tvm_ffi.register_object("tl.Conv2DIm2Col")
-# class Conv2DIm2ColOp(Node, Scriptable): ...
-
-
 @tvm_ffi.register_object("tl.GemmWarpPolicy")
 class GemmWarpPolicy(Node, Scriptable):
     policy_type: int
@@ -31,10 +26,6 @@ class GemmWarpPolicy(Node, Scriptable):
     def compute_warp_partition(self, M: int, N: int, block_size: int, target: Target, is_wgmma: bool):
         _ffi_api.GemmWarpPolicyComputeWarpPartition(self, int(M), int(N), int(block_size), target, is_wgmma)
         return self.m_warp, self.n_warp
-
-
-# @tvm_ffi.register_object("tl.Gemm")
-# class Gemm(Node, Scriptable): ...
 
 @tvm_ffi.register_object("tl.FinalizeReducerOp")
 class FinalizeReducerOp(Node, Scriptable): ...
