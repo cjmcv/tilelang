@@ -584,7 +584,7 @@ public:
   WgMMACollector() = default;
 
   void VisitExpr_(const CallNode *op) final {
-    if (op->op.same_as(tl_gemm()) || op->op.same_as(tl_gemm_sp())) {
+    if (op->op.same_as(tl_gemm())) {
       auto op_name = std::string(op->args[0].as<StringImmNode>()->value);
       if (has_wgmma_) {
         has_wgmma_ =

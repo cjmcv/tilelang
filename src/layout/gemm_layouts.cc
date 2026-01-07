@@ -85,27 +85,6 @@ Fragment makeGemmFragmentC(const int block_m, const int block_n,
   return block_layout;
 }
 
-Fragment makeGemmSparseFragmentC(const int block_m, const int block_n,
-                                 const int warp_m, const int warp_n,
-                                 const int element_size) {
-  if (element_size == 64) {
-    ICHECK(false) << "Not supported";
-  }
-  ICHECK(block_m % warp_m == 0);
-  ICHECK(block_n % warp_n == 0);
-  ICHECK(warp_m % 16 == 0) << "warp_m=" << warp_m;
-  ICHECK(warp_n % 8 == 0) << "warp_n=" << warp_n;
-  auto base_layout = makeGemmFragment8x8()->Repeat({2, 1}, false);
-  // NOTE: This func wasn't implemented by following the CUTLASS 2 iterator
-  // but by inspecting the output, it appears that we first need to
-  // repeat the warp layout while avoiding duplicate thread mappings.
-  auto warp_layout =
-      base_layout->Repeat({warp_m / 16, warp_n / 8}, false, false);
-  auto block_layout =
-      warp_layout->Repeat({block_m / warp_m, block_n / warp_n}, true, false);
-  return block_layout;
-}
-
 Fragment makeGemmFragmentCHopper(const int block_m, const int block_n,
                                  const int warp_m, const int warp_n,
                                  const int element_size) {
@@ -574,13 +553,6 @@ Layout makeTensorOpMultiplicand(int mat_stride, int mat_continuous,
 
   return Layout(Array{i, j},
                 {element_contiguous + element_strided * stride * kFactor});
-}
-
-Layout makeGemmSparseAmpereABLayout(int mat_stride, int mat_continuous,
-                                    int elementsize) {
-  int kCrosswise = std::min(mat_continuous, (1024 / elementsize));
-  return makeTensorOpMultiplicand(mat_stride, mat_continuous, elementsize,
-                                  kCrosswise);
 }
 
 /*!

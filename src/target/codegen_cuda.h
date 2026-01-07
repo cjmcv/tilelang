@@ -104,7 +104,7 @@ private:
   // whether enable int8
   bool enable_int8_{false};
   // whether enable sparse gemm
-  bool enable_sparse_gemm_{false};
+  // bool enable_sparse_gemm_{false};
   // whether enable warp shuffle intrinsics
   bool enable_warp_shuffle_{false};
   // whether need math_constants.h

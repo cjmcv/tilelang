@@ -447,14 +447,6 @@ TVM_DLL const Op &loop_break();
 TVM_DLL const Op &tl_gemm();
 
 /*!
- * \brief tilelang intrinsic for sparse matrix multiplication (GEMM with
- * sparsity).
- *
- *  This op is used to represent a sparse GEMM operation in tilelang.
- */
-TVM_DLL const Op &tl_gemm_sp();
-
-/*!
  * \brief tilelang intrinsic for shuffle elect.
  *
  *  This op is used to represent a shuffle elect operation in tilelang.

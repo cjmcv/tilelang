@@ -285,11 +285,6 @@ TIR_DEFINE_TL_BUILTIN(loop_break)
 TIR_DEFINE_TL_BUILTIN(tl_gemm).set_num_inputs(4).set_attr<TCallEffectKind>(
     "TCallEffectKind", Integer(CallEffectKind::kOpaque));
 
-TIR_DEFINE_TL_BUILTIN(tl_gemm_sp)
-    .set_num_inputs(5)
-    .set_attr<TCallEffectKind>("TCallEffectKind",
-                               Integer(CallEffectKind::kOpaque));
-
 TIR_DEFINE_TL_BUILTIN(tl_shuffle_elect)
     .set_num_inputs(1)
     .set_attr<TCallEffectKind>("TCallEffectKind",
