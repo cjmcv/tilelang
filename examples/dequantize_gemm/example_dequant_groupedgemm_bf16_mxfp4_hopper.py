@@ -1,6 +1,6 @@
 import tilelang
 import tilelang.language as T
-from tilelang.quantize import _tir_u8_to_f4_to_bf16
+from tilelang.intrinsics _tir_u8_to_f4_to_bf16
 from tilelang import tvm as tvm
 from tvm import DataType
 import torch
@@ -120,7 +120,7 @@ def matmul(
     B_dequantize_shared_shape = (block_N, block_K)
     assert K % (block_K * split) == 0
 
-    from tilelang.quantize import get_mxfp_intrin_group
+    from tilelang.intrinsics get_mxfp_intrin_group
 
     # fast_dequant_bf16_fp4_twiddling
     mxfp_intrin_info = get_mxfp_intrin_group(

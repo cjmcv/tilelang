@@ -30,7 +30,7 @@ from tvm.target import Target
 
 from tilelang.jit.kernel import JITKernel
 from tilelang.utils.target import determine_target
-from tilelang.jit.cache import cached, clear_cache
+from tilelang.jit.kernel_cache import cached, clear_cache
 from os import path, makedirs
 from logging import getLogger
 # from tilelang.jit.param import Kernel

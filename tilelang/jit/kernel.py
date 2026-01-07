@@ -15,7 +15,7 @@ import tilelang
 from tilelang import tvm
 from tilelang import env
 from tilelang.engine.param import CompiledArtifact, KernelParam
-from tilelang.jit.adapter import (
+from tilelang.jit.tvm_ffi import (
     BaseKernelAdapter,
     TVMFFIKernelAdapter,
 )

@@ -3,7 +3,7 @@ from tilelang import language as T
 from typing import Optional, Callable, Any
 import torch
 from tilelang import DataType
-from tilelang.quantize import (
+from tilelang.intrinsics (
     _tir_packed_int_to_int_convert,
 )
 
@@ -58,7 +58,7 @@ def dequantize_gemv(
     if fast_decoding is True:
         # Lazy import to decrease the startup time
         # as intrin registry may take a while to load
-        from tilelang.quantize import get_lop3_intrin_group
+        from tilelang.intrinsics get_lop3_intrin_group
 
         lop3_intrin_info = get_lop3_intrin_group(
             out_dtype=in_dtype,

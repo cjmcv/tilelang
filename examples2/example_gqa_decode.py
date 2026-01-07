@@ -444,6 +444,7 @@ def main(batch: int = 1, heads: int = 32, groups: int = 8, kv_seqlen: int = 8192
 
     if not tune:
         config, sm_version = get_heuristic_config()
+        config = dict(block_N=64, block_H=64, num_split=8, num_stages=1, threads=128)
         kernel = flashattn(batch, heads, groups, kv_seqlen, dim, **config)
         kernel.export_sources(kernel_path="./gen/flashattn.cu", host_path="./gen/flashattn.cpp")
         profiler = kernel.get_profiler(tensor_supply_type=tilelang.TensorSupplyType.Auto)

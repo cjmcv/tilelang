@@ -14,7 +14,7 @@ from tilelang.utils.tensor import (
     is_float8_dtype,
 )
 from tilelang.engine.param import KernelParam
-from tilelang.jit.adapter import BaseKernelAdapter
+from tilelang.jit.tvm_ffi import BaseKernelAdapter
 from tilelang.profiler.bench import do_bench
 
 
