@@ -1,7 +1,7 @@
 """GEMM (General Matrix Multiplication) operators exposed on the TileLang language surface."""
 
 from __future__ import annotations
-from tilelang.tileop.base import GemmWarpPolicy
+from tilelang.tileop.gemm_base import GemmWarpPolicy
 import tilelang.language as T
 from tvm import tir
 from tilelang.utils.language import (

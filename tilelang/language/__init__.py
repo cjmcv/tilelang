@@ -59,8 +59,8 @@ from .allocate import (
     empty,  # noqa: F401
 )
 from .copy_op import copy # , c2d_im2col  # noqa: F401
-from tilelang.tileop.base import GemmWarpPolicy  # noqa: F401
-from .gemm_op import gemm, gemm_v2  # noqa: F401
+from tilelang.tileop.gemm_base import GemmWarpPolicy  # noqa: F401
+from .gemm_op import gemm # , gemm_v2  # noqa: F401
 from .fill_op import fill, clear  # noqa: F401
 from .reduce_op import (
     reduce,  # noqa: F401
