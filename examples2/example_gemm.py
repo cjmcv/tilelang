@@ -1,6 +1,7 @@
 import tilelang
 import tilelang.language as T
 import util
+from tools.bench import do_bench
 
 @tilelang.jit(out_idx=[-1])
 def matmul(M, N, K, block_M, block_N, block_K, dtype=T.bfloat16, accum_dtype=T.float32):
@@ -52,8 +53,8 @@ def main():
     # kernel.export_sources(kernel_path="./gen/gemm.cu", host_path="./gen/gemm.cpp")
     
     # benchmark
-    profiler = kernel.get_profiler()
-    latency = profiler.do_bench(backend="cupti")
+    # profiler = kernel.get_profiler()
+    # latency = profiler.do_bench(backend="cupti")
     
     print("0:", kernel.prim_func.attrs)
     print("1:", kernel.adapter.params)
@@ -64,8 +65,9 @@ def main():
     
     smem_bytes = util.get_smem_bytes(kernel.prim_func)
     print("shared memory =", smem_bytes, "B")
-
-    latency = profiler.do_bench()
+    
+    latency = do_bench(lambda: kernel(a, b), warmup=10, rep=100, )
+    # latency = profiler.do_bench()
     print(f"tilelang Latency: {latency}ms")
 
 

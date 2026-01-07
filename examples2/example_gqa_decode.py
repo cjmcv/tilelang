@@ -8,6 +8,7 @@ import argparse
 import itertools
 from functools import lru_cache
 from typing import Tuple, Dict
+from tools.bench import do_bench
 
 torch.random.manual_seed(0)
 
@@ -444,9 +445,10 @@ def main(batch: int = 1, heads: int = 32, groups: int = 8, kv_seqlen: int = 8192
 
     if not tune:
         config, sm_version = get_heuristic_config()
+        config = dict(block_N=64, block_H=64, num_split=2, num_stages=2, threads=128)
         kernel = flashattn(batch, heads, groups, kv_seqlen, dim, **config)
         kernel.export_sources(kernel_path="./gen/flashattn.cu", host_path="./gen/flashattn.cpp")
-        profiler = kernel.get_profiler(tensor_supply_type=tilelang.TensorSupplyType.Auto)
+        # profiler = kernel.get_profiler(tensor_supply_type=tilelang.TensorSupplyType.Auto)
 
         q = torch.randn(batch, heads, dim, device="cuda", dtype=torch.float16)
         k = torch.randn(batch, kv_seqlen, groups, dim, device="cuda", dtype=torch.float16)
@@ -466,10 +468,12 @@ def main(batch: int = 1, heads: int = 32, groups: int = 8, kv_seqlen: int = 8192
         assert_similar(o, o_ref_split, name="o_ref_split")
 
         print("All checks pass.")
-        latency = profiler.do_bench(ref_program, warmup=500)
+        # latency = profiler.do_bench(ref_program, warmup=500)
+        latency = do_bench(lambda: ref_program(q, k, v, mask, glse, Output_partial), warmup=500, rep=200, )
         print("Ref: {:.2f} ms".format(latency))
         print("Ref: {:.2f} TFlops".format(total_flops / latency * 1e-9))
-        latency = profiler.do_bench(warmup=500)
+        # latency = profiler.do_bench(warmup=500)
+        latency = do_bench(lambda: kernel(q, k, v, mask, glse, Output_partial), warmup=500, rep=200, )
         print("Tile-lang: {:.2f} ms".format(latency))
         print("Tile-lang: {:.2f} TFlops".format(total_flops / latency * 1e-9))
     else:
