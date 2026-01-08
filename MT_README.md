@@ -30,7 +30,7 @@ cmake -B build -G Ninja && cmake --build build --parallel 8
 
 # 3. 使用
 export PYTHONPATH=/home/cjmcv/project/tilelang:$PYTHONPATH
-pushd examples2/ && python example_gemm.py && popd
+pushd demo/ && python example_gemm.py && popd
 
 # 清submodule
 git submodule deinit -f 3rdparty/composable_kernel/
@@ -39,11 +39,13 @@ rm -rf .git/modules/3rdparty/composable_kernel/
 
 git submodule add https://github.com/apache/tvm.git 3rdparty/tvm
 
-
 # 备注
-
 @tilelang.testing.requires_cuda
 @tilelang.testing.requires_cuda_compute_version(9, 0)
 -> 改回使用tvm的，tvm的只是没有_ge, _lt等扩展，功能一致
 @tvm.testing.requires_cuda
 @tvm.testing.requires_cuda_compute_version(9, 0)
+
+# TODO
+1. 将项目转到mpk里进行编译；
+2. 修改cuda code gen，转化到所需格式；

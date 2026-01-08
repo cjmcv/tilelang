@@ -59,10 +59,10 @@ ffi::Module BuildTileLangCUDA(IRModule mod, Target target) {
   }
 
   std::string code = cg.Finish();
-  if (const auto f =
-          ffi::Function::GetGlobal("tilelang_callback_cuda_postproc")) {
-    code = (*f)(code, target).cast<std::string>();
-  }
+  // if (const auto f =
+  //         ffi::Function::GetGlobal("tilelang_callback_cuda_postproc")) {
+  //   code = (*f)(code, target).cast<std::string>();
+  // }
   std::string fmt = "ptx";
   std::string ptx;
   if (const auto f =
@@ -95,10 +95,10 @@ ffi::Module BuildTileLangCUDAWithoutCompile(IRModule mod, Target target) {
   }
 
   std::string code = cg.Finish();
-  if (const auto f =
-          ffi::Function::GetGlobal("tilelang_callback_cuda_postproc")) {
-    code = (*f)(code, target).cast<std::string>();
-  }
+  // if (const auto f =
+  //         ffi::Function::GetGlobal("tilelang_callback_cuda_postproc")) {
+  //   code = (*f)(code, target).cast<std::string>();
+  // }
   return runtime::CUDAModuleCreate("ptx", "ptx", ExtractFuncInfo(mod), code);
 }
 
