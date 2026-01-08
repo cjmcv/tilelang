@@ -7,9 +7,9 @@
 
 rm a.out
 nvcc -gencode arch=compute_89,code=sm_89 \
-     -I../3rdparty/cutlass/include \
-     -I../src/ \
-     gen/gemm.cu main.cu
+     -I../../3rdparty/cutlass/include \
+     -I../../src/ \
+     ../gen/gemm.cu main.cu
 
 echo "Compile Done!"
 

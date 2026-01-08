@@ -32,12 +32,17 @@ cmake -B build -G Ninja && cmake --build build --parallel 8
 export PYTHONPATH=/home/cjmcv/project/tilelang:$PYTHONPATH
 pushd demo/ && python example_gemm.py && popd
 
+# 4. megakernel 编译
+python megakernel_setup.py build_ext --inplace
+export PYTHONPATH=/home/cjmcv/project/tilelang/megakernel:$PYTHONPATH
+export MIRAGE_HOME=/home/cjmcv/project/tilelang/
+
 # 清submodule
 git submodule deinit -f 3rdparty/tvm/
 git rm -f 3rdparty/tvm/
 rm -rf .git/modules/3rdparty/tvm/
 
-git submodule add --recursive https://github.com/apache/tvm.git 3rdparty/tvm
+git submodule add https://github.com/apache/tvm.git 3rdparty/tvm
 
 # 备注
 @tilelang.testing.requires_cuda
