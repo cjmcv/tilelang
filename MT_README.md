@@ -33,11 +33,11 @@ export PYTHONPATH=/home/cjmcv/project/tilelang:$PYTHONPATH
 pushd demo/ && python example_gemm.py && popd
 
 # 清submodule
-git submodule deinit -f 3rdparty/composable_kernel/
-git rm -f 3rdparty/composable_kernel/
-rm -rf .git/modules/3rdparty/composable_kernel/
+git submodule deinit -f 3rdparty/tvm/
+git rm -f 3rdparty/tvm/
+rm -rf .git/modules/3rdparty/tvm/
 
-git submodule add https://github.com/apache/tvm.git 3rdparty/tvm
+git submodule add --recursive https://github.com/apache/tvm.git 3rdparty/tvm
 
 # 备注
 @tilelang.testing.requires_cuda
@@ -49,3 +49,21 @@ git submodule add https://github.com/apache/tvm.git 3rdparty/tvm
 # TODO
 1. 将项目转到mpk里进行编译；
 2. 修改cuda code gen，转化到所需格式；
+
+
+# 使用官方tvm，未通过
+/home/cjmcv/project/tilelang/src/transform/inject_assumes.cc:86:48: error: ‘tilelang_assume’ is not a member of ‘tvm::tir::attr’
+   86 |         body = AttrStmt(simplified, tir::attr::tilelang_assume,
+
+/home/cjmcv/project/tilelang/src/transform/layout_inference.cc:504:41: error: ‘class tvm::arith::Analyzer’ has no member named ‘Clone’
+  504 |       analyzer_vec_.push_back(analyzer_.Clone());
+
+
+/home/cjmcv/project/tilelang/src/target/rt_mod_cuda.cc:24:54: error: ‘kDLGridConstant’ is not a member of ‘tvm::runtime’
+   24 |           info.arg_types.push_back(DataType(runtime::kDLGridConstant, 64, 1));
+-> grid_constant
+
+OSError: /home/cjmcv/project/tilelang/build/lib/libtilelang_module.so: undefined symbol: _ZN3tvm3tir24DetectBufferVarAccessLCAERKNS0_8PrimFuncE
+class BufferAllocationLocator : public StmtExprMutator { ：在tvm也有一份，需要知道更改的目的
+
+ValueError: Invalid object type: <class 'tvm.tir.expr.Var'>
