@@ -42,15 +42,6 @@ endif()
 find_program(CCACHE_PROGRAM ccache)
 if(CCACHE_PROGRAM)
   message(STATUS "Using ccache: ${CCACHE_PROGRAM} with base_dir=${CMAKE_SOURCE_DIR}")
-  # if(APPLE)
-  #   # Passing configs like `ccache base_dir=/xxx cc ...` is supported
-  #   # (likely) since ccache 4.x, which has been provided by homebrew.
-  #   # Our Linux builder image (manylinux2014 & manylinux_2_28) still
-  #   # provides ccache 3.x and do not support this form.
-  #   # `cibuildwheel` uses fixed folder on Linux (`/project`) as working directory,
-  #   # so cache would work without setting `base_dir`.
-  #   set(CCACHE_PROGRAM "${CCACHE_PROGRAM};base_dir=${CMAKE_SOURCE_DIR}")
-  # endif()
   set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}" CACHE STRING "C compiler launcher")
   set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}" CACHE STRING "CXX compiler launcher")
   set(CMAKE_CUDA_COMPILER_LAUNCHER "${CCACHE_PROGRAM}" CACHE STRING "CUDA compiler launcher")
@@ -111,11 +102,6 @@ set(PREBUILD_CYTHON ON)
 
 include(cmake/load_tvm.cmake)
 
-# if(EXISTS ${TVM_SOURCE}/cmake/config.cmake)
-#   include(${TVM_SOURCE}/cmake/config.cmake)
-# else()
-#   message(FATAL_ERROR "Nor tvm provided or submodule checkout-ed.")
-# endif()
 # Re-apply TileLang's preferred backend settings after TVM's config may have
 # overridden the USE_* cache entries.
 foreach(BACKEND IN LISTS TILELANG_BACKENDS)
@@ -136,9 +122,6 @@ file(GLOB TILE_LANG_SRCS
   src/transform/common/*.cc
   src/op/*.cc
   src/target/utils.cc
-  # src/target/codegen_c_host.cc
-  # src/target/codegen_cpp.cc
-  # src/target/rt_mod_cpp.cc
   # intrin_rule doesn't have system dependency
   src/target/intrin_rule*.cc
 )
@@ -175,13 +158,13 @@ if(USE_CUDA)
   list(APPEND TILE_LANG_INCLUDES ${CUDAToolkit_INCLUDE_DIRS})
 endif()
 
-set(USE_Z3      ON CACHE STRING "Use Z3 SMT solver for TileLang optimizations")
-set(USE_PYPI_Z3 ON CACHE BOOL   "Use Z3 provided by PyPI z3-solver package")
+# set(USE_Z3      ON CACHE STRING "Use Z3 SMT solver for TileLang optimizations")
+# set(USE_PYPI_Z3 ON CACHE BOOL   "Use Z3 provided by PyPI z3-solver package")
 
-if(USE_Z3 AND USE_PYPI_Z3)
-  list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake/pypi-z3")
-  find_package(Z3 REQUIRED)
-endif()
+# if(USE_Z3 AND USE_PYPI_Z3)
+#   list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake/pypi-z3")
+#   find_package(Z3 REQUIRED)
+# endif()
 
 # Include tvm after configs have been populated
 # add_subdirectory(${TVM_SOURCE} tvm EXCLUDE_FROM_ALL)
@@ -222,47 +205,9 @@ set_target_properties(tilelang_module PROPERTIES
 # Build cython extension
 find_package(Python REQUIRED COMPONENTS Interpreter Development.Module ${SKBUILD_SABI_COMPONENT})
 
-# add_custom_command(
-#   OUTPUT "${CMAKE_BINARY_DIR}/tilelang_cython_wrapper.cpp"
-#   COMMENT
-#     "Cythoning tilelang/jit/adapter/cython/cython_wrapper.pyx"
-#   COMMAND Python::Interpreter -m cython
-#           "${CMAKE_CURRENT_SOURCE_DIR}/tilelang/jit/adapter/cython/cython_wrapper.pyx"
-#           --module-name tilelang_cython_wrapper
-#           --cplus --output-file "${CMAKE_BINARY_DIR}/tilelang_cython_wrapper.cpp"
-#   DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tilelang/jit/adapter/cython/cython_wrapper.pyx"
-#   VERBATIM)
-
-# if(NOT "${SKBUILD_SABI_VERSION}" STREQUAL "")
-#   set(USE_SABI USE_SABI ${SKBUILD_SABI_VERSION})
-# endif()
-
-# python_add_library(tilelang_cython_wrapper MODULE "${CMAKE_BINARY_DIR}/tilelang_cython_wrapper.cpp" ${USE_SABI} WITH_SOABI)
-
-# # Ensure dev builds drop the extension into build/lib alongside other shared libs
-# set_target_properties(tilelang_cython_wrapper PROPERTIES
-#   LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
-#   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
-#   ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
-# )
-
-# # Install the extension into tilelang/lib inside the wheel
-# install(TARGETS tilelang_cython_wrapper
-#         LIBRARY DESTINATION tilelang/lib
-#         RUNTIME DESTINATION tilelang/lib
-#         ARCHIVE DESTINATION tilelang/lib)
-
-# # add python z3 lib path to rpath for running tests and dev in current folder
-# if(USE_Z3 AND USE_PYPI_Z3)
-#   set_property(TARGET tvm APPEND PROPERTY BUILD_RPATH ${Python3_SITELIB}/z3/lib)
-#   set_property(TARGET tvm APPEND PROPERTY BUILD_RPATH ${Python3_SITELIB}/z3/bin)
-# endif()
-
 # let libtilelang to search tvm/tvm_runtime in same dir
 set_target_properties(tilelang        PROPERTIES INSTALL_RPATH "${TILELANG_INSTALL_RPATH}")
 set_target_properties(tilelang_module PROPERTIES INSTALL_RPATH "${TILELANG_INSTALL_RPATH}")
-# set_target_properties(tvm             PROPERTIES INSTALL_RPATH "${TILELANG_INSTALL_RPATH}")
-# set_target_properties(tvm_runtime     PROPERTIES INSTALL_RPATH "${TILELANG_INSTALL_RPATH}")
 # tvm tvm_runtime 
 install(
   TARGETS tilelang_module tilelang
