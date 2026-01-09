@@ -169,7 +169,7 @@ def splitk_gemv_vectorized_tvm(
     K: int,
     BLOCK_N: int,
     reduce_threads: int,
-    dtype: T.dtype = T.float16,
+    dtype: T.dtype = T.bfloat16,
     accum_dtype: T.dtype = T.float,
 ):
     MAX_TRANSACTION_SIZE_IN_BITS = 128
@@ -177,7 +177,7 @@ def splitk_gemv_vectorized_tvm(
     BLOCK_K = reduce_threads * TILE_K
 
     @T.prim_func
-    def main(
+    def linear(
         A: T.Tensor((K,), dtype),
         B: T.Tensor((N, K), dtype),
         C: T.Tensor((N,), dtype),
@@ -215,7 +215,7 @@ def splitk_gemv_vectorized_tvm(
 
             C[bn * BLOCK_N + tn] = C_reduced[0]
 
-    return main
+    return linear
 
 
 def get_block_template_configs():
@@ -274,11 +274,12 @@ def main(do_bench: bool = True):
     parser = argparse.ArgumentParser(description="GEMV Example")
     parser.add_argument("--n", type=int, default=9728*2, help="Matrix dimension N")
     parser.add_argument("--k", type=int, default=2560, help="Matrix dimension K")
+    cur_path = "/home/cjmcv/project/tilelang/demo/microkernels"
     args, _ = parser.parse_known_args()
     N, K = args.n, args.k
     
     kernel = splitk_gemv_vectorized_tvm(N, K, 2, 32)
-    kernel.export_sources(kernel_path="./gen/gemv.cu", host_path="./gen/gemv.cpp")
+    kernel.export_sources(kernel_path=cur_path+"/../gen/linear_gemv_tl.cuh", host_path=cur_path+"/../gen/linear_gemv_tl.cpp")
     return
     
     check_correctness_and_bench("0", naive_gemv(N, K, 128, 128), N, K, do_bench=do_bench)

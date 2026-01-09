@@ -12,7 +12,7 @@ if __name__ == "__main__":
     max_batch_size = 1
     batch_size = 1
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output-dir", default="./gen", help="Output files directory")
+    parser.add_argument("--output-dir", default="/home/cjmcv/project/tilelang/demo/gen", help="Output files directory")
     parser.add_argument("--trace-name", default="qwen3", help="Perfetto trace output name")
     parser.add_argument("--profiling", action="store_true", help="Use Profiler to generate trace")
     parser.add_argument("--nc", action="store_true", help="no-compile: Use the specified compiled library instead of recompiling it")
@@ -59,8 +59,10 @@ if __name__ == "__main__":
         input=x,
         weight=w,
         output=linear_out,
+        # grid_dim=(152, 1, 1),  # 19456/128
+        # block_dim=(128, 1, 1),
         grid_dim=(152, 1, 1),  # 19456/128
-        block_dim=(128, 1, 1),
+        block_dim=(128, 128, 32),
     )
     layers.compile_load(args.nc, args.output_dir)
     

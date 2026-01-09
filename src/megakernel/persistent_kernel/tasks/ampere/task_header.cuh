@@ -17,7 +17,8 @@
 // #include "linear_cutlass.cuh"
 // #include "linear_cutlass_withp.cuh"
 // #include "linear_cutlass_origin.cuh"
-#include "linear_gemv_cutlass.cuh"
+// #include "linear_gemv_cutlass.cuh"
+#include "linear_gemm_tl.cuh"
 #else
 #include "linear.cuh"
 #endif // MEGAKERNEL_USE_CUTLASS_KERNEL
