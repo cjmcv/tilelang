@@ -32,24 +32,24 @@ def config_cython():
         from Cython.Build import cythonize
         ret = []
         cython_path = path.join(path.dirname(__file__), "megakernel/_cython")
-        mirage_path = path.join(path.dirname(__file__), ".")
+        megakernel_path = path.join(path.dirname(__file__), ".")
         for fn in os.listdir(cython_path):
             if not fn.endswith(".pyx"):
                 continue
             ret.append(Extension(
                 "megakernel.%s" % fn[:-4],
                 ["%s/%s" % (cython_path, fn)],
-                include_dirs=[path.join(mirage_path, "src"),
-                              path.join(mirage_path, "3rdparty", "json", "include"),
-                              path.join(mirage_path, "3rdparty", "cutlass", "include"),
+                include_dirs=[path.join(megakernel_path, "src"),
+                              path.join(megakernel_path, "3rdparty", "json", "include"),
+                              path.join(megakernel_path, "3rdparty", "cutlass", "include"),
                               "/usr/local/cuda/include"],
                 libraries=["cudadevrt", "cudart_static", "cudart", "cuda", "gomp", "rt"],
-                library_dirs=[path.join(mirage_path, "build"),
-                              path.join(mirage_path, "3rdparty", "build"),
+                library_dirs=[path.join(megakernel_path, "build"),
+                              path.join(megakernel_path, "3rdparty", "build"),
                               "/usr/local/cuda/lib",
                               "/usr/local/cuda/lib64",
                               "/usr/local/cuda/lib64/stubs"],
-                define_macros=[("MIRAGE_BACKEND_USE_CUDA", None)],
+                define_macros=[("MEGAKERNEL_BACKEND_USE_CUDA", None)],
                 extra_compile_args=["-std=c++17", "-fopenmp"],
                 extra_link_args=["-fPIC", "-fopenmp"],
                 language="c++"))
@@ -62,16 +62,16 @@ def config_cython():
 setup_args = {}
 
 
-setup(name='mirage',
+setup(name='megakernel',
       version="0.2.4",
       description="Mirage: A Multi-Level Superoptimizer for Tensor Algebra",
       zip_safe=False,
       install_requires=[],
       packages=find_packages(),
-      url='https://github.com/mirage-project/mirage',
+      url='https://github.com/megakernel-project/megakernel',
       ext_modules=config_cython(),
       #**setup_args,
       )
 
 # python cython_setup.py build_ext --inplace
-# python -c "import mirage"
+# python -c "import megakernel"

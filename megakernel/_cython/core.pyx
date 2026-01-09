@@ -27,7 +27,7 @@ from libcpp cimport bool
 
 ctypedef unsigned long int size_t
 
-cdef extern from "mirage/type.h":
+cdef extern from "megakernel/type.h":
     ctypedef struct dim3:
         unsigned int x
         unsigned int y
@@ -37,8 +37,8 @@ cdef extern from "mirage/type.h":
         int y
         int z
 
-cdef extern from "mirage/type.h" namespace "mirage::type":
-    # This must be consistent with mirage/type.h
+cdef extern from "megakernel/type.h" namespace "megakernel::type":
+    # This must be consistent with megakernel/type.h
     cdef enum DataType:
         DT_FLOAT4 = 920,
         DT_INT4 = 925,
@@ -66,8 +66,8 @@ cdef extern from "mirage/type.h" namespace "mirage::type":
         TB_INPUT_OP = 2001,
         TB_CUSTOMIZED_OP = 2999
 
-cdef extern from "mirage/layout.h" namespace "mirage::layout":
-    # This must be consistent with mirage/layout.h
+cdef extern from "megakernel/layout.h" namespace "megakernel::layout":
+    # This must be consistent with megakernel/layout.h
     cdef enum DmemLayout:
         DmemRowMajor = 100,
         DmemColumnMajor = 101,
@@ -77,10 +77,10 @@ cdef extern from "mirage/layout.h" namespace "mirage::layout":
         SmemColumnMajor = 201,
         SmemUnknownLayout = 299
 
-# cdef cppclass CppTBGraph "mirage::threadblock::Graph"
+# cdef cppclass CppTBGraph "megakernel::threadblock::Graph"
 
-cdef extern from "mirage/kernel/device_tensor.h" namespace "mirage::kernel":
-    cdef struct CppDTensor "mirage::kernel::DTensor":
+cdef extern from "megakernel/kernel/device_tensor.h" namespace "megakernel::kernel":
+    cdef struct CppDTensor "megakernel::kernel::DTensor":
         DataType data_type
         DmemLayout layout
         int num_dims
@@ -90,25 +90,25 @@ cdef extern from "mirage/kernel/device_tensor.h" namespace "mirage::kernel":
         #void *data_ptr
         int owner_ts_idx
 
-cdef extern from "mirage/kernel/runtime.h" namespace "mirage::runtime":
+cdef extern from "megakernel/kernel/runtime.h" namespace "megakernel::runtime":
     ctypedef struct TaskGraphResult:
         string cuda_code
         string json_file
 
-cdef extern from "mirage/kernel/graph.h" namespace "mirage::kernel":
+cdef extern from "megakernel/kernel/graph.h" namespace "megakernel::kernel":
 
-    cdef cppclass CppKNOperator "mirage::kernel::KNOperator":
+    cdef cppclass CppKNOperator "megakernel::kernel::KNOperator":
         KNOperatorType op_type
         vector[CppDTensor] input_tensors
         vector[CppDTensor] output_tensors
         int get_input_dtensors(CppDTensor** cinputs)
         int get_output_dtensors(CppDTensor** cinputs)
  
-    cdef cppclass CppKNCustomizedOp "mirage::kernel::KNCustomizedOp"(CppKNOperator):
+    cdef cppclass CppKNCustomizedOp "megakernel::kernel::KNCustomizedOp"(CppKNOperator):
         CppTBGraph bgraph
         void get_bgraph(CppTBGraph** bgraph)
 
-    cdef cppclass CppKNGraph "mirage::kernel::Graph":
+    cdef cppclass CppKNGraph "megakernel::kernel::Graph":
         CppKNGraph(dim3 gpu_dim)
         CppDTensor* new_input_ptr(vector[int] dims,
                                   vector[size_t] strides,
@@ -142,8 +142,8 @@ cdef extern from "mirage/kernel/graph.h" namespace "mirage::kernel":
 
         vector[CppKNOperator*] operators
 
-cdef extern from "mirage/threadblock/graph.h" namespace "mirage::threadblock":
-    ctypedef struct CppSTensor "mirage::threadblock::STensor":
+cdef extern from "megakernel/threadblock/graph.h" namespace "megakernel::threadblock":
+    ctypedef struct CppSTensor "megakernel::threadblock::STensor":
         DataType data_type
         SmemLayout layout
         int num_dims
@@ -151,18 +151,18 @@ cdef extern from "mirage/threadblock/graph.h" namespace "mirage::threadblock":
         int owner_ts_idx
         size_t guid
     
-    cdef cppclass CppTBOperator "mirage::threadblock::TBOperator":
+    cdef cppclass CppTBOperator "megakernel::threadblock::TBOperator":
         TBOperatorType op_type
         vector[CppSTensor] input_tensors
         vector[CppSTensor] output_tensors
         int get_input_stensors(CppSTensor** cinputs)
         int get_output_stensors(CppSTensor** cinputs)
 
-    cdef cppclass CppTBInputOp "mirage::threadblock::TBInputOp"(CppTBOperator):
+    cdef cppclass CppTBInputOp "megakernel::threadblock::TBInputOp"(CppTBOperator):
         int3 input_map
         size_t get_dtensor_guid()
 
-    cdef cppclass CppTBGraph "mirage::threadblock::Graph":
+    cdef cppclass CppTBGraph "megakernel::threadblock::Graph":
         CppTBGraph(dim3 grid_dim,
                    dim3 block_dim,
                    int thread_num,

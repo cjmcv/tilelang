@@ -1,7 +1,7 @@
 
 import torch
 import argparse
-import mirage as mi
+import megakernel as mi
 
 from common.pkt_util import TorchRef, MpkReporter
 from common.mpk_layers import MpkLayers

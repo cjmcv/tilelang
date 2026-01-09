@@ -33,7 +33,7 @@ from transformers.modeling_utils import PreTrainedModel
 from .configuration_qwen3 import Qwen3Config
 import time
 
-import mirage as mi
+import megakernel as mi
 from common.mpk_layers import MpkLayers
 
 from .rope import apply_rotary_pos_emb_triton

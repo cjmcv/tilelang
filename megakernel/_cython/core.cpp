@@ -5,11 +5,18 @@
     "distutils": {
         "define_macros": [
             [
-                "MIRAGE_BACKEND_USE_CUDA",
+                "MEGAKERNEL_BACKEND_USE_CUDA",
                 null
             ]
         ],
-        "depends": [],
+        "depends": [
+            "/home/cjmcv/project/tilelang/src/megakernel/kernel/device_tensor.h",
+            "/home/cjmcv/project/tilelang/src/megakernel/kernel/graph.h",
+            "/home/cjmcv/project/tilelang/src/megakernel/kernel/runtime.h",
+            "/home/cjmcv/project/tilelang/src/megakernel/layout.h",
+            "/home/cjmcv/project/tilelang/src/megakernel/threadblock/graph.h",
+            "/home/cjmcv/project/tilelang/src/megakernel/type.h"
+        ],
         "extra_compile_args": [
             "-std=c++17",
             "-fopenmp"
@@ -19,9 +26,9 @@
             "-fopenmp"
         ],
         "include_dirs": [
-            "/home/cjmcv/project/tilelang/../src",
-            "/home/cjmcv/project/tilelang/../3rdparty/json/include",
-            "/home/cjmcv/project/tilelang/../3rdparty/cutlass/include",
+            "/home/cjmcv/project/tilelang/./src",
+            "/home/cjmcv/project/tilelang/./3rdparty/json/include",
+            "/home/cjmcv/project/tilelang/./3rdparty/cutlass/include",
             "/usr/local/cuda/include"
         ],
         "language": "c++",
@@ -34,8 +41,8 @@
             "rt"
         ],
         "library_dirs": [
-            "/home/cjmcv/project/tilelang/../build",
-            "/home/cjmcv/project/tilelang/../3rdparty/build",
+            "/home/cjmcv/project/tilelang/./build",
+            "/home/cjmcv/project/tilelang/./3rdparty/build",
             "/usr/local/cuda/lib",
             "/usr/local/cuda/lib64",
             "/usr/local/cuda/lib64/stubs"
@@ -1317,12 +1324,12 @@ static CYTHON_INLINE float __PYX_NAN() {
 #include <memory>
 #include <string>
 #include <vector>
-#include "mirage/type.h"
-#include "mirage/layout.h"
-#include "mirage/kernel/device_tensor.h"
-#include "mirage/kernel/runtime.h"
-#include "mirage/kernel/graph.h"
-#include "mirage/threadblock/graph.h"
+#include "megakernel/type.h"
+#include "megakernel/layout.h"
+#include "megakernel/kernel/device_tensor.h"
+#include "megakernel/kernel/runtime.h"
+#include "megakernel/kernel/graph.h"
+#include "megakernel/threadblock/graph.h"
 #ifdef _OPENMP
 #include <omp.h>
 #endif /* _OPENMP */
@@ -1592,7 +1599,7 @@ static const char *__pyx_f[] = {
  * 
  * ctypedef unsigned long int size_t             # <<<<<<<<<<<<<<
  * 
- * cdef extern from "mirage/type.h":
+ * cdef extern from "megakernel/type.h":
  */
 typedef unsigned long __pyx_t_10megakernel_4core_size_t;
 /* #### Code section: complex_type_declarations ### */
@@ -1648,7 +1655,7 @@ struct __pyx_opt_args_7cpython_11contextvars_get_value_no_default {
 struct __pyx_obj_10megakernel_4core_DTensor {
   PyObject_HEAD
   struct __pyx_vtabstruct_10megakernel_4core_DTensor *__pyx_vtab;
-  struct mirage::kernel::DTensor *c_ptr;
+  struct megakernel::kernel::DTensor *c_ptr;
 };
 
 
@@ -1662,7 +1669,7 @@ struct __pyx_obj_10megakernel_4core_DTensor {
 struct __pyx_obj_10megakernel_4core_STensor {
   PyObject_HEAD
   struct __pyx_vtabstruct_10megakernel_4core_STensor *__pyx_vtab;
-  mirage::threadblock::STensor *c_ptr;
+  megakernel::threadblock::STensor *c_ptr;
 };
 
 
@@ -1676,7 +1683,7 @@ struct __pyx_obj_10megakernel_4core_STensor {
 struct __pyx_obj_10megakernel_4core_CyKNOperator {
   PyObject_HEAD
   struct __pyx_vtabstruct_10megakernel_4core_CyKNOperator *__pyx_vtab;
-  mirage::kernel::KNOperator *c_ptr;
+  megakernel::kernel::KNOperator *c_ptr;
 };
 
 
@@ -1689,7 +1696,7 @@ struct __pyx_obj_10megakernel_4core_CyKNOperator {
  */
 struct __pyx_obj_10megakernel_4core_CyKNCustomizedOp {
   struct __pyx_obj_10megakernel_4core_CyKNOperator __pyx_base;
-  mirage::kernel::KNCustomizedOp *c_customized_ptr;
+  megakernel::kernel::KNCustomizedOp *c_customized_ptr;
 };
 
 
@@ -1703,7 +1710,7 @@ struct __pyx_obj_10megakernel_4core_CyKNCustomizedOp {
 struct __pyx_obj_10megakernel_4core_CyTBOperator {
   PyObject_HEAD
   struct __pyx_vtabstruct_10megakernel_4core_CyTBOperator *__pyx_vtab;
-  mirage::threadblock::TBOperator *c_ptr;
+  megakernel::threadblock::TBOperator *c_ptr;
 };
 
 
@@ -1716,7 +1723,7 @@ struct __pyx_obj_10megakernel_4core_CyTBOperator {
  */
 struct __pyx_obj_10megakernel_4core_CyTBInputOp {
   struct __pyx_obj_10megakernel_4core_CyTBOperator __pyx_base;
-  mirage::threadblock::TBInputOp *c_input_ptr;
+  megakernel::threadblock::TBInputOp *c_input_ptr;
 };
 
 
@@ -1729,7 +1736,7 @@ struct __pyx_obj_10megakernel_4core_CyTBInputOp {
  */
 struct __pyx_obj_10megakernel_4core_CyKNGraph {
   PyObject_HEAD
-  mirage::kernel::Graph *p_kgraph;
+  megakernel::kernel::Graph *p_kgraph;
 };
 
 
@@ -1742,7 +1749,7 @@ struct __pyx_obj_10megakernel_4core_CyKNGraph {
  */
 struct __pyx_obj_10megakernel_4core_CyTBGraph {
   PyObject_HEAD
-  mirage::threadblock::Graph *p_bgraph;
+  megakernel::threadblock::Graph *p_bgraph;
 };
 
 
@@ -2809,7 +2816,7 @@ static CYTHON_INLINE int __Pyx_PyInt_As_int(PyObject *);
 static CYTHON_INLINE PyObject* __Pyx_PyInt_From_int(int value);
 
 /* CIntToPy.proto */
-static CYTHON_INLINE PyObject* __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_DataType(enum mirage::type::DataType value);
+static CYTHON_INLINE PyObject* __Pyx_PyInt_From_enum__megakernel_3a__3a_type_3a__3a_DataType(enum megakernel::type::DataType value);
 
 /* CIntFromPy.proto */
 static CYTHON_INLINE unsigned PY_LONG_LONG __Pyx_PyInt_As_unsigned_PY_LONG_LONG(PyObject *);
@@ -2818,16 +2825,16 @@ static CYTHON_INLINE unsigned PY_LONG_LONG __Pyx_PyInt_As_unsigned_PY_LONG_LONG(
 static CYTHON_INLINE PyObject* __Pyx_PyInt_From_unsigned_PY_LONG_LONG(unsigned PY_LONG_LONG value);
 
 /* CIntToPy.proto */
-static CYTHON_INLINE PyObject* __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_KNOperatorType(enum mirage::type::KNOperatorType value);
+static CYTHON_INLINE PyObject* __Pyx_PyInt_From_enum__megakernel_3a__3a_type_3a__3a_KNOperatorType(enum megakernel::type::KNOperatorType value);
 
 /* CIntToPy.proto */
-static CYTHON_INLINE PyObject* __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_TBOperatorType(enum mirage::type::TBOperatorType value);
+static CYTHON_INLINE PyObject* __Pyx_PyInt_From_enum__megakernel_3a__3a_type_3a__3a_TBOperatorType(enum megakernel::type::TBOperatorType value);
 
 /* CIntFromPy.proto */
 static CYTHON_INLINE size_t __Pyx_PyInt_As_size_t(PyObject *);
 
 /* CIntFromPy.proto */
-static CYTHON_INLINE enum mirage::type::DataType __Pyx_PyInt_As_enum__mirage_3a__3a_type_3a__3a_DataType(PyObject *);
+static CYTHON_INLINE enum megakernel::type::DataType __Pyx_PyInt_As_enum__megakernel_3a__3a_type_3a__3a_DataType(PyObject *);
 
 /* CIntToPy.proto */
 static CYTHON_INLINE PyObject* __Pyx_PyInt_From_long(long value);
@@ -9720,7 +9727,7 @@ static PyObject *__pyx_pf_10megakernel_4core_get_kn_operator_type_string(CYTHON_
  *     elif op_type == KN_INPUT_OP:
  */
   switch (__pyx_v_op_type) {
-    case mirage::type::KN_UNKOWN:
+    case megakernel::type::KN_UNKOWN:
 
     /* "megakernel/_cython/core.pyx":265
  * def get_kn_operator_type_string(int op_type):
@@ -9742,7 +9749,7 @@ static PyObject *__pyx_pf_10megakernel_4core_get_kn_operator_type_string(CYTHON_
  *     elif op_type == KN_INPUT_OP:
  */
     break;
-    case mirage::type::KN_INPUT_OP:
+    case megakernel::type::KN_INPUT_OP:
 
     /* "megakernel/_cython/core.pyx":267
  *         return "kn_unknown"
@@ -9764,7 +9771,7 @@ static PyObject *__pyx_pf_10megakernel_4core_get_kn_operator_type_string(CYTHON_
  *     elif op_type == KN_CUSTOMIZED_OP:
  */
     break;
-    case mirage::type::KN_CUSTOMIZED_OP:
+    case megakernel::type::KN_CUSTOMIZED_OP:
 
     /* "megakernel/_cython/core.pyx":269
  *         return "kn_input_op"
@@ -9952,7 +9959,7 @@ static PyObject *__pyx_pf_10megakernel_4core_2get_tb_operator_type_string(CYTHON
  *     elif op_type == TB_INPUT_OP:
  */
   switch (__pyx_v_op_type) {
-    case mirage::type::TB_UNKOWN:
+    case megakernel::type::TB_UNKOWN:
 
     /* "megakernel/_cython/core.pyx":276
  * def get_tb_operator_type_string(int op_type):
@@ -9974,7 +9981,7 @@ static PyObject *__pyx_pf_10megakernel_4core_2get_tb_operator_type_string(CYTHON
  *     elif op_type == TB_INPUT_OP:
  */
     break;
-    case mirage::type::TB_INPUT_OP:
+    case megakernel::type::TB_INPUT_OP:
 
     /* "megakernel/_cython/core.pyx":278
  *         return "tb_unknown"
@@ -9996,7 +10003,7 @@ static PyObject *__pyx_pf_10megakernel_4core_2get_tb_operator_type_string(CYTHON
  *     elif op_type == TB_CUSTOMIZED_OP:
  */
     break;
-    case mirage::type::TB_CUSTOMIZED_OP:
+    case megakernel::type::TB_CUSTOMIZED_OP:
 
     /* "megakernel/_cython/core.pyx":280
  *         return "tb_input_op"
@@ -10222,7 +10229,7 @@ static PyObject *__pyx_pf_10megakernel_4core_4convert_dtype_to_ctype(CYTHON_UNUS
  *         return DT_UINT16
  */
     __Pyx_XDECREF(__pyx_r);
-    __pyx_t_1 = __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_DataType(mirage::type::DT_INT8); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 287, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyInt_From_enum__megakernel_3a__3a_type_3a__3a_DataType(megakernel::type::DT_INT8); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 287, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
     __pyx_r = __pyx_t_1;
     __pyx_t_1 = 0;
@@ -10280,7 +10287,7 @@ static PyObject *__pyx_pf_10megakernel_4core_4convert_dtype_to_ctype(CYTHON_UNUS
  *         return DT_FLOAT16
  */
     __Pyx_XDECREF(__pyx_r);
-    __pyx_t_1 = __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_DataType(mirage::type::DT_UINT16); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 289, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyInt_From_enum__megakernel_3a__3a_type_3a__3a_DataType(megakernel::type::DT_UINT16); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 289, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
     __pyx_r = __pyx_t_1;
     __pyx_t_1 = 0;
@@ -10338,7 +10345,7 @@ static PyObject *__pyx_pf_10megakernel_4core_4convert_dtype_to_ctype(CYTHON_UNUS
  *         return DT_BFLOAT16
  */
     __Pyx_XDECREF(__pyx_r);
-    __pyx_t_1 = __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_DataType(mirage::type::DT_FLOAT16); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 291, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyInt_From_enum__megakernel_3a__3a_type_3a__3a_DataType(megakernel::type::DT_FLOAT16); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 291, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
     __pyx_r = __pyx_t_1;
     __pyx_t_1 = 0;
@@ -10396,7 +10403,7 @@ static PyObject *__pyx_pf_10megakernel_4core_4convert_dtype_to_ctype(CYTHON_UNUS
  *         return DT_FLOAT32
  */
     __Pyx_XDECREF(__pyx_r);
-    __pyx_t_1 = __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_DataType(mirage::type::DT_BFLOAT16); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 293, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyInt_From_enum__megakernel_3a__3a_type_3a__3a_DataType(megakernel::type::DT_BFLOAT16); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 293, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
     __pyx_r = __pyx_t_1;
     __pyx_t_1 = 0;
@@ -10454,7 +10461,7 @@ static PyObject *__pyx_pf_10megakernel_4core_4convert_dtype_to_ctype(CYTHON_UNUS
  *         return DT_INT32
  */
     __Pyx_XDECREF(__pyx_r);
-    __pyx_t_1 = __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_DataType(mirage::type::DT_FLOAT32); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 295, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyInt_From_enum__megakernel_3a__3a_type_3a__3a_DataType(megakernel::type::DT_FLOAT32); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 295, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
     __pyx_r = __pyx_t_1;
     __pyx_t_1 = 0;
@@ -10512,7 +10519,7 @@ static PyObject *__pyx_pf_10megakernel_4core_4convert_dtype_to_ctype(CYTHON_UNUS
  *         return DT_INT64
  */
     __Pyx_XDECREF(__pyx_r);
-    __pyx_t_1 = __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_DataType(mirage::type::DT_INT32); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 297, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyInt_From_enum__megakernel_3a__3a_type_3a__3a_DataType(megakernel::type::DT_INT32); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 297, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
     __pyx_r = __pyx_t_1;
     __pyx_t_1 = 0;
@@ -10570,7 +10577,7 @@ static PyObject *__pyx_pf_10megakernel_4core_4convert_dtype_to_ctype(CYTHON_UNUS
  *         return DT_DOUBLE
  */
     __Pyx_XDECREF(__pyx_r);
-    __pyx_t_1 = __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_DataType(mirage::type::DT_INT64); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 299, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyInt_From_enum__megakernel_3a__3a_type_3a__3a_DataType(megakernel::type::DT_INT64); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 299, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
     __pyx_r = __pyx_t_1;
     __pyx_t_1 = 0;
@@ -10628,7 +10635,7 @@ static PyObject *__pyx_pf_10megakernel_4core_4convert_dtype_to_ctype(CYTHON_UNUS
  *         raise RuntimeError(f"Unsupported dtype: {dtype}")
  */
     __Pyx_XDECREF(__pyx_r);
-    __pyx_t_1 = __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_DataType(mirage::type::DT_DOUBLE); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 301, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyInt_From_enum__megakernel_3a__3a_type_3a__3a_DataType(megakernel::type::DT_DOUBLE); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 301, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
     __pyx_r = __pyx_t_1;
     __pyx_t_1 = 0;
@@ -11486,7 +11493,7 @@ static PyObject *__pyx_pf_10megakernel_4core_8convert_ctype_to_dtype(CYTHON_UNUS
  *         return int8
  *     elif type == DT_UINT16:
  */
-  __pyx_t_1 = __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_DataType(mirage::type::DT_INT8); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 326, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyInt_From_enum__megakernel_3a__3a_type_3a__3a_DataType(megakernel::type::DT_INT8); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 326, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_t_2 = PyObject_RichCompare(__pyx_v_type, __pyx_t_1, Py_EQ); __Pyx_XGOTREF(__pyx_t_2); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 326, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
@@ -11524,7 +11531,7 @@ static PyObject *__pyx_pf_10megakernel_4core_8convert_ctype_to_dtype(CYTHON_UNUS
  *         return uint16
  *     elif type == DT_FLOAT16:
  */
-  __pyx_t_2 = __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_DataType(mirage::type::DT_UINT16); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 328, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_PyInt_From_enum__megakernel_3a__3a_type_3a__3a_DataType(megakernel::type::DT_UINT16); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 328, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   __pyx_t_1 = PyObject_RichCompare(__pyx_v_type, __pyx_t_2, Py_EQ); __Pyx_XGOTREF(__pyx_t_1); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 328, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
@@ -11562,7 +11569,7 @@ static PyObject *__pyx_pf_10megakernel_4core_8convert_ctype_to_dtype(CYTHON_UNUS
  *         return float16
  *     elif type == DT_BFLOAT16:
  */
-  __pyx_t_1 = __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_DataType(mirage::type::DT_FLOAT16); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 330, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyInt_From_enum__megakernel_3a__3a_type_3a__3a_DataType(megakernel::type::DT_FLOAT16); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 330, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_t_2 = PyObject_RichCompare(__pyx_v_type, __pyx_t_1, Py_EQ); __Pyx_XGOTREF(__pyx_t_2); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 330, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
@@ -11600,7 +11607,7 @@ static PyObject *__pyx_pf_10megakernel_4core_8convert_ctype_to_dtype(CYTHON_UNUS
  *         return bfloat16
  *     elif type == DT_INT32:
  */
-  __pyx_t_2 = __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_DataType(mirage::type::DT_BFLOAT16); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 332, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_PyInt_From_enum__megakernel_3a__3a_type_3a__3a_DataType(megakernel::type::DT_BFLOAT16); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 332, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   __pyx_t_1 = PyObject_RichCompare(__pyx_v_type, __pyx_t_2, Py_EQ); __Pyx_XGOTREF(__pyx_t_1); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 332, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
@@ -11638,7 +11645,7 @@ static PyObject *__pyx_pf_10megakernel_4core_8convert_ctype_to_dtype(CYTHON_UNUS
  *         return int32
  *     elif type == DT_FLOAT32:
  */
-  __pyx_t_1 = __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_DataType(mirage::type::DT_INT32); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 334, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyInt_From_enum__megakernel_3a__3a_type_3a__3a_DataType(megakernel::type::DT_INT32); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 334, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_t_2 = PyObject_RichCompare(__pyx_v_type, __pyx_t_1, Py_EQ); __Pyx_XGOTREF(__pyx_t_2); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 334, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
@@ -11676,7 +11683,7 @@ static PyObject *__pyx_pf_10megakernel_4core_8convert_ctype_to_dtype(CYTHON_UNUS
  *         return float32
  *     elif type == DT_DOUBLE:
  */
-  __pyx_t_2 = __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_DataType(mirage::type::DT_FLOAT32); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 336, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_PyInt_From_enum__megakernel_3a__3a_type_3a__3a_DataType(megakernel::type::DT_FLOAT32); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 336, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   __pyx_t_1 = PyObject_RichCompare(__pyx_v_type, __pyx_t_2, Py_EQ); __Pyx_XGOTREF(__pyx_t_1); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 336, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
@@ -11714,7 +11721,7 @@ static PyObject *__pyx_pf_10megakernel_4core_8convert_ctype_to_dtype(CYTHON_UNUS
  *         return float64
  *     else:
  */
-  __pyx_t_1 = __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_DataType(mirage::type::DT_DOUBLE); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 338, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyInt_From_enum__megakernel_3a__3a_type_3a__3a_DataType(megakernel::type::DT_DOUBLE); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 338, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_t_2 = PyObject_RichCompare(__pyx_v_type, __pyx_t_1, Py_EQ); __Pyx_XGOTREF(__pyx_t_2); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 338, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
@@ -12287,7 +12294,7 @@ static CYTHON_INLINE PyObject *__pyx_f_10megakernel_4core_7DTensor__set_tensor(s
  *         else:
  *             ptr = ctypes.cast(tensor, ctypes.c_void_p).value
  */
-    __pyx_v_self->c_ptr = ((struct mirage::kernel::DTensor *)NULL);
+    __pyx_v_self->c_ptr = ((struct megakernel::kernel::DTensor *)NULL);
 
     /* "megakernel/_cython/core.pyx":369
  *     cdef inline _set_tensor(self, tensor):
@@ -12354,7 +12361,7 @@ static CYTHON_INLINE PyObject *__pyx_f_10megakernel_4core_7DTensor__set_tensor(s
  * 
  *     property guid:
  */
-    __pyx_v_self->c_ptr = ((struct mirage::kernel::DTensor *)__pyx_v_ptr);
+    __pyx_v_self->c_ptr = ((struct megakernel::kernel::DTensor *)__pyx_v_ptr);
   }
   __pyx_L3:;
 
@@ -12871,7 +12878,7 @@ static PyObject *__pyx_pf_10megakernel_4core_7DTensor_5dtype___get__(struct __py
     __Pyx_XDECREF(__pyx_r);
     __Pyx_GetModuleGlobalName(__pyx_t_3, __pyx_n_s_convert_ctype_to_dtype); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 405, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_3);
-    __pyx_t_4 = __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_DataType(__pyx_v_self->c_ptr->data_type); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 405, __pyx_L1_error)
+    __pyx_t_4 = __Pyx_PyInt_From_enum__megakernel_3a__3a_type_3a__3a_DataType(__pyx_v_self->c_ptr->data_type); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 405, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_4);
     __pyx_t_5 = NULL;
     __pyx_t_6 = 0;
@@ -13502,7 +13509,7 @@ static CYTHON_INLINE PyObject *__pyx_f_10megakernel_4core_7STensor__set_tensor(s
  *         else:
  *             ptr = ctypes.cast(tensor, ctypes.c_void_p).value
  */
-    __pyx_v_self->c_ptr = ((mirage::threadblock::STensor *)NULL);
+    __pyx_v_self->c_ptr = ((megakernel::threadblock::STensor *)NULL);
 
     /* "megakernel/_cython/core.pyx":422
  *     cdef inline _set_tensor(self, tensor):
@@ -13569,7 +13576,7 @@ static CYTHON_INLINE PyObject *__pyx_f_10megakernel_4core_7STensor__set_tensor(s
  *     property guid:
  *         def __get__(self):
  */
-    __pyx_v_self->c_ptr = ((mirage::threadblock::STensor *)__pyx_v_ptr);
+    __pyx_v_self->c_ptr = ((megakernel::threadblock::STensor *)__pyx_v_ptr);
   }
   __pyx_L3:;
 
@@ -14075,7 +14082,7 @@ static PyObject *__pyx_pf_10megakernel_4core_7STensor_5dtype___get__(struct __py
     __Pyx_XDECREF(__pyx_r);
     __Pyx_GetModuleGlobalName(__pyx_t_3, __pyx_n_s_convert_ctype_to_dtype); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 455, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_3);
-    __pyx_t_4 = __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_DataType(__pyx_v_self->c_ptr->data_type); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 455, __pyx_L1_error)
+    __pyx_t_4 = __Pyx_PyInt_From_enum__megakernel_3a__3a_type_3a__3a_DataType(__pyx_v_self->c_ptr->data_type); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 455, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_4);
     __pyx_t_5 = NULL;
     __pyx_t_6 = 0;
@@ -14706,7 +14713,7 @@ static CYTHON_INLINE PyObject *__pyx_f_10megakernel_4core_12CyKNOperator__set_op
  *         else:
  *             ptr = ctypes.cast(op, ctypes.c_void_p).value
  */
-    __pyx_v_self->c_ptr = ((mirage::kernel::KNOperator *)NULL);
+    __pyx_v_self->c_ptr = ((megakernel::kernel::KNOperator *)NULL);
 
     /* "megakernel/_cython/core.pyx":472
  *     cdef inline _set_operator(self, op):
@@ -14773,7 +14780,7 @@ static CYTHON_INLINE PyObject *__pyx_f_10megakernel_4core_12CyKNOperator__set_op
  * 
  *     def get_input_dtensors(self):
  */
-    __pyx_v_self->c_ptr = ((mirage::kernel::KNOperator *)__pyx_v_ptr);
+    __pyx_v_self->c_ptr = ((megakernel::kernel::KNOperator *)__pyx_v_ptr);
   }
   __pyx_L3:;
 
@@ -14851,7 +14858,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 }
 
 static PyObject *__pyx_pf_10megakernel_4core_12CyKNOperator_get_input_dtensors(struct __pyx_obj_10megakernel_4core_CyKNOperator *__pyx_v_self) {
-  struct mirage::kernel::DTensor *__pyx_v_cinputs[0x400];
+  struct megakernel::kernel::DTensor *__pyx_v_cinputs[0x400];
   int __pyx_v_num;
   PyObject *__pyx_v_inputs = NULL;
   int __pyx_v_i;
@@ -15052,7 +15059,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 }
 
 static PyObject *__pyx_pf_10megakernel_4core_12CyKNOperator_2get_output_dtensors(struct __pyx_obj_10megakernel_4core_CyKNOperator *__pyx_v_self) {
-  struct mirage::kernel::DTensor *__pyx_v_coutputs[0x400];
+  struct megakernel::kernel::DTensor *__pyx_v_coutputs[0x400];
   int __pyx_v_num;
   PyObject *__pyx_v_outputs = NULL;
   int __pyx_v_i;
@@ -15281,7 +15288,7 @@ static PyObject *__pyx_pf_10megakernel_4core_12CyKNOperator_7op_type___get__(str
     __Pyx_XDECREF(__pyx_r);
     __Pyx_GetModuleGlobalName(__pyx_t_3, __pyx_n_s_get_kn_operator_type_string); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 501, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_3);
-    __pyx_t_4 = __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_KNOperatorType(__pyx_v_self->c_ptr->op_type); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 501, __pyx_L1_error)
+    __pyx_t_4 = __Pyx_PyInt_From_enum__megakernel_3a__3a_type_3a__3a_KNOperatorType(__pyx_v_self->c_ptr->op_type); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 501, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_4);
     __pyx_t_5 = __Pyx_PyObject_CallOneArg(((PyObject *)(&PyInt_Type)), __pyx_t_4); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 501, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
@@ -15797,7 +15804,7 @@ static int __pyx_pf_10megakernel_4core_16CyKNCustomizedOp___cinit__(struct __pyx
  *         else:
  *             ptr = ctypes.cast(op, ctypes.c_void_p).value
  */
-    __pyx_v_self->c_customized_ptr = ((mirage::kernel::KNCustomizedOp *)NULL);
+    __pyx_v_self->c_customized_ptr = ((megakernel::kernel::KNCustomizedOp *)NULL);
 
     /* "megakernel/_cython/core.pyx":511
  *     def __cinit__(self, op):
@@ -15864,7 +15871,7 @@ static int __pyx_pf_10megakernel_4core_16CyKNCustomizedOp___cinit__(struct __pyx
  * 
  *     def get_bgraph(self):
  */
-    __pyx_v_self->c_customized_ptr = ((mirage::kernel::KNCustomizedOp *)__pyx_v_ptr);
+    __pyx_v_self->c_customized_ptr = ((megakernel::kernel::KNCustomizedOp *)__pyx_v_ptr);
   }
   __pyx_L3:;
 
@@ -15941,7 +15948,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 }
 
 static PyObject *__pyx_pf_10megakernel_4core_16CyKNCustomizedOp_2get_bgraph(struct __pyx_obj_10megakernel_4core_CyKNCustomizedOp *__pyx_v_self) {
-  mirage::threadblock::Graph *__pyx_v_bgraph;
+  megakernel::threadblock::Graph *__pyx_v_bgraph;
   PyObject *__pyx_v_ptr = NULL;
   struct __pyx_obj_10megakernel_4core_CyTBGraph *__pyx_v_cybgraph = NULL;
   PyObject *__pyx_r = NULL;
@@ -16320,7 +16327,7 @@ static CYTHON_INLINE PyObject *__pyx_f_10megakernel_4core_12CyTBOperator__set_op
  *         else:
  *             ptr = ctypes.cast(op, ctypes.c_void_p).value
  */
-    __pyx_v_self->c_ptr = ((mirage::threadblock::TBOperator *)NULL);
+    __pyx_v_self->c_ptr = ((megakernel::threadblock::TBOperator *)NULL);
 
     /* "megakernel/_cython/core.pyx":530
  *     cdef inline _set_operator(self, op):
@@ -16387,7 +16394,7 @@ static CYTHON_INLINE PyObject *__pyx_f_10megakernel_4core_12CyTBOperator__set_op
  * 
  *     def get_input_stensors(self):
  */
-    __pyx_v_self->c_ptr = ((mirage::threadblock::TBOperator *)__pyx_v_ptr);
+    __pyx_v_self->c_ptr = ((megakernel::threadblock::TBOperator *)__pyx_v_ptr);
   }
   __pyx_L3:;
 
@@ -16465,7 +16472,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 }
 
 static PyObject *__pyx_pf_10megakernel_4core_12CyTBOperator_get_input_stensors(struct __pyx_obj_10megakernel_4core_CyTBOperator *__pyx_v_self) {
-  mirage::threadblock::STensor *__pyx_v_cinputs[0x400];
+  megakernel::threadblock::STensor *__pyx_v_cinputs[0x400];
   int __pyx_v_num;
   PyObject *__pyx_v_inputs = NULL;
   int __pyx_v_i;
@@ -16666,7 +16673,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 }
 
 static PyObject *__pyx_pf_10megakernel_4core_12CyTBOperator_2get_output_stensors(struct __pyx_obj_10megakernel_4core_CyTBOperator *__pyx_v_self) {
-  mirage::threadblock::STensor *__pyx_v_coutputs[0x400];
+  megakernel::threadblock::STensor *__pyx_v_coutputs[0x400];
   int __pyx_v_num;
   PyObject *__pyx_v_outputs = NULL;
   int __pyx_v_i;
@@ -16895,7 +16902,7 @@ static PyObject *__pyx_pf_10megakernel_4core_12CyTBOperator_7op_type___get__(str
     __Pyx_XDECREF(__pyx_r);
     __Pyx_GetModuleGlobalName(__pyx_t_3, __pyx_n_s_get_tb_operator_type_string); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 559, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_3);
-    __pyx_t_4 = __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_TBOperatorType(__pyx_v_self->c_ptr->op_type); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 559, __pyx_L1_error)
+    __pyx_t_4 = __Pyx_PyInt_From_enum__megakernel_3a__3a_type_3a__3a_TBOperatorType(__pyx_v_self->c_ptr->op_type); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 559, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_4);
     __pyx_t_5 = __Pyx_PyObject_CallOneArg(((PyObject *)(&PyInt_Type)), __pyx_t_4); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 559, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
@@ -17411,7 +17418,7 @@ static int __pyx_pf_10megakernel_4core_11CyTBInputOp___cinit__(struct __pyx_obj_
  *         else:
  *             ptr = ctypes.cast(op, ctypes.c_void_p).value
  */
-    __pyx_v_self->c_input_ptr = ((mirage::threadblock::TBInputOp *)NULL);
+    __pyx_v_self->c_input_ptr = ((megakernel::threadblock::TBInputOp *)NULL);
 
     /* "megakernel/_cython/core.pyx":569
  *     def __cinit__(self, op):
@@ -17478,7 +17485,7 @@ static int __pyx_pf_10megakernel_4core_11CyTBInputOp___cinit__(struct __pyx_obj_
  * 
  *     property input_map:
  */
-    __pyx_v_self->c_input_ptr = ((mirage::threadblock::TBInputOp *)__pyx_v_ptr);
+    __pyx_v_self->c_input_ptr = ((megakernel::threadblock::TBInputOp *)__pyx_v_ptr);
   }
   __pyx_L3:;
 
@@ -18104,7 +18111,7 @@ static int __pyx_pf_10megakernel_4core_9CyKNGraph___cinit__(struct __pyx_obj_10m
  *         else:
  *             ptr = ctypes.cast(graph, ctypes.c_void_p).value
  */
-    __pyx_v_self->p_kgraph = new mirage::kernel::Graph(__pyx_v_c_gpu_dim);
+    __pyx_v_self->p_kgraph = new megakernel::kernel::Graph(__pyx_v_c_gpu_dim);
 
     /* "megakernel/_cython/core.pyx":599
  *         cdef unsigned long long ptr
@@ -18171,7 +18178,7 @@ static int __pyx_pf_10megakernel_4core_9CyKNGraph___cinit__(struct __pyx_obj_10m
  * 
  *     def new_input(self, tuple dims, tuple strides, dtype : dtype = float16):
  */
-    __pyx_v_self->p_kgraph = ((mirage::kernel::Graph *)__pyx_v_ptr);
+    __pyx_v_self->p_kgraph = ((megakernel::kernel::Graph *)__pyx_v_ptr);
   }
   __pyx_L3:;
 
@@ -18344,7 +18351,7 @@ static PyObject *__pyx_pf_10megakernel_4core_9CyKNGraph_2new_input(struct __pyx_
   std::vector<size_t>  __pyx_v_cstrides;
   Py_ssize_t __pyx_v_i;
   PyObject *__pyx_v_c_type = NULL;
-  struct mirage::kernel::DTensor *__pyx_v_ptr;
+  struct megakernel::kernel::DTensor *__pyx_v_ptr;
   PyObject *__pyx_v_t = NULL;
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
@@ -18357,7 +18364,7 @@ static PyObject *__pyx_pf_10megakernel_4core_9CyKNGraph_2new_input(struct __pyx_
   PyObject *__pyx_t_7 = NULL;
   PyObject *__pyx_t_8 = NULL;
   unsigned int __pyx_t_9;
-  enum mirage::type::DataType __pyx_t_10;
+  enum megakernel::type::DataType __pyx_t_10;
   PyObject *__pyx_t_11 = NULL;
   PyObject *__pyx_t_12 = NULL;
   int __pyx_lineno = 0;
@@ -18512,8 +18519,8 @@ static PyObject *__pyx_pf_10megakernel_4core_9CyKNGraph_2new_input(struct __pyx_
  *         t = ctypes.cast(<unsigned long long>ptr, ctypes.c_void_p)
  *         return DTensor(t)
  */
-  __pyx_t_10 = ((enum mirage::type::DataType)__Pyx_PyInt_As_enum__mirage_3a__3a_type_3a__3a_DataType(__pyx_v_c_type)); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 619, __pyx_L1_error)
-  __pyx_v_ptr = __pyx_v_self->p_kgraph->new_input_ptr(__pyx_v_cdims, __pyx_v_cstrides, __pyx_t_10, mirage::layout::DmemRowMajor);
+  __pyx_t_10 = ((enum megakernel::type::DataType)__Pyx_PyInt_As_enum__megakernel_3a__3a_type_3a__3a_DataType(__pyx_v_c_type)); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 619, __pyx_L1_error)
+  __pyx_v_ptr = __pyx_v_self->p_kgraph->new_input_ptr(__pyx_v_cdims, __pyx_v_cstrides, __pyx_t_10, megakernel::layout::DmemRowMajor);
 
   /* "megakernel/_cython/core.pyx":620
  *         c_type = convert_dtype_to_ctype(dtype)
@@ -18726,10 +18733,10 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 }
 
 static PyObject *__pyx_pf_10megakernel_4core_9CyKNGraph_4customized(struct __pyx_obj_10megakernel_4core_CyKNGraph *__pyx_v_self, PyObject *__pyx_v_inputs, struct __pyx_obj_10megakernel_4core_CyTBGraph *__pyx_v_bgraph) {
-  std::vector<struct mirage::kernel::DTensor const *>  __pyx_v_cinputs;
+  std::vector<struct megakernel::kernel::DTensor const *>  __pyx_v_cinputs;
   struct __pyx_obj_10megakernel_4core_DTensor *__pyx_v_t = 0;
   Py_ssize_t __pyx_v_i;
-  struct mirage::kernel::DTensor *__pyx_v_coutputs[0x400];
+  struct megakernel::kernel::DTensor *__pyx_v_coutputs[0x400];
   int __pyx_v_num_outputs;
   PyObject *__pyx_v_outputs = NULL;
   PyObject *__pyx_v_ptr = NULL;
@@ -18741,7 +18748,7 @@ static PyObject *__pyx_pf_10megakernel_4core_9CyKNGraph_4customized(struct __pyx
   PyObject *__pyx_t_4 = NULL;
   int __pyx_t_5;
   PyObject *__pyx_t_6 = NULL;
-  struct mirage::kernel::DTensor *__pyx_t_7;
+  struct megakernel::kernel::DTensor *__pyx_t_7;
   int __pyx_t_8;
   int __pyx_t_9;
   PyObject *__pyx_t_10 = NULL;
@@ -19064,7 +19071,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 }
 
 static PyObject *__pyx_pf_10megakernel_4core_9CyKNGraph_6get_input_dtensors(struct __pyx_obj_10megakernel_4core_CyKNGraph *__pyx_v_self) {
-  struct mirage::kernel::DTensor *__pyx_v_cinputs[0x400];
+  struct megakernel::kernel::DTensor *__pyx_v_cinputs[0x400];
   int __pyx_v_num;
   PyObject *__pyx_v_inputs = NULL;
   int __pyx_v_i;
@@ -21569,16 +21576,16 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 
 static PyObject *__pyx_pf_10megakernel_4core_9CyKNGraph_18get_graph_structure(struct __pyx_obj_10megakernel_4core_CyKNGraph *__pyx_v_self) {
   PyObject *__pyx_v_operators = NULL;
-  std::vector<mirage::kernel::KNOperator *>  __pyx_v_ops;
-  std::vector<mirage::kernel::KNOperator *> ::size_type __pyx_v_i;
+  std::vector<megakernel::kernel::KNOperator *>  __pyx_v_ops;
+  std::vector<megakernel::kernel::KNOperator *> ::size_type __pyx_v_i;
   struct __pyx_obj_10megakernel_4core_CyKNOperator *__pyx_v_op = NULL;
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
-  std::vector<mirage::kernel::KNOperator *>  __pyx_t_2;
-  std::vector<mirage::kernel::KNOperator *> ::size_type __pyx_t_3;
-  std::vector<mirage::kernel::KNOperator *> ::size_type __pyx_t_4;
-  std::vector<mirage::kernel::KNOperator *> ::size_type __pyx_t_5;
+  std::vector<megakernel::kernel::KNOperator *>  __pyx_t_2;
+  std::vector<megakernel::kernel::KNOperator *> ::size_type __pyx_t_3;
+  std::vector<megakernel::kernel::KNOperator *> ::size_type __pyx_t_4;
+  std::vector<megakernel::kernel::KNOperator *> ::size_type __pyx_t_5;
   PyObject *__pyx_t_6 = NULL;
   PyObject *__pyx_t_7 = NULL;
   unsigned int __pyx_t_8;
@@ -22933,12 +22940,12 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 }
 
 static PyObject *__pyx_pf_10megakernel_4core_9CyKNGraph_30fuse_tensors(struct __pyx_obj_10megakernel_4core_CyKNGraph *__pyx_v_self, PyObject *__pyx_v_inputs, int __pyx_v_fused_dim, int __pyx_v_num_groups, PyObject *__pyx_v_name) {
-  std::vector<struct mirage::kernel::DTensor const *>  __pyx_v_cinputs;
+  std::vector<struct megakernel::kernel::DTensor const *>  __pyx_v_cinputs;
   struct __pyx_obj_10megakernel_4core_DTensor *__pyx_v_t = 0;
   Py_ssize_t __pyx_v_i;
   char *__pyx_v_cname;
   PyObject *__pyx_v_py_byte_string = NULL;
-  struct mirage::kernel::DTensor *__pyx_v_ptr;
+  struct megakernel::kernel::DTensor *__pyx_v_ptr;
   PyObject *__pyx_v_output = NULL;
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
@@ -22948,7 +22955,7 @@ static PyObject *__pyx_pf_10megakernel_4core_9CyKNGraph_30fuse_tensors(struct __
   PyObject *__pyx_t_4 = NULL;
   PyObject *__pyx_t_5 = NULL;
   int __pyx_t_6;
-  struct mirage::kernel::DTensor *__pyx_t_7;
+  struct megakernel::kernel::DTensor *__pyx_t_7;
   char *__pyx_t_8;
   PyObject *__pyx_t_9 = NULL;
   PyObject *__pyx_t_10 = NULL;
@@ -23355,12 +23362,12 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 }
 
 static PyObject *__pyx_pf_10megakernel_4core_9CyKNGraph_32shuffle_tensors(struct __pyx_obj_10megakernel_4core_CyKNGraph *__pyx_v_self, PyObject *__pyx_v_inputs, int __pyx_v_shuffled_dim, int __pyx_v_num_groups, PyObject *__pyx_v_name) {
-  std::vector<struct mirage::kernel::DTensor const *>  __pyx_v_cinputs;
+  std::vector<struct megakernel::kernel::DTensor const *>  __pyx_v_cinputs;
   struct __pyx_obj_10megakernel_4core_DTensor *__pyx_v_t = 0;
   Py_ssize_t __pyx_v_i;
   char *__pyx_v_cname;
   PyObject *__pyx_v_py_byte_string = NULL;
-  struct mirage::kernel::DTensor *__pyx_v_ptr;
+  struct megakernel::kernel::DTensor *__pyx_v_ptr;
   PyObject *__pyx_v_output = NULL;
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
@@ -23370,7 +23377,7 @@ static PyObject *__pyx_pf_10megakernel_4core_9CyKNGraph_32shuffle_tensors(struct
   PyObject *__pyx_t_4 = NULL;
   PyObject *__pyx_t_5 = NULL;
   int __pyx_t_6;
-  struct mirage::kernel::DTensor *__pyx_t_7;
+  struct megakernel::kernel::DTensor *__pyx_t_7;
   char *__pyx_t_8;
   PyObject *__pyx_t_9 = NULL;
   PyObject *__pyx_t_10 = NULL;
@@ -24072,7 +24079,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 }
 
 static PyObject *__pyx_pf_10megakernel_4core_9CyKNGraph_36generate_task_graph(struct __pyx_obj_10megakernel_4core_CyKNGraph *__pyx_v_self, int __pyx_v_num_gpus, int __pyx_v_my_gpu_id) {
-  mirage::runtime::TaskGraphResult __pyx_v_result;
+  megakernel::runtime::TaskGraphResult __pyx_v_result;
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
@@ -24769,7 +24776,7 @@ static int __pyx_pf_10megakernel_4core_9CyTBGraph___cinit__(struct __pyx_obj_10m
  *         else:
  *             ptr = ctypes.cast(bgraph, ctypes.c_void_p).value
  */
-    __pyx_v_self->p_bgraph = new mirage::threadblock::Graph(__pyx_v_c_grid_dim, __pyx_v_c_block_dim, __pyx_v_thread_num, __pyx_v_dimx);
+    __pyx_v_self->p_bgraph = new megakernel::threadblock::Graph(__pyx_v_c_grid_dim, __pyx_v_c_block_dim, __pyx_v_thread_num, __pyx_v_dimx);
 
     /* "megakernel/_cython/core.pyx":813
  *         cdef dim3 c_grid_dim
@@ -24846,7 +24853,7 @@ static int __pyx_pf_10megakernel_4core_9CyTBGraph___cinit__(struct __pyx_obj_10m
  *             elif isinstance(bgraph, ctypes.c_void_p):
  *                 self.p_bgraph = <CppTBGraph*>(ptr)
  */
-      __pyx_v_self->p_bgraph = ((mirage::threadblock::Graph *)__pyx_v_ptr);
+      __pyx_v_self->p_bgraph = ((megakernel::threadblock::Graph *)__pyx_v_ptr);
 
       /* "megakernel/_cython/core.pyx":827
  *         else:
@@ -24881,7 +24888,7 @@ static int __pyx_pf_10megakernel_4core_9CyTBGraph___cinit__(struct __pyx_obj_10m
  *             else:
  *                 assert False, "bgraph must be an integer or ctypes.c_void_p, but got " + str(type(bgraph))
  */
-      __pyx_v_self->p_bgraph = ((mirage::threadblock::Graph *)__pyx_v_ptr);
+      __pyx_v_self->p_bgraph = ((megakernel::threadblock::Graph *)__pyx_v_ptr);
 
       /* "megakernel/_cython/core.pyx":829
  *             if isinstance(bgraph, int):
@@ -25091,8 +25098,8 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 
 static PyObject *__pyx_pf_10megakernel_4core_9CyTBGraph_2new_input(struct __pyx_obj_10megakernel_4core_CyTBGraph *__pyx_v_self, struct __pyx_obj_10megakernel_4core_DTensor *__pyx_v_dtensor, PyObject *__pyx_v_input_map, bool __pyx_v_store_in_dmem) {
   int3 __pyx_v_c_input_map;
-  struct mirage::kernel::DTensor *__pyx_v_dtensor_cptr;
-  mirage::threadblock::STensor *__pyx_v_ptr;
+  struct megakernel::kernel::DTensor *__pyx_v_dtensor_cptr;
+  megakernel::threadblock::STensor *__pyx_v_ptr;
   PyObject *__pyx_v_t = NULL;
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
@@ -25100,7 +25107,7 @@ static PyObject *__pyx_pf_10megakernel_4core_9CyTBGraph_2new_input(struct __pyx_
   int __pyx_t_2;
   PyObject *__pyx_t_3 = NULL;
   int __pyx_t_4;
-  struct mirage::kernel::DTensor *__pyx_t_5;
+  struct megakernel::kernel::DTensor *__pyx_t_5;
   PyObject *__pyx_t_6 = NULL;
   PyObject *__pyx_t_7 = NULL;
   PyObject *__pyx_t_8 = NULL;
@@ -25231,7 +25238,7 @@ static PyObject *__pyx_pf_10megakernel_4core_9CyTBGraph_2new_input(struct __pyx_
  *         t = ctypes.cast(<unsigned long long>ptr, ctypes.c_void_p)
  *         return STensor(t)
  */
-  __pyx_v_ptr = __pyx_v_self->p_bgraph->new_input(__pyx_v_dtensor_cptr, __pyx_v_c_input_map, mirage::layout::SmemRowMajor, __pyx_v_store_in_dmem);
+  __pyx_v_ptr = __pyx_v_self->p_bgraph->new_input(__pyx_v_dtensor_cptr, __pyx_v_c_input_map, megakernel::layout::SmemRowMajor, __pyx_v_store_in_dmem);
 
   /* "megakernel/_cython/core.pyx":844
  *             dtensor_cptr = dtensor.c_ptr
@@ -25509,17 +25516,17 @@ static PyObject *__pyx_pw_10megakernel_4core_9CyTBGraph_9operators_1__get__(PyOb
 }
 
 static PyObject *__pyx_pf_10megakernel_4core_9CyTBGraph_9operators___get__(struct __pyx_obj_10megakernel_4core_CyTBGraph *__pyx_v_self) {
-  std::vector<mirage::threadblock::TBOperator *>  __pyx_v_coperators;
+  std::vector<megakernel::threadblock::TBOperator *>  __pyx_v_coperators;
   PyObject *__pyx_v_operators = NULL;
-  std::vector<mirage::threadblock::TBOperator *> ::size_type __pyx_v_i;
+  std::vector<megakernel::threadblock::TBOperator *> ::size_type __pyx_v_i;
   PyObject *__pyx_v_ptr = NULL;
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
-  std::vector<mirage::threadblock::TBOperator *>  __pyx_t_1;
+  std::vector<megakernel::threadblock::TBOperator *>  __pyx_t_1;
   PyObject *__pyx_t_2 = NULL;
-  std::vector<mirage::threadblock::TBOperator *> ::size_type __pyx_t_3;
-  std::vector<mirage::threadblock::TBOperator *> ::size_type __pyx_t_4;
-  std::vector<mirage::threadblock::TBOperator *> ::size_type __pyx_t_5;
+  std::vector<megakernel::threadblock::TBOperator *> ::size_type __pyx_t_3;
+  std::vector<megakernel::threadblock::TBOperator *> ::size_type __pyx_t_4;
+  std::vector<megakernel::threadblock::TBOperator *> ::size_type __pyx_t_5;
   PyObject *__pyx_t_6 = NULL;
   PyObject *__pyx_t_7 = NULL;
   PyObject *__pyx_t_8 = NULL;
@@ -34525,31 +34532,31 @@ static CYTHON_INLINE PyObject* __Pyx_PyInt_From_int(int value) {
 }
 
 /* CIntToPy */
-static CYTHON_INLINE PyObject* __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_DataType(enum mirage::type::DataType value) {
+static CYTHON_INLINE PyObject* __Pyx_PyInt_From_enum__megakernel_3a__3a_type_3a__3a_DataType(enum megakernel::type::DataType value) {
 #ifdef __Pyx_HAS_GCC_DIAGNOSTIC
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
 #endif
-    const enum mirage::type::DataType neg_one = (enum mirage::type::DataType) -1, const_zero = (enum mirage::type::DataType) 0;
+    const enum megakernel::type::DataType neg_one = (enum megakernel::type::DataType) -1, const_zero = (enum megakernel::type::DataType) 0;
 #ifdef __Pyx_HAS_GCC_DIAGNOSTIC
 #pragma GCC diagnostic pop
 #endif
     const int is_unsigned = neg_one > const_zero;
     if (is_unsigned) {
-        if (sizeof(enum mirage::type::DataType) < sizeof(long)) {
+        if (sizeof(enum megakernel::type::DataType) < sizeof(long)) {
             return PyInt_FromLong((long) value);
-        } else if (sizeof(enum mirage::type::DataType) <= sizeof(unsigned long)) {
+        } else if (sizeof(enum megakernel::type::DataType) <= sizeof(unsigned long)) {
             return PyLong_FromUnsignedLong((unsigned long) value);
 #ifdef HAVE_LONG_LONG
-        } else if (sizeof(enum mirage::type::DataType) <= sizeof(unsigned PY_LONG_LONG)) {
+        } else if (sizeof(enum megakernel::type::DataType) <= sizeof(unsigned PY_LONG_LONG)) {
             return PyLong_FromUnsignedLongLong((unsigned PY_LONG_LONG) value);
 #endif
         }
     } else {
-        if (sizeof(enum mirage::type::DataType) <= sizeof(long)) {
+        if (sizeof(enum megakernel::type::DataType) <= sizeof(long)) {
             return PyInt_FromLong((long) value);
 #ifdef HAVE_LONG_LONG
-        } else if (sizeof(enum mirage::type::DataType) <= sizeof(PY_LONG_LONG)) {
+        } else if (sizeof(enum megakernel::type::DataType) <= sizeof(PY_LONG_LONG)) {
             return PyLong_FromLongLong((PY_LONG_LONG) value);
 #endif
         }
@@ -34564,7 +34571,7 @@ static CYTHON_INLINE PyObject* __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_
         }
 #elif !CYTHON_COMPILING_IN_LIMITED_API && PY_VERSION_HEX < 0x030d0000
         int one = 1; int little = (int)*(unsigned char *)&one;
-        return _PyLong_FromByteArray(bytes, sizeof(enum mirage::type::DataType),
+        return _PyLong_FromByteArray(bytes, sizeof(enum megakernel::type::DataType),
                                      little, !is_unsigned);
 #else
         int one = 1; int little = (int)*(unsigned char *)&one;
@@ -34572,7 +34579,7 @@ static CYTHON_INLINE PyObject* __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_
         PyObject *py_bytes = NULL, *arg_tuple = NULL, *kwds = NULL, *order_str = NULL;
         from_bytes = PyObject_GetAttrString((PyObject*)&PyLong_Type, "from_bytes");
         if (!from_bytes) return NULL;
-        py_bytes = PyBytes_FromStringAndSize((char*)bytes, sizeof(enum mirage::type::DataType));
+        py_bytes = PyBytes_FromStringAndSize((char*)bytes, sizeof(enum megakernel::type::DataType));
         if (!py_bytes) goto limited_bad;
         order_str = PyUnicode_FromString(little ? "little" : "big");
         if (!order_str) goto limited_bad;
@@ -34934,31 +34941,31 @@ static CYTHON_INLINE PyObject* __Pyx_PyInt_From_unsigned_PY_LONG_LONG(unsigned P
 }
 
 /* CIntToPy */
-static CYTHON_INLINE PyObject* __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_KNOperatorType(enum mirage::type::KNOperatorType value) {
+static CYTHON_INLINE PyObject* __Pyx_PyInt_From_enum__megakernel_3a__3a_type_3a__3a_KNOperatorType(enum megakernel::type::KNOperatorType value) {
 #ifdef __Pyx_HAS_GCC_DIAGNOSTIC
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
 #endif
-    const enum mirage::type::KNOperatorType neg_one = (enum mirage::type::KNOperatorType) -1, const_zero = (enum mirage::type::KNOperatorType) 0;
+    const enum megakernel::type::KNOperatorType neg_one = (enum megakernel::type::KNOperatorType) -1, const_zero = (enum megakernel::type::KNOperatorType) 0;
 #ifdef __Pyx_HAS_GCC_DIAGNOSTIC
 #pragma GCC diagnostic pop
 #endif
     const int is_unsigned = neg_one > const_zero;
     if (is_unsigned) {
-        if (sizeof(enum mirage::type::KNOperatorType) < sizeof(long)) {
+        if (sizeof(enum megakernel::type::KNOperatorType) < sizeof(long)) {
             return PyInt_FromLong((long) value);
-        } else if (sizeof(enum mirage::type::KNOperatorType) <= sizeof(unsigned long)) {
+        } else if (sizeof(enum megakernel::type::KNOperatorType) <= sizeof(unsigned long)) {
             return PyLong_FromUnsignedLong((unsigned long) value);
 #ifdef HAVE_LONG_LONG
-        } else if (sizeof(enum mirage::type::KNOperatorType) <= sizeof(unsigned PY_LONG_LONG)) {
+        } else if (sizeof(enum megakernel::type::KNOperatorType) <= sizeof(unsigned PY_LONG_LONG)) {
             return PyLong_FromUnsignedLongLong((unsigned PY_LONG_LONG) value);
 #endif
         }
     } else {
-        if (sizeof(enum mirage::type::KNOperatorType) <= sizeof(long)) {
+        if (sizeof(enum megakernel::type::KNOperatorType) <= sizeof(long)) {
             return PyInt_FromLong((long) value);
 #ifdef HAVE_LONG_LONG
-        } else if (sizeof(enum mirage::type::KNOperatorType) <= sizeof(PY_LONG_LONG)) {
+        } else if (sizeof(enum megakernel::type::KNOperatorType) <= sizeof(PY_LONG_LONG)) {
             return PyLong_FromLongLong((PY_LONG_LONG) value);
 #endif
         }
@@ -34973,7 +34980,7 @@ static CYTHON_INLINE PyObject* __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_
         }
 #elif !CYTHON_COMPILING_IN_LIMITED_API && PY_VERSION_HEX < 0x030d0000
         int one = 1; int little = (int)*(unsigned char *)&one;
-        return _PyLong_FromByteArray(bytes, sizeof(enum mirage::type::KNOperatorType),
+        return _PyLong_FromByteArray(bytes, sizeof(enum megakernel::type::KNOperatorType),
                                      little, !is_unsigned);
 #else
         int one = 1; int little = (int)*(unsigned char *)&one;
@@ -34981,7 +34988,7 @@ static CYTHON_INLINE PyObject* __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_
         PyObject *py_bytes = NULL, *arg_tuple = NULL, *kwds = NULL, *order_str = NULL;
         from_bytes = PyObject_GetAttrString((PyObject*)&PyLong_Type, "from_bytes");
         if (!from_bytes) return NULL;
-        py_bytes = PyBytes_FromStringAndSize((char*)bytes, sizeof(enum mirage::type::KNOperatorType));
+        py_bytes = PyBytes_FromStringAndSize((char*)bytes, sizeof(enum megakernel::type::KNOperatorType));
         if (!py_bytes) goto limited_bad;
         order_str = PyUnicode_FromString(little ? "little" : "big");
         if (!order_str) goto limited_bad;
@@ -35005,31 +35012,31 @@ static CYTHON_INLINE PyObject* __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_
 }
 
 /* CIntToPy */
-static CYTHON_INLINE PyObject* __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_TBOperatorType(enum mirage::type::TBOperatorType value) {
+static CYTHON_INLINE PyObject* __Pyx_PyInt_From_enum__megakernel_3a__3a_type_3a__3a_TBOperatorType(enum megakernel::type::TBOperatorType value) {
 #ifdef __Pyx_HAS_GCC_DIAGNOSTIC
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
 #endif
-    const enum mirage::type::TBOperatorType neg_one = (enum mirage::type::TBOperatorType) -1, const_zero = (enum mirage::type::TBOperatorType) 0;
+    const enum megakernel::type::TBOperatorType neg_one = (enum megakernel::type::TBOperatorType) -1, const_zero = (enum megakernel::type::TBOperatorType) 0;
 #ifdef __Pyx_HAS_GCC_DIAGNOSTIC
 #pragma GCC diagnostic pop
 #endif
     const int is_unsigned = neg_one > const_zero;
     if (is_unsigned) {
-        if (sizeof(enum mirage::type::TBOperatorType) < sizeof(long)) {
+        if (sizeof(enum megakernel::type::TBOperatorType) < sizeof(long)) {
             return PyInt_FromLong((long) value);
-        } else if (sizeof(enum mirage::type::TBOperatorType) <= sizeof(unsigned long)) {
+        } else if (sizeof(enum megakernel::type::TBOperatorType) <= sizeof(unsigned long)) {
             return PyLong_FromUnsignedLong((unsigned long) value);
 #ifdef HAVE_LONG_LONG
-        } else if (sizeof(enum mirage::type::TBOperatorType) <= sizeof(unsigned PY_LONG_LONG)) {
+        } else if (sizeof(enum megakernel::type::TBOperatorType) <= sizeof(unsigned PY_LONG_LONG)) {
             return PyLong_FromUnsignedLongLong((unsigned PY_LONG_LONG) value);
 #endif
         }
     } else {
-        if (sizeof(enum mirage::type::TBOperatorType) <= sizeof(long)) {
+        if (sizeof(enum megakernel::type::TBOperatorType) <= sizeof(long)) {
             return PyInt_FromLong((long) value);
 #ifdef HAVE_LONG_LONG
-        } else if (sizeof(enum mirage::type::TBOperatorType) <= sizeof(PY_LONG_LONG)) {
+        } else if (sizeof(enum megakernel::type::TBOperatorType) <= sizeof(PY_LONG_LONG)) {
             return PyLong_FromLongLong((PY_LONG_LONG) value);
 #endif
         }
@@ -35044,7 +35051,7 @@ static CYTHON_INLINE PyObject* __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_
         }
 #elif !CYTHON_COMPILING_IN_LIMITED_API && PY_VERSION_HEX < 0x030d0000
         int one = 1; int little = (int)*(unsigned char *)&one;
-        return _PyLong_FromByteArray(bytes, sizeof(enum mirage::type::TBOperatorType),
+        return _PyLong_FromByteArray(bytes, sizeof(enum megakernel::type::TBOperatorType),
                                      little, !is_unsigned);
 #else
         int one = 1; int little = (int)*(unsigned char *)&one;
@@ -35052,7 +35059,7 @@ static CYTHON_INLINE PyObject* __Pyx_PyInt_From_enum__mirage_3a__3a_type_3a__3a_
         PyObject *py_bytes = NULL, *arg_tuple = NULL, *kwds = NULL, *order_str = NULL;
         from_bytes = PyObject_GetAttrString((PyObject*)&PyLong_Type, "from_bytes");
         if (!from_bytes) return NULL;
-        py_bytes = PyBytes_FromStringAndSize((char*)bytes, sizeof(enum mirage::type::TBOperatorType));
+        py_bytes = PyBytes_FromStringAndSize((char*)bytes, sizeof(enum megakernel::type::TBOperatorType));
         if (!py_bytes) goto limited_bad;
         order_str = PyUnicode_FromString(little ? "little" : "big");
         if (!order_str) goto limited_bad;
@@ -35343,34 +35350,34 @@ raise_neg_overflow:
 }
 
 /* CIntFromPy */
-static CYTHON_INLINE enum mirage::type::DataType __Pyx_PyInt_As_enum__mirage_3a__3a_type_3a__3a_DataType(PyObject *x) {
+static CYTHON_INLINE enum megakernel::type::DataType __Pyx_PyInt_As_enum__megakernel_3a__3a_type_3a__3a_DataType(PyObject *x) {
 #ifdef __Pyx_HAS_GCC_DIAGNOSTIC
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
 #endif
-    const enum mirage::type::DataType neg_one = (enum mirage::type::DataType) -1, const_zero = (enum mirage::type::DataType) 0;
+    const enum megakernel::type::DataType neg_one = (enum megakernel::type::DataType) -1, const_zero = (enum megakernel::type::DataType) 0;
 #ifdef __Pyx_HAS_GCC_DIAGNOSTIC
 #pragma GCC diagnostic pop
 #endif
     const int is_unsigned = neg_one > const_zero;
 #if PY_MAJOR_VERSION < 3
     if (likely(PyInt_Check(x))) {
-        if ((sizeof(enum mirage::type::DataType) < sizeof(long))) {
-            __PYX_VERIFY_RETURN_INT(enum mirage::type::DataType, long, PyInt_AS_LONG(x))
+        if ((sizeof(enum megakernel::type::DataType) < sizeof(long))) {
+            __PYX_VERIFY_RETURN_INT(enum megakernel::type::DataType, long, PyInt_AS_LONG(x))
         } else {
             long val = PyInt_AS_LONG(x);
             if (is_unsigned && unlikely(val < 0)) {
                 goto raise_neg_overflow;
             }
-            return (enum mirage::type::DataType) val;
+            return (enum megakernel::type::DataType) val;
         }
     }
 #endif
     if (unlikely(!PyLong_Check(x))) {
-        enum mirage::type::DataType val;
+        enum megakernel::type::DataType val;
         PyObject *tmp = __Pyx_PyNumber_IntOrLong(x);
-        if (!tmp) return (enum mirage::type::DataType) -1;
-        val = __Pyx_PyInt_As_enum__mirage_3a__3a_type_3a__3a_DataType(tmp);
+        if (!tmp) return (enum megakernel::type::DataType) -1;
+        val = __Pyx_PyInt_As_enum__megakernel_3a__3a_type_3a__3a_DataType(tmp);
         Py_DECREF(tmp);
         return val;
     }
@@ -35379,35 +35386,35 @@ static CYTHON_INLINE enum mirage::type::DataType __Pyx_PyInt_As_enum__mirage_3a_
         if (unlikely(__Pyx_PyLong_IsNeg(x))) {
             goto raise_neg_overflow;
         } else if (__Pyx_PyLong_IsCompact(x)) {
-            __PYX_VERIFY_RETURN_INT(enum mirage::type::DataType, __Pyx_compact_upylong, __Pyx_PyLong_CompactValueUnsigned(x))
+            __PYX_VERIFY_RETURN_INT(enum megakernel::type::DataType, __Pyx_compact_upylong, __Pyx_PyLong_CompactValueUnsigned(x))
         } else {
             const digit* digits = __Pyx_PyLong_Digits(x);
             assert(__Pyx_PyLong_DigitCount(x) > 1);
             switch (__Pyx_PyLong_DigitCount(x)) {
                 case 2:
-                    if ((8 * sizeof(enum mirage::type::DataType) > 1 * PyLong_SHIFT)) {
+                    if ((8 * sizeof(enum megakernel::type::DataType) > 1 * PyLong_SHIFT)) {
                         if ((8 * sizeof(unsigned long) > 2 * PyLong_SHIFT)) {
-                            __PYX_VERIFY_RETURN_INT(enum mirage::type::DataType, unsigned long, (((((unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
-                        } else if ((8 * sizeof(enum mirage::type::DataType) >= 2 * PyLong_SHIFT)) {
-                            return (enum mirage::type::DataType) (((((enum mirage::type::DataType)digits[1]) << PyLong_SHIFT) | (enum mirage::type::DataType)digits[0]));
+                            __PYX_VERIFY_RETURN_INT(enum megakernel::type::DataType, unsigned long, (((((unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if ((8 * sizeof(enum megakernel::type::DataType) >= 2 * PyLong_SHIFT)) {
+                            return (enum megakernel::type::DataType) (((((enum megakernel::type::DataType)digits[1]) << PyLong_SHIFT) | (enum megakernel::type::DataType)digits[0]));
                         }
                     }
                     break;
                 case 3:
-                    if ((8 * sizeof(enum mirage::type::DataType) > 2 * PyLong_SHIFT)) {
+                    if ((8 * sizeof(enum megakernel::type::DataType) > 2 * PyLong_SHIFT)) {
                         if ((8 * sizeof(unsigned long) > 3 * PyLong_SHIFT)) {
-                            __PYX_VERIFY_RETURN_INT(enum mirage::type::DataType, unsigned long, (((((((unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
-                        } else if ((8 * sizeof(enum mirage::type::DataType) >= 3 * PyLong_SHIFT)) {
-                            return (enum mirage::type::DataType) (((((((enum mirage::type::DataType)digits[2]) << PyLong_SHIFT) | (enum mirage::type::DataType)digits[1]) << PyLong_SHIFT) | (enum mirage::type::DataType)digits[0]));
+                            __PYX_VERIFY_RETURN_INT(enum megakernel::type::DataType, unsigned long, (((((((unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if ((8 * sizeof(enum megakernel::type::DataType) >= 3 * PyLong_SHIFT)) {
+                            return (enum megakernel::type::DataType) (((((((enum megakernel::type::DataType)digits[2]) << PyLong_SHIFT) | (enum megakernel::type::DataType)digits[1]) << PyLong_SHIFT) | (enum megakernel::type::DataType)digits[0]));
                         }
                     }
                     break;
                 case 4:
-                    if ((8 * sizeof(enum mirage::type::DataType) > 3 * PyLong_SHIFT)) {
+                    if ((8 * sizeof(enum megakernel::type::DataType) > 3 * PyLong_SHIFT)) {
                         if ((8 * sizeof(unsigned long) > 4 * PyLong_SHIFT)) {
-                            __PYX_VERIFY_RETURN_INT(enum mirage::type::DataType, unsigned long, (((((((((unsigned long)digits[3]) << PyLong_SHIFT) | (unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
-                        } else if ((8 * sizeof(enum mirage::type::DataType) >= 4 * PyLong_SHIFT)) {
-                            return (enum mirage::type::DataType) (((((((((enum mirage::type::DataType)digits[3]) << PyLong_SHIFT) | (enum mirage::type::DataType)digits[2]) << PyLong_SHIFT) | (enum mirage::type::DataType)digits[1]) << PyLong_SHIFT) | (enum mirage::type::DataType)digits[0]));
+                            __PYX_VERIFY_RETURN_INT(enum megakernel::type::DataType, unsigned long, (((((((((unsigned long)digits[3]) << PyLong_SHIFT) | (unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if ((8 * sizeof(enum megakernel::type::DataType) >= 4 * PyLong_SHIFT)) {
+                            return (enum megakernel::type::DataType) (((((((((enum megakernel::type::DataType)digits[3]) << PyLong_SHIFT) | (enum megakernel::type::DataType)digits[2]) << PyLong_SHIFT) | (enum megakernel::type::DataType)digits[1]) << PyLong_SHIFT) | (enum megakernel::type::DataType)digits[0]));
                         }
                     }
                     break;
@@ -35422,93 +35429,93 @@ static CYTHON_INLINE enum mirage::type::DataType __Pyx_PyInt_As_enum__mirage_3a_
         {
             int result = PyObject_RichCompareBool(x, Py_False, Py_LT);
             if (unlikely(result < 0))
-                return (enum mirage::type::DataType) -1;
+                return (enum megakernel::type::DataType) -1;
             if (unlikely(result == 1))
                 goto raise_neg_overflow;
         }
 #endif
-        if ((sizeof(enum mirage::type::DataType) <= sizeof(unsigned long))) {
-            __PYX_VERIFY_RETURN_INT_EXC(enum mirage::type::DataType, unsigned long, PyLong_AsUnsignedLong(x))
+        if ((sizeof(enum megakernel::type::DataType) <= sizeof(unsigned long))) {
+            __PYX_VERIFY_RETURN_INT_EXC(enum megakernel::type::DataType, unsigned long, PyLong_AsUnsignedLong(x))
 #ifdef HAVE_LONG_LONG
-        } else if ((sizeof(enum mirage::type::DataType) <= sizeof(unsigned PY_LONG_LONG))) {
-            __PYX_VERIFY_RETURN_INT_EXC(enum mirage::type::DataType, unsigned PY_LONG_LONG, PyLong_AsUnsignedLongLong(x))
+        } else if ((sizeof(enum megakernel::type::DataType) <= sizeof(unsigned PY_LONG_LONG))) {
+            __PYX_VERIFY_RETURN_INT_EXC(enum megakernel::type::DataType, unsigned PY_LONG_LONG, PyLong_AsUnsignedLongLong(x))
 #endif
         }
     } else {
 #if CYTHON_USE_PYLONG_INTERNALS
         if (__Pyx_PyLong_IsCompact(x)) {
-            __PYX_VERIFY_RETURN_INT(enum mirage::type::DataType, __Pyx_compact_pylong, __Pyx_PyLong_CompactValue(x))
+            __PYX_VERIFY_RETURN_INT(enum megakernel::type::DataType, __Pyx_compact_pylong, __Pyx_PyLong_CompactValue(x))
         } else {
             const digit* digits = __Pyx_PyLong_Digits(x);
             assert(__Pyx_PyLong_DigitCount(x) > 1);
             switch (__Pyx_PyLong_SignedDigitCount(x)) {
                 case -2:
-                    if ((8 * sizeof(enum mirage::type::DataType) - 1 > 1 * PyLong_SHIFT)) {
+                    if ((8 * sizeof(enum megakernel::type::DataType) - 1 > 1 * PyLong_SHIFT)) {
                         if ((8 * sizeof(unsigned long) > 2 * PyLong_SHIFT)) {
-                            __PYX_VERIFY_RETURN_INT(enum mirage::type::DataType, long, -(long) (((((unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
-                        } else if ((8 * sizeof(enum mirage::type::DataType) - 1 > 2 * PyLong_SHIFT)) {
-                            return (enum mirage::type::DataType) (((enum mirage::type::DataType)-1)*(((((enum mirage::type::DataType)digits[1]) << PyLong_SHIFT) | (enum mirage::type::DataType)digits[0])));
+                            __PYX_VERIFY_RETURN_INT(enum megakernel::type::DataType, long, -(long) (((((unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if ((8 * sizeof(enum megakernel::type::DataType) - 1 > 2 * PyLong_SHIFT)) {
+                            return (enum megakernel::type::DataType) (((enum megakernel::type::DataType)-1)*(((((enum megakernel::type::DataType)digits[1]) << PyLong_SHIFT) | (enum megakernel::type::DataType)digits[0])));
                         }
                     }
                     break;
                 case 2:
-                    if ((8 * sizeof(enum mirage::type::DataType) > 1 * PyLong_SHIFT)) {
+                    if ((8 * sizeof(enum megakernel::type::DataType) > 1 * PyLong_SHIFT)) {
                         if ((8 * sizeof(unsigned long) > 2 * PyLong_SHIFT)) {
-                            __PYX_VERIFY_RETURN_INT(enum mirage::type::DataType, unsigned long, (((((unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
-                        } else if ((8 * sizeof(enum mirage::type::DataType) - 1 > 2 * PyLong_SHIFT)) {
-                            return (enum mirage::type::DataType) ((((((enum mirage::type::DataType)digits[1]) << PyLong_SHIFT) | (enum mirage::type::DataType)digits[0])));
+                            __PYX_VERIFY_RETURN_INT(enum megakernel::type::DataType, unsigned long, (((((unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if ((8 * sizeof(enum megakernel::type::DataType) - 1 > 2 * PyLong_SHIFT)) {
+                            return (enum megakernel::type::DataType) ((((((enum megakernel::type::DataType)digits[1]) << PyLong_SHIFT) | (enum megakernel::type::DataType)digits[0])));
                         }
                     }
                     break;
                 case -3:
-                    if ((8 * sizeof(enum mirage::type::DataType) - 1 > 2 * PyLong_SHIFT)) {
+                    if ((8 * sizeof(enum megakernel::type::DataType) - 1 > 2 * PyLong_SHIFT)) {
                         if ((8 * sizeof(unsigned long) > 3 * PyLong_SHIFT)) {
-                            __PYX_VERIFY_RETURN_INT(enum mirage::type::DataType, long, -(long) (((((((unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
-                        } else if ((8 * sizeof(enum mirage::type::DataType) - 1 > 3 * PyLong_SHIFT)) {
-                            return (enum mirage::type::DataType) (((enum mirage::type::DataType)-1)*(((((((enum mirage::type::DataType)digits[2]) << PyLong_SHIFT) | (enum mirage::type::DataType)digits[1]) << PyLong_SHIFT) | (enum mirage::type::DataType)digits[0])));
+                            __PYX_VERIFY_RETURN_INT(enum megakernel::type::DataType, long, -(long) (((((((unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if ((8 * sizeof(enum megakernel::type::DataType) - 1 > 3 * PyLong_SHIFT)) {
+                            return (enum megakernel::type::DataType) (((enum megakernel::type::DataType)-1)*(((((((enum megakernel::type::DataType)digits[2]) << PyLong_SHIFT) | (enum megakernel::type::DataType)digits[1]) << PyLong_SHIFT) | (enum megakernel::type::DataType)digits[0])));
                         }
                     }
                     break;
                 case 3:
-                    if ((8 * sizeof(enum mirage::type::DataType) > 2 * PyLong_SHIFT)) {
+                    if ((8 * sizeof(enum megakernel::type::DataType) > 2 * PyLong_SHIFT)) {
                         if ((8 * sizeof(unsigned long) > 3 * PyLong_SHIFT)) {
-                            __PYX_VERIFY_RETURN_INT(enum mirage::type::DataType, unsigned long, (((((((unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
-                        } else if ((8 * sizeof(enum mirage::type::DataType) - 1 > 3 * PyLong_SHIFT)) {
-                            return (enum mirage::type::DataType) ((((((((enum mirage::type::DataType)digits[2]) << PyLong_SHIFT) | (enum mirage::type::DataType)digits[1]) << PyLong_SHIFT) | (enum mirage::type::DataType)digits[0])));
+                            __PYX_VERIFY_RETURN_INT(enum megakernel::type::DataType, unsigned long, (((((((unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if ((8 * sizeof(enum megakernel::type::DataType) - 1 > 3 * PyLong_SHIFT)) {
+                            return (enum megakernel::type::DataType) ((((((((enum megakernel::type::DataType)digits[2]) << PyLong_SHIFT) | (enum megakernel::type::DataType)digits[1]) << PyLong_SHIFT) | (enum megakernel::type::DataType)digits[0])));
                         }
                     }
                     break;
                 case -4:
-                    if ((8 * sizeof(enum mirage::type::DataType) - 1 > 3 * PyLong_SHIFT)) {
+                    if ((8 * sizeof(enum megakernel::type::DataType) - 1 > 3 * PyLong_SHIFT)) {
                         if ((8 * sizeof(unsigned long) > 4 * PyLong_SHIFT)) {
-                            __PYX_VERIFY_RETURN_INT(enum mirage::type::DataType, long, -(long) (((((((((unsigned long)digits[3]) << PyLong_SHIFT) | (unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
-                        } else if ((8 * sizeof(enum mirage::type::DataType) - 1 > 4 * PyLong_SHIFT)) {
-                            return (enum mirage::type::DataType) (((enum mirage::type::DataType)-1)*(((((((((enum mirage::type::DataType)digits[3]) << PyLong_SHIFT) | (enum mirage::type::DataType)digits[2]) << PyLong_SHIFT) | (enum mirage::type::DataType)digits[1]) << PyLong_SHIFT) | (enum mirage::type::DataType)digits[0])));
+                            __PYX_VERIFY_RETURN_INT(enum megakernel::type::DataType, long, -(long) (((((((((unsigned long)digits[3]) << PyLong_SHIFT) | (unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if ((8 * sizeof(enum megakernel::type::DataType) - 1 > 4 * PyLong_SHIFT)) {
+                            return (enum megakernel::type::DataType) (((enum megakernel::type::DataType)-1)*(((((((((enum megakernel::type::DataType)digits[3]) << PyLong_SHIFT) | (enum megakernel::type::DataType)digits[2]) << PyLong_SHIFT) | (enum megakernel::type::DataType)digits[1]) << PyLong_SHIFT) | (enum megakernel::type::DataType)digits[0])));
                         }
                     }
                     break;
                 case 4:
-                    if ((8 * sizeof(enum mirage::type::DataType) > 3 * PyLong_SHIFT)) {
+                    if ((8 * sizeof(enum megakernel::type::DataType) > 3 * PyLong_SHIFT)) {
                         if ((8 * sizeof(unsigned long) > 4 * PyLong_SHIFT)) {
-                            __PYX_VERIFY_RETURN_INT(enum mirage::type::DataType, unsigned long, (((((((((unsigned long)digits[3]) << PyLong_SHIFT) | (unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
-                        } else if ((8 * sizeof(enum mirage::type::DataType) - 1 > 4 * PyLong_SHIFT)) {
-                            return (enum mirage::type::DataType) ((((((((((enum mirage::type::DataType)digits[3]) << PyLong_SHIFT) | (enum mirage::type::DataType)digits[2]) << PyLong_SHIFT) | (enum mirage::type::DataType)digits[1]) << PyLong_SHIFT) | (enum mirage::type::DataType)digits[0])));
+                            __PYX_VERIFY_RETURN_INT(enum megakernel::type::DataType, unsigned long, (((((((((unsigned long)digits[3]) << PyLong_SHIFT) | (unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if ((8 * sizeof(enum megakernel::type::DataType) - 1 > 4 * PyLong_SHIFT)) {
+                            return (enum megakernel::type::DataType) ((((((((((enum megakernel::type::DataType)digits[3]) << PyLong_SHIFT) | (enum megakernel::type::DataType)digits[2]) << PyLong_SHIFT) | (enum megakernel::type::DataType)digits[1]) << PyLong_SHIFT) | (enum megakernel::type::DataType)digits[0])));
                         }
                     }
                     break;
             }
         }
 #endif
-        if ((sizeof(enum mirage::type::DataType) <= sizeof(long))) {
-            __PYX_VERIFY_RETURN_INT_EXC(enum mirage::type::DataType, long, PyLong_AsLong(x))
+        if ((sizeof(enum megakernel::type::DataType) <= sizeof(long))) {
+            __PYX_VERIFY_RETURN_INT_EXC(enum megakernel::type::DataType, long, PyLong_AsLong(x))
 #ifdef HAVE_LONG_LONG
-        } else if ((sizeof(enum mirage::type::DataType) <= sizeof(PY_LONG_LONG))) {
-            __PYX_VERIFY_RETURN_INT_EXC(enum mirage::type::DataType, PY_LONG_LONG, PyLong_AsLongLong(x))
+        } else if ((sizeof(enum megakernel::type::DataType) <= sizeof(PY_LONG_LONG))) {
+            __PYX_VERIFY_RETURN_INT_EXC(enum megakernel::type::DataType, PY_LONG_LONG, PyLong_AsLongLong(x))
 #endif
         }
     }
     {
-        enum mirage::type::DataType val;
+        enum megakernel::type::DataType val;
         int ret = -1;
 #if PY_VERSION_HEX >= 0x030d00A6 && !CYTHON_COMPILING_IN_LIMITED_API
         Py_ssize_t bytes_copied = PyLong_AsNativeBytes(
@@ -35528,20 +35535,20 @@ static CYTHON_INLINE enum mirage::type::DataType __Pyx_PyInt_As_enum__mirage_3a_
 #else
         PyErr_SetString(PyExc_RuntimeError,
                         "_PyLong_AsByteArray() or PyLong_AsNativeBytes() not available, cannot convert large enums");
-        val = (enum mirage::type::DataType) -1;
+        val = (enum megakernel::type::DataType) -1;
 #endif
         if (unlikely(ret))
-            return (enum mirage::type::DataType) -1;
+            return (enum megakernel::type::DataType) -1;
         return val;
     }
 raise_overflow:
     PyErr_SetString(PyExc_OverflowError,
-        "value too large to convert to enum mirage::type::DataType");
-    return (enum mirage::type::DataType) -1;
+        "value too large to convert to enum megakernel::type::DataType");
+    return (enum megakernel::type::DataType) -1;
 raise_neg_overflow:
     PyErr_SetString(PyExc_OverflowError,
-        "can't convert negative value to enum mirage::type::DataType");
-    return (enum mirage::type::DataType) -1;
+        "can't convert negative value to enum megakernel::type::DataType");
+    return (enum megakernel::type::DataType) -1;
 }
 
 /* CIntToPy */

@@ -88,7 +88,7 @@ static PyMethodDef ModuleMethods[] = {
 
 static struct PyModuleDef ModuleDef = {
   PyModuleDef_HEAD_INIT,
-  "__mirage_launcher",
+  "__megakernel_launcher",
   NULL, //documentation
   -1, //size
   ModuleMethods,
@@ -98,7 +98,7 @@ static struct PyModuleDef ModuleDef = {
   NULL  // m_free
 };
 
-PyMODINIT_FUNC PyInit___mirage_launcher(void) {
+PyMODINIT_FUNC PyInit___megakernel_launcher(void) {
   PyObject *m = PyModule_Create(&ModuleDef);
   if(m == NULL) {
     return NULL;
@@ -116,9 +116,9 @@ def get_compile_command(
     cc,
     file_name,
     py_include_dir,
-    mirage_home_path,
-    mirage_inc_path,
-    mirage_deps_path,
+    megakernel_home_path,
+    megakernel_inc_path,
+    megakernel_deps_path,
     nvshmem_inc_path,
     nvshmem_lib_path,
     mpi_inc_path,
@@ -153,13 +153,13 @@ def get_compile_command(
         "-Xptxas=-v",
         "-lineinfo",
         f"-I{py_include_dir}",
-        f"-I{mirage_inc_path}",
-        f"-I{os.path.join(mirage_inc_path, 'mirage/persistent_kernel')}",
-        f"-I{os.path.join(mirage_deps_path, 'cutlass/include')}",
-        f"-I{os.path.join(mirage_deps_path, 'cutlass/tools/util/include')}",
-        f"-I{os.path.join(mirage_deps_path, 'json/include')}",
+        f"-I{megakernel_inc_path}",
+        f"-I{os.path.join(megakernel_inc_path, 'megakernel/persistent_kernel')}",
+        f"-I{os.path.join(megakernel_deps_path, 'cutlass/include')}",
+        f"-I{os.path.join(megakernel_deps_path, 'cutlass/tools/util/include')}",
+        f"-I{os.path.join(megakernel_deps_path, 'json/include')}",
         f"-DMAX_WORKER_PER_SCHEDULER={max_worker_per_scheduler}",
-        f"-DMIRAGE_USE_CUTLASS_KERNEL={'1' if use_cutlass_kernel else '0'}",
+        f"-DMEGAKERNEL_USE_CUTLASS_KERNEL={'1' if use_cutlass_kernel else '0'}",
     ]
 
     flags = [
@@ -173,7 +173,7 @@ def get_compile_command(
         "-o",
         py_so_path,
     ]
-    flags = flags + [f"-DMPK_TARGET_CC={target_cc}", "-DMIRAGE_BACKEND_USE_CUDA"]
+    flags = flags + [f"-DMPK_TARGET_CC={target_cc}", "-DMEGAKERNEL_BACKEND_USE_CUDA"]
 
     if use_nvshmem:
         nvshmem_cmd = [
@@ -191,15 +191,15 @@ def get_compile_command(
             "-arch=sm_90a",
             "-gencode=arch=compute_90a,code=sm_90a",
             "-DMPK_ENABLE_TMA",
-            "-DMIRAGE_GRACE_HOPPER",
+            "-DMEGAKERNEL_GRACE_HOPPER",
             "-DNDEBUG",
-        ] + (["-DMIRAGE_ENABLE_PROFILER"] if profiling else [])
+        ] + (["-DMEGAKERNEL_ENABLE_PROFILER"] if profiling else [])
     elif target_cc == 100:
         specific_cmd = [
             "-arch=sm_100a",
             "-gencode=arch=compute_100a,code=sm_100a",
             "-DMPK_ENABLE_TMA",
-            "-DMIRAGE_GRACE_BLACKWELL",
+            "-DMEGAKERNEL_GRACE_BLACKWELL",
         ]
     else:
         specific_cmd = [
@@ -1336,7 +1336,7 @@ class PersistentKernel:
         
         output_dir = kwargs.get("output_dir", None)
 
-        MIRAGE_ROOT, INCLUDE_PATH, DEPS_PATH = get_key_paths()
+        MEGAKERNEL_ROOT, INCLUDE_PATH, DEPS_PATH = get_key_paths()
         # tempdir_obj = tempfile.TemporaryDirectory()
         # tempdir = "./gen/" # tempdir_obj.name
         results = self.kn_graph.generate_task_graph(num_gpus=self.world_size, my_gpu_id=self.mpi_rank)
@@ -1382,12 +1382,12 @@ class PersistentKernel:
             scheme = "posix_prefix"
         py_include_dir = sysconfig.get_paths(scheme=scheme)["include"]
 
-        # find mirage home
-        if "MIRAGE_HOME" in os.environ:
-            MIRAGE_HOME_PATH = os.environ.get("MIRAGE_HOME")
+        # find megakernel home
+        if "MEGAKERNEL_HOME" in os.environ:
+            MEGAKERNEL_HOME_PATH = os.environ.get("MEGAKERNEL_HOME")
         else:
             raise RuntimeError(
-                "MIRAGE_HOME unspecified; Please set MIRAGE_HOME to be the root of the Mirage folder"
+                "MEGAKERNEL_HOME unspecified; Please set MEGAKERNEL_HOME to be the root of the Mirage folder"
             )
 
         NVSHMEM_INC_PATH = None
@@ -1462,9 +1462,9 @@ class PersistentKernel:
             cc=cc,
             file_name=cuda_code_path,
             py_include_dir=py_include_dir,
-            mirage_home_path=MIRAGE_HOME_PATH,
-            mirage_inc_path=INCLUDE_PATH,
-            mirage_deps_path=DEPS_PATH,
+            megakernel_home_path=MEGAKERNEL_HOME_PATH,
+            megakernel_inc_path=INCLUDE_PATH,
+            megakernel_deps_path=DEPS_PATH,
             nvshmem_inc_path=NVSHMEM_INC_PATH,
             nvshmem_lib_path=NVSHMEM_LIB_PATH,
             mpi_inc_path=MPI_INC_PATH,
@@ -1485,7 +1485,7 @@ class PersistentKernel:
 
     def load_module(self, so_path):
         import importlib.util
-        spec = importlib.util.spec_from_file_location("__mirage_launcher", so_path)
+        spec = importlib.util.spec_from_file_location("__megakernel_launcher", so_path)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         self.init_func = getattr(mod, "init_func")
@@ -1525,7 +1525,7 @@ class PersistentKernel:
             if self.trace_name:
                 trace_name = self.trace_name + ".perfetto-trace"
             else:
-                trace_name = f"mirage_{self.mpi_rank}.perfetto-trace"
+                trace_name = f"megakernel_{self.mpi_rank}.perfetto-trace"
 
             export_to_perfetto_trace(
                 self.profiler_tensor, trace_name

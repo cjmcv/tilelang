@@ -210,9 +210,9 @@ class MpkReporter:
 
     # pushd build && make -j8 && popd
     
-    # git clone --recursive https://www.github.com/mirage-project/mirage
+    # git clone --recursive https://www.github.com/megakernel-project/megakernel
     # pip install -e . -v
-    # export MIRAGE_HOME=$(pwd)
+    # export MEGAKERNEL_HOME=$(pwd)
     # python demo_refac/single_silu_mul.py
     # --profiling https://ui.perfetto.dev/
     

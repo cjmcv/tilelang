@@ -35,7 +35,7 @@ pushd demo/ && python example_gemm.py && popd
 # 4. megakernel 编译
 python megakernel_setup.py build_ext --inplace
 export PYTHONPATH=/home/cjmcv/project/tilelang/megakernel:$PYTHONPATH
-export MIRAGE_HOME=/home/cjmcv/project/tilelang/
+export MEGAKERNEL_HOME=/home/cjmcv/project/tilelang/
 
 # 清submodule
 git submodule deinit -f 3rdparty/tvm/

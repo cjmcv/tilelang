@@ -586,7 +586,7 @@ def handle_graph_data(graph_data, graph_title, output_filename, dot=True, png=Tr
 
 
 if __name__ == "__main__":
-    file_name = "mirage_search_checkpoint.json"
+    file_name = "megakernel_search_checkpoint.json"
     with open(file_name) as f:
         data = json.load(f)
 

@@ -31,7 +31,7 @@ def get_scheduler(sm_cnt, worker):
 # This method auto probe GPUs and return the worker and scheduler count for
 # them.
 def get_configurations_from_gpu(rank):
-    # Reference: https://github.com/mirage-project/mirage/issues/354
+    # Reference: https://github.com/megakernel-project/megakernel/issues/354
     props = torch.cuda.get_device_properties(rank)
     sm_cnt = props.multi_processor_count
     print("sm_cnt: ", sm_cnt)
