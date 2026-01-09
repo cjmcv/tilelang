@@ -29,14 +29,13 @@ ln -s $PWD/3rdparty/tvm/build/lib/libtvm_ffi.so  build/tvm/
 cmake -B build -G Ninja && cmake --build build --parallel 8
 
 # 3. 使用
-export PYTHONPATH=/home/cjmcv/project/tilelang:$PYTHONPATH
-python demo/microkernels/example_gemm.py
+export PYTHONPATH=/home/cjmcv/project/megakernel/:$PYTHONPATH
+pushd demo && python microkernels/example_gemm.py && popd
 
 # 4. megakernel 编译
 python megakernel_setup.py build_ext --inplace
-export PYTHONPATH=/home/cjmcv/project/tilelang/megakernel:$PYTHONPATH
-export MEGAKERNEL_HOME=/home/cjmcv/project/tilelang/
-python demo/single_silu_mul.py
+export MEGAKERNEL_HOME=/home/cjmcv/project/megakernel/
+pushd demo && python single_silu_mul.py && popd
 
 # 清submodule
 git submodule deinit -f 3rdparty/tvm/

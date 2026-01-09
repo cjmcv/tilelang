@@ -31,8 +31,8 @@ if __name__ == "__main__":
     torch.set_default_dtype(torch.bfloat16)
     
     reporter = MpkReporter() 
-    model, tokenizer = reporter.memory_footprint_simulation(rank)
-    w_rms_torch, w_gatedup_torch, w_down_proj_torch = reporter.get_weight_qwen3_mlp(layer_id=0)
+    # model, tokenizer = reporter.memory_footprint_simulation(rank)
+    # w_rms_torch, w_gatedup_torch, w_down_proj_torch = reporter.get_weight_qwen3_mlp(layer_id=0)
     
     layers = MpkLayers(0, 1, world_size, rank, max_batch_size, args.trace_name, args.profiling)
     mpk = layers.get_mpk()

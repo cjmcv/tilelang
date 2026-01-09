@@ -272,7 +272,7 @@ def check_correctness_and_bench(msg, kernel, N, K, do_bench=True):
 
 def main(do_bench: bool = True):
     parser = argparse.ArgumentParser(description="GEMV Example")
-    parser.add_argument("--n", type=int, default=9728*2, help="Matrix dimension N")
+    parser.add_argument("--n", type=int, default=19456, help="Matrix dimension N")
     parser.add_argument("--k", type=int, default=2560, help="Matrix dimension K")
     cur_path = "/home/cjmcv/project/tilelang/demo/microkernels"
     args, _ = parser.parse_known_args()
@@ -280,13 +280,13 @@ def main(do_bench: bool = True):
     
     kernel = splitk_gemv_vectorized_tvm(N, K, 2, 32)
     kernel.export_sources(kernel_path=cur_path+"/../gen/linear_gemv_tl.cuh", host_path=cur_path+"/../gen/linear_gemv_tl.cpp")
-    return
-    
+
+    config = dict(BLOCK_N=2, reduce_threads=32)
     check_correctness_and_bench("0", naive_gemv(N, K, 128, 128), N, K, do_bench=do_bench)
     check_correctness_and_bench("1", naive_splitk_gemv(N, K, 32, 32), N, K, do_bench=do_bench)
     check_correctness_and_bench("2", splitk_gemv(N, K, 32, 32, 32), N, K, do_bench=do_bench)
     check_correctness_and_bench("3", splitk_gemv_vectorized(N, K, 2, 32), N, K, do_bench=do_bench)
-    check_correctness_and_bench("4", splitk_gemv_vectorized_tvm(N, K, 2, 32), N, K, do_bench=do_bench)
+    check_correctness_and_bench("4", splitk_gemv_vectorized_tvm(N, K, **config), N, K, do_bench=do_bench)
     check_correctness_and_bench("5", gemv_alloc_reducer(N, K, block_M=128, block_N=128), N, K, do_bench=do_bench)
 
     print("Test passed!")
@@ -294,6 +294,7 @@ def main(do_bench: bool = True):
     if do_bench:
         best_result = splitk_gemv_vectorized_tvm(N, K)
         best_config = best_result.config
+        print("best_config", best_config)
         kernel = splitk_gemv_vectorized_tvm(N, K, **best_config)
         profiler = kernel.get_profiler()
         latency = profiler.do_bench(lambda x, y: x @ y.T, warmup=500)

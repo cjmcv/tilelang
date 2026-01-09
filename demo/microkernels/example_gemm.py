@@ -64,20 +64,27 @@ template <typename T,
                                                 void* __restrict__ output_ptr,
                                                 int num_active_tokens,
                                                 bool residual) {
+  assert(THREAD_NUM==<threads>)
   assert(TILE_DIM_X==<BLOCK_N>); assert(TILE_DIM_Y==<BLOCK_M>); assert(TILE_DIM_Z==<BLOCK_K>);
   assert(M==<M>); assert(N==<N>); assert(K==<K>);
   
-  const bfloat16* __restrict__ A = static_cast<const bfloat16* __restrict__>(input_ptr);
-  const bfloat16* __restrict__ B = static_cast<const bfloat16* __restrict__>(weight_ptr);
-  const bfloat16* __restrict__ C = static_cast<const bfloat16* __restrict__>(output_ptr);
+  const <dtype>* __restrict__ A = static_cast<const <dtype>* __restrict__>(input_ptr);
+  const <dtype>* __restrict__ B = static_cast<const <dtype>* __restrict__>(weight_ptr);
+  const <dtype>* __restrict__ C = static_cast<const <dtype>* __restrict__>(output_ptr);
 '''
 
+        head_str = head_str.replace('<threads>', str(self.threads))
         head_str = head_str.replace('<BLOCK_M>', str(self.block_M))
         head_str = head_str.replace('<BLOCK_N>', str(self.block_N)) 
         head_str = head_str.replace('<BLOCK_K>', str(self.block_K)) 
         head_str = head_str.replace('<M>', str(self.M))
         head_str = head_str.replace('<N>', str(self.N)) 
         head_str = head_str.replace('<K>', str(self.K)) 
+        if self.dtype == T.bfloat16:
+            dtype = "bfloat16"
+        else:
+            dtype = "float16"
+        head_str = head_str.replace('<dtype>', str(dtype))
                 
         origin_source = self.kernel.get_kernel_source()
         source = origin_source.replace("blockIdx.x", "bx")
