@@ -40,15 +40,19 @@ def matmul(M, N, K, block_M, block_N, block_K, dtype=T.float16, accum_dtype=T.fl
 
 
 def main():
-    kernel = matmul(1024, 1024, 1024, 128, 128, 32)
+    kernel = matmul(1, 19456, 2560, 128, 128, 32)
 
     import torch
 
-    a = torch.randn(1024, 1024).cuda().half()
-    b = torch.randn(1024, 1024).cuda().half()
+    a = torch.randn(1, 2560).cuda().half()
+    b = torch.randn(2560, 19456).cuda().half()
 
     c = kernel(a, b)
+    profiler = kernel.get_profiler()
 
+    latency = profiler.do_bench(profiler.func, warmup=25)
+    print("latency", latency)
+    
     ref_c = a @ b
 
     print("c:")

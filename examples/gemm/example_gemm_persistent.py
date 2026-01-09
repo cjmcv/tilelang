@@ -1,8 +1,28 @@
 import tilelang
 import tilelang.language as T
-from tilelang.carver.arch import driver
+# from tilelang.carver.arch import driver
 import argparse
 
+try:
+    import torch.cuda._CudaDeviceProperties as _CudaDeviceProperties
+except ImportError:
+    _CudaDeviceProperties = type("DummyCudaDeviceProperties", (), {})
+    
+def get_cuda_device_properties(device_id: int = 0) -> _CudaDeviceProperties | None:
+    try:
+        import torch.cuda
+
+        if not torch.cuda.is_available():
+            return None
+        return torch.cuda.get_device_properties(torch.device(device_id))
+    except ImportError:
+        return None
+    
+def get_num_sms(device_id: int = 0) -> int:
+    prop = get_cuda_device_properties(device_id)
+    if prop is None:
+        raise RuntimeError("Failed to get device properties.")
+    return prop.multi_processor_count
 
 @tilelang.jit(out_idx=[-1])
 def matmul_non_persistent(M, N, K, block_M, block_N, block_K, threads, num_stages, dtype=T.float16, accum_dtype=T.float32):
@@ -36,7 +56,7 @@ def matmul_non_persistent(M, N, K, block_M, block_N, block_K, threads, num_stage
 def matmul_persistent(
     M, N, K, block_M, block_N, block_K, threads, num_stages, dtype=T.float16, accum_dtype=T.float32, use_persistent_primitive=True
 ):
-    sm_num = driver.get_num_sms()
+    sm_num = get_num_sms()
     m_blocks = T.ceildiv(M, block_M)
     n_blocks = T.ceildiv(N, block_N)
     waves = T.ceildiv(m_blocks * n_blocks, sm_num)

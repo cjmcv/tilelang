@@ -6,7 +6,7 @@ from common.pkt_util import TestUtil, TorchRef
 
 class LinearLt:
     
-    def __init__(self, M, N, K, block_M, block_N, block_K, threads, dtype=T.bfloat16, accum_dtype=T.float32):
+    def __init__(self, M, N, K, block_M, block_N, block_K, num_stages, threads, enable_rasteration, dtype=T.bfloat16, accum_dtype=T.float32):
         self.M = M
         self.N = N
         self.K = K
@@ -15,15 +15,22 @@ class LinearLt:
         self.block_M = block_M
         self.block_N = block_N
         self.block_K = block_K
+        self.num_stages = num_stages
         self.threads = threads
+        self.enable_rasteration = enable_rasteration
         self.dtype = dtype
         self.accum_dtype = accum_dtype
 
     def get_kernel(self):
+        # self.kernel = LinearLt.matmul(self.M, self.N, self.K, 
+        #                               self.girdDim_x, self.girdDim_y, 
+        #                               self.block_M, self.block_N, self.block_K, 
+        #                               self.threads, self.dtype, self.accum_dtype)
         self.kernel = LinearLt.matmul(self.M, self.N, self.K, 
                                       self.girdDim_x, self.girdDim_y, 
                                       self.block_M, self.block_N, self.block_K, 
-                                      self.threads, self.dtype, self.accum_dtype)
+                                      self.num_stages, self.threads, self.enable_rasteration, 
+                                      self.dtype, self.accum_dtype)
         return self.kernel
     
     def replace_line(self, text: str, src_target: str, skip_count: int, dst_target: str) -> str:
@@ -94,37 +101,65 @@ template <typename T,
         source += "\n} // kernel"
         return source
         
+    # @tilelang.jit(out_idx=[-1])
+    # def matmul(M, N, K, girdDim_x, girdDim_y, block_M, block_N, block_K, threads, dtype, accum_dtype):
+    #     @T.prim_func
+    #     def linear(
+    #         A: T.Tensor((M, K), dtype),
+    #         B: T.Tensor((N, K), dtype),
+    #         C: T.Tensor((M, N), dtype),
+    #     ):
+    #         with T.Kernel(girdDim_x, girdDim_y, threads=threads) as (bx, by): # tilelang.next_power_of_2(128)
+    #             A_shared = T.alloc_shared((block_M, block_K), dtype)
+    #             B_shared = T.alloc_shared((block_N, block_K), dtype)
+    #             C_local = T.alloc_fragment((block_M, block_N), accum_dtype)
+
+    #             T.clear(C_local)
+    #             for k in T.Pipelined(T.ceildiv(K, block_K), num_stages=3):
+    #                 T.copy(A[by * block_M, k * block_K], A_shared)
+    #                 T.copy(B[bx * block_N, k * block_K], B_shared)
+    #                 T.gemm(A_shared, B_shared, C_local, transpose_B=True)
+
+    #             T.copy(C_local, C[by * block_M, bx * block_N])
+
+    #     return linear
+
     @tilelang.jit(out_idx=[-1])
-    def matmul(M, N, K, girdDim_x, girdDim_y, block_M, block_N, block_K, threads, dtype, accum_dtype):
+    def matmul(M, N, K, girdDim_x, girdDim_y, block_M, block_N, block_K, num_stages, thread_num, enable_rasteration, dtype=T.float16, accum_dtype=T.float32):
         @T.prim_func
         def linear(
             A: T.Tensor((M, K), dtype),
             B: T.Tensor((N, K), dtype),
             C: T.Tensor((M, N), dtype),
         ):
-            with T.Kernel(girdDim_x, girdDim_y, threads=threads) as (bx, by): # tilelang.next_power_of_2(128)
+            with T.Kernel(girdDim_x, girdDim_y, threads=thread_num) as (bx, by):
                 A_shared = T.alloc_shared((block_M, block_K), dtype)
                 B_shared = T.alloc_shared((block_N, block_K), dtype)
                 C_local = T.alloc_fragment((block_M, block_N), accum_dtype)
-
+                C_shared = T.alloc_shared((block_M, block_N), dtype)
+                T.use_swizzle(panel_size=10, enable=enable_rasteration)
                 T.clear(C_local)
-                for k in T.Pipelined(T.ceildiv(K, block_K), num_stages=3):
+                for k in T.Pipelined(T.ceildiv(K, block_K), num_stages=num_stages):
                     T.copy(A[by * block_M, k * block_K], A_shared)
                     T.copy(B[bx * block_N, k * block_K], B_shared)
-                    T.gemm(A_shared, B_shared, C_local, transpose_B=True)
-
-                T.copy(C_local, C[by * block_M, bx * block_N])
+                    T.gemm(
+                        A_shared,
+                        B_shared,
+                        C_local,
+                        transpose_B=True,
+                    )
+                T.copy(C_local, C_shared)
+                T.copy(C_shared, C[by * block_M, bx * block_N])
 
         return linear
 
-
 def main():
-    cur_path = "/home/cjmcv/project/tilelang/demo/microkernels"
+    cur_path = "/home/cjmcv/project/megakernel/demo/microkernels"
     
     M = 1
     N = 19456
     K = 2560
-    linear = LinearLt(M,N,K, block_M=128, block_N=128, block_K=32, threads=128, dtype=T.bfloat16, accum_dtype=T.float32)
+    linear = LinearLt(M,N,K, block_M=64, block_N=64, block_K=64, num_stages=3, threads=128, enable_rasteration=False, dtype=T.bfloat16, accum_dtype=T.float32)
     kernel = linear.get_kernel()
 
     import torch

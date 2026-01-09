@@ -274,7 +274,7 @@ def main(do_bench: bool = True):
     parser = argparse.ArgumentParser(description="GEMV Example")
     parser.add_argument("--n", type=int, default=19456, help="Matrix dimension N")
     parser.add_argument("--k", type=int, default=2560, help="Matrix dimension K")
-    cur_path = "/home/cjmcv/project/tilelang/demo/microkernels"
+    cur_path = "/home/cjmcv/project/megakernel/demo/microkernels"
     args, _ = parser.parse_known_args()
     N, K = args.n, args.k
     
