@@ -7,7 +7,8 @@
 *.pyc
 a.out
 gen/
-_cython/core.cpp
+core.cpp
+trace.json
 
 # Precompiled Headers
 *.gch

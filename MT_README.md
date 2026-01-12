@@ -28,21 +28,23 @@ ln -s $PWD/3rdparty/tvm/build/lib/libtvm_ffi.so  build/tvm/
 
 cmake -B build -G Ninja && cmake --build build --parallel 8
 
-# 3. 使用
-export PYTHONPATH=/home/cjmcv/project/megakernel/:$PYTHONPATH
+# 3. 使用tilelang
+export MEGAKERNEL_HOME=/home/cjmcv/project/megakernel && export PYTHONPATH=$MEGAKERNEL_HOME:$PYTHONPATH
 pushd demo && python microkernels/example_gemm.py && popd
 
 # 4. megakernel 编译
 python megakernel_setup.py build_ext --inplace
-export MEGAKERNEL_HOME=/home/cjmcv/project/megakernel/
 pushd demo && python single_silu_mul.py && popd
 
 # 清submodule
 git submodule deinit -f 3rdparty/tvm/
 git rm -f 3rdparty/tvm/
 rm -rf .git/modules/3rdparty/tvm/
-
 git submodule add https://github.com/apache/tvm.git 3rdparty/tvm
+
+# TODO
+
+
 
 # 备注
 @tilelang.testing.requires_cuda
@@ -51,9 +53,7 @@ git submodule add https://github.com/apache/tvm.git 3rdparty/tvm
 @tvm.testing.requires_cuda
 @tvm.testing.requires_cuda_compute_version(9, 0)
 
-# TODO
-1. 将项目转到mpk里进行编译；
-2. 修改cuda code gen，转化到所需格式；
+
 
 
 # 使用官方tvm，未通过
