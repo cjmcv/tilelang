@@ -17,10 +17,9 @@ from common.pkt_util import TestUtil, TorchRef
 from common.micro_kernel_base import BaseMicroKernel, HparamSelectMode
 
 
-class _GemmStrategy(BaseMicroKernel):
+class _GemmStrategy:
     def __init__(self, M, N, K, dtype, accum_dtype):
-        super().__init__()
-        self.kerne_name = "linear_gemm_tl"+f"_{M}_{N}_{K}"
+        self.name = "linear_gemm_tl"+f"_{M}_{N}_{K}"
         
         self.M = M
         self.N = N
@@ -28,10 +27,10 @@ class _GemmStrategy(BaseMicroKernel):
         self.dtype = dtype
         self.accum_dtype = accum_dtype
         
-        self.hparam_space = self.get_hparam_space()
+        self.hparam_space = self._get_hparam_space()
         print(len(self.hparam_space))
         
-    def get_hparam_space(self):
+    def _get_hparam_space(self):
         block_M=[64, 128] #, 256
         block_N=[64, 128] #, 256
         block_K=[32, 64]
@@ -56,54 +55,17 @@ class _GemmStrategy(BaseMicroKernel):
             return idx, hparams, round(latency, 5), "success"
         except Exception as e:
             return idx, hparams, None, f"{e}"    
-
-    # def _tune_parallel(self):
-    #     thread_size = min(8, multiprocessing.cpu_count() // 4)
-    #     print(f"Start tuning with {len(self.hparam_space)} schemes (thread_num: {thread_size})")
-    #     tasks = [(idx, hparams) for idx, hparams in enumerate(self.hparam_space)]
-        
-    #     with ThreadPoolExecutor(max_workers=thread_size) as executor:
-    #         all_results = executor.map(self._tune_single, tasks)
-
-    #     results = []
-    #     for idx, hparams, latency, status in all_results:
-    #         if status == "success":
-    #             print(f">>>>> tuning({idx}): {latency} -> {hparams}")
-    #             results.append({"idx": idx, "latency": latency, "hparams": hparams})
-    #         else:
-    #             print(f"Failed: Schema {idx+1}: {status}")
-    #     return results
     
-    def get_kernel(self, mode: HparamSelectMode):
-        file_path = self.save_path+self.kerne_name
-        if (mode == HparamSelectMode.TUNING):
-            print(f"Start tuning with a total of {len(self.hparam_space)} schemes.")
-            
-            latency_hparams_list = []
-            for idx, hparams in enumerate(self.hparam_space):
-                _, _, latency, status = self._tune_single(idx, hparams)
-                if status == "success":
-                    latency_hparams_list.append((latency, hparams))
-                print(f">>>>> tuning({idx}-{status}): {latency} -> {hparams}")
-                
-            # latency_hparams_list = self._tune_parallel()
-            latency_hparams_list.sort(key=lambda x: x[0])
-            self.write_tuned_hparams_to_json(latency_hparams_list, file_path+"_tuned.json")
-            best_latency, selected_hparams = latency_hparams_list[0]
-            print(f"[Tuning], the best result: {best_latency} ms -> {selected_hparams}")
-            
-        elif (mode == HparamSelectMode.TUNED):
-            latency_hparams_list = self.read_tuned_hparams_from_json(file_path+"_tuned.json")
-            selected_hparams = latency_hparams_list[0]["hparams"]
-            print("[Tuned] selected_hparams: ", selected_hparams)
-            
-        else:
-            # [block_M, block_N, block_K, num_stages, threads, policy, enable_rasteration]
-            selected_hparams = [64, 64, 64, 3, 128, 0, False]
-            print("[Heuristic] selected_hparams: ", selected_hparams)
+    def get_tuning_params(self):
+        return self.name, self.hparam_space, self._tune_single
+    
+    def get_heuristic_hparams(self):
+        # [block_M, block_N, block_K, num_stages, threads, policy, enable_rasteration]
+        return [64, 64, 64, 3, 128, 0, False]
         
+    def get_kernel(self, selected_hparams):
         kernel = self.matmul(self.M, self.N, self.K, *selected_hparams, self.dtype, self.accum_dtype) 
-        return kernel, selected_hparams
+        return kernel
     
     # @tilelang.jit(out_idx=[-1])
     # def matmul(M, N, K, girdDim_x, girdDim_y, block_M, block_N, block_K, threads, dtype, accum_dtype):
@@ -167,7 +129,7 @@ class _GemmStrategy(BaseMicroKernel):
 class MicroLinear(BaseMicroKernel):
     def __init__(self, M, N, K, dtype=T.bfloat16, accum_dtype=T.float32):
         super().__init__()
-        self.kerne_name = "linear_gemm_tl"+f"_{M}_{N}_{K}"
+        self.kernel_name = "linear_tl"+f"_{M}_{N}_{K}"
         
         self.M = M
         self.N = N
@@ -234,12 +196,22 @@ template <typename T,
         return source
     
     def get_kernel(self, mode: HparamSelectMode):
-        file_path = self.save_path+self.kerne_name
+        file_path = self.save_path+self.kernel_name
         
-        kernel, selected_hparams = self.strategy.get_kernel(mode)
+        if (mode == HparamSelectMode.TUNING):
+            best_latency, selected_hparams = self.run_tuning(*self.strategy.get_tuning_params())
+        elif (mode == HparamSelectMode.TUNED):
+            best_latency, selected_hparams = self.read_tuned_hparams_from_json(self.strategy.name)
+            print("[Tuned] selected_hparams: ", selected_hparams)
+        else:
+            selected_hparams = self.strategy.get_heuristic_hparams()
+            print("[Heuristic] selected_hparams: ", selected_hparams)
+        
+        kernel = self.strategy.get_kernel(selected_hparams)
         kernel.export_sources(kernel_path=file_path+"_src.cuh", host_path=file_path+"_src.cpp")
         
-        extra_attr = f"\n// smem: {self.get_smem_bytes(kernel.prim_func)} bytes."
+        extra_attr = f"\n// Smem: {self.get_smem_bytes(kernel.prim_func)} bytes."
+        extra_attr = f"\n// Strategy: {self.strategy.name}"
         with open(file_path+".cuh", "w", encoding="utf-8") as f:
             f.write(self.get_source(kernel, selected_hparams) + extra_attr)
             

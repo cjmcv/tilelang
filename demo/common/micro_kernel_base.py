@@ -78,7 +78,8 @@ class BaseMicroKernel:
         
         print(f"Save: {file_path}")
 
-    def read_tuned_hparams_from_json(self, file_path):
+    def read_tuned_hparams_from_json(self, kernel_name):
+        file_path = self.save_path+kerne_name+"_tuned.json"
         latency_hparams_list = []
         try:
             with open(file_path, "r", encoding="utf-8") as f:
@@ -95,4 +96,42 @@ class BaseMicroKernel:
         except Exception as e:
             print(f"Unknown error during file reading: {e}")
         
-        return latency_hparams_list
+        best_latency = latency_hparams_list[0]["latency"]
+        selected_hparams = latency_hparams_list[0]["hparams"]
+        return best_latency, selected_hparams
+
+    # def _tune_parallel(self):
+    #     thread_size = min(8, multiprocessing.cpu_count() // 4)
+    #     print(f"Start tuning with {len(self.hparam_space)} schemes (thread_num: {thread_size})")
+    #     tasks = [(idx, hparams) for idx, hparams in enumerate(self.hparam_space)]
+        
+    #     with ThreadPoolExecutor(max_workers=thread_size) as executor:
+    #         all_results = executor.map(self._tune_single, tasks)
+
+    #     results = []
+    #     for idx, hparams, latency, status in all_results:
+    #         if status == "success":
+    #             print(f">>>>> tuning({idx}): {latency} -> {hparams}")
+    #             results.append({"idx": idx, "latency": latency, "hparams": hparams})
+    #         else:
+    #             print(f"Failed: Schema {idx+1}: {status}")
+    #     return results
+    
+    def run_tuning(self, kerne_name, hparam_space, tuning_func):
+        file_path = self.save_path + kerne_name
+        print(f"Start tuning with a total of {len(hparam_space)} schemes.")
+        
+        latency_hparams_list = []
+        for idx, hparams in enumerate(hparam_space):
+            _, _, latency, status = tuning_func(idx, hparams)
+            if status == "success":
+                latency_hparams_list.append((latency, hparams))
+            print(f">>>>> tuning({idx}-{status}): {latency} -> {hparams}")
+            
+        # latency_hparams_list = self._tune_parallel()
+        latency_hparams_list.sort(key=lambda x: x[0])
+        self.write_tuned_hparams_to_json(latency_hparams_list, file_path+"_tuned.json")
+        best_latency, selected_hparams = latency_hparams_list[0]
+        print(f"[Tuning], the best result: {best_latency} ms -> {selected_hparams}")
+        
+        return best_latency, selected_hparams
