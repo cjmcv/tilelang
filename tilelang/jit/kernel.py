@@ -110,9 +110,10 @@ class JITKernel(Generic[_P, _T]):
             "tvm_ffi",
         ], f"Invalid execution backend. {execution_backend}"
         
+        # from_database = False
+        # print("hello jit:", from_database)
         if from_database:
             return
-
         # Print log on compilation starts
         # NOTE(Chenggang): printing could let the training/inference framework easier to know
         # whether the communication timeout is from compilation
@@ -237,7 +238,7 @@ class JITKernel(Generic[_P, _T]):
             )
 
         self.artifact = artifact
-
+        # print("artifact: ", artifact)
         # Create an adapter based on the specified execution backend.
         if execution_backend == "tvm_ffi":
             # Use TVMFFIKernelAdapter for interoperability with PyTorch via DLPack.

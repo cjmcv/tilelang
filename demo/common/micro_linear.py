@@ -9,14 +9,105 @@ from pathlib import Path
 # from concurrent.futures import ProcessPoolExecutor, as_completed
 # from concurrent.futures import ThreadPoolExecutor
 import torch
+from tvm import DataType
 from tvm.tir import stmt_functor, Block, For, PrimFunc
 import tilelang
 import tilelang.language as T
 
 from common.pkt_util import TestUtil, TorchRef
-from common.micro_kernel_base import BaseMicroKernel, HparamSelectMode
+from common.micro_kernel_base import BaseMicroKernel, LaunchInfoAnalyzer, HparamSelectMode
 
 
+class _GemvStrategy:
+    def __init__(self, M, N, K, dtype, accum_dtype):
+        self.name = "linear_gemv_tl"+f"_{M}_{N}_{K}"
+        
+        self.M = M
+        self.N = N
+        self.K = K
+        self.dtype = dtype
+        self.accum_dtype = accum_dtype
+        assert(self.M == 1)
+        
+        self.hparam_space = self._get_hparam_space()
+        print(len(self.hparam_space))
+        
+    def _get_hparam_space(self):
+        BLOCK_N = [2, 4, 8, 32, 64, 128]
+        reduce_threads = [4, 8, 32]
+        
+        res = []
+        for n, reduce_thread in itertools.product(BLOCK_N, reduce_threads):
+            res.append([n, reduce_thread])
+        # print(res)
+        return res
+    
+    def get_tuning_params(self):
+        return self.name, self.hparam_space, self.get_kernel
+    
+    def get_heuristic_hparams(self):
+        # [BLOCK_N, reduce_threads]
+        return [2, 32]
+        
+    def get_kernel(self, selected_hparams):
+        return self.kernel_main(self.N, self.K, *selected_hparams, self.dtype, self.accum_dtype) 
+    
+    @tilelang.jit(out_idx=[-1])
+    def kernel_main(
+        N: int,
+        K: int,
+        BLOCK_N: int,
+        reduce_threads: int,
+        dtype: T.dtype = T.bfloat16,
+        accum_dtype: T.dtype = T.float,
+    ):
+        # splitk_gemv_vectorized_tvm
+        MAX_TRANSACTION_SIZE_IN_BITS = 128
+        TILE_K = MAX_TRANSACTION_SIZE_IN_BITS // DataType(dtype).bits
+        BLOCK_K = reduce_threads * TILE_K
+
+        @T.prim_func
+        def linear(
+            A: T.Tensor((1, K), dtype),
+            B: T.Tensor((N, K), dtype),
+            C: T.Tensor((1, N), dtype),
+        ):
+            with T.Kernel(T.ceildiv(N, BLOCK_N), threads=(BLOCK_N, reduce_threads)) as bn:
+                tn = T.get_thread_binding(0)
+                tk = T.get_thread_binding(1)
+                A_local = T.alloc_local((TILE_K,), dtype)
+                B_local = T.alloc_local((TILE_K,), dtype)
+                C_accum = T.alloc_local((1,), accum_dtype)
+
+                T.clear(C_accum)
+                for bk in T.serial(T.ceildiv(K, BLOCK_K)):
+                    for k in T.vectorized(TILE_K):
+                        A_local[k] = A[0, bk * BLOCK_K + tk * TILE_K + k]
+                        B_local[k] = B[bn * BLOCK_N + tn, bk * BLOCK_K + tk * TILE_K + k]
+                    for k in T.serial(TILE_K):
+                        C_accum[0] += A_local[k].astype(accum_dtype) * B_local[k].astype(accum_dtype)
+                C_reduced = T.alloc_local((1,), accum_dtype)
+                with T.attr(
+                    T.comm_reducer(lambda x, y: x + y, [T.Cast(accum_dtype, 0)]),
+                    "reduce_scope",
+                    T.reinterpret(T.uint64(0), dtype="handle"),
+                ):
+                    T.evaluate(
+                        T.tvm_thread_allreduce(
+                            T.uint32(1),
+                            C_accum[0],
+                            True,
+                            C_reduced[0],
+                            tk,
+                            dtype="handle",
+                        )
+                    )
+
+                C[0, bn * BLOCK_N + tn] = C_reduced[0]
+
+        return linear
+    
+    
 class _GemmStrategy:
     def __init__(self, M, N, K, dtype, accum_dtype):
         self.name = "linear_gemm_tl"+f"_{M}_{N}_{K}"
@@ -31,9 +122,9 @@ class _GemmStrategy:
         print(len(self.hparam_space))
         
     def _get_hparam_space(self):
-        block_M=[64, 128] #, 256
-        block_N=[64, 128] #, 256
-        block_K=[32, 64]
+        BLOCK_M=[64, 128] #, 256
+        BLOCK_N=[64, 128] #, 256
+        BLOCK_K=[32, 64]
         num_stages=[0]#, 1, 2, 3
         thread_nums=[128]#, 256
         policies=[T.GemmWarpPolicy.Square]
@@ -41,34 +132,24 @@ class _GemmStrategy:
         
         res = []
         for m, n, k, num_stage, thread_num, policy, enable_rasteration in itertools.product(
-            block_M, block_N, block_K, num_stages, thread_nums, policies, enable_rasterations):
+            BLOCK_M, BLOCK_N, BLOCK_K, num_stages, thread_nums, policies, enable_rasterations):
             res.append([m, n, k, num_stage, thread_num, policy, enable_rasteration])
 
-        return res
-    
-    def _tune_single(self, idx, hparams):
-        # idx, hparams = tasks
-        try:
-            kernel = self.matmul(self.M, self.N, self.K, *hparams, self.dtype, self.accum_dtype)
-            profiler = kernel.get_profiler()
-            latency = profiler.do_bench(backend="cupti")
-            return idx, hparams, round(latency, 5), "success"
-        except Exception as e:
-            return idx, hparams, None, f"{e}"    
+        return res 
     
     def get_tuning_params(self):
-        return self.name, self.hparam_space, self._tune_single
+        return self.name, self.hparam_space, self.get_kernel
     
     def get_heuristic_hparams(self):
-        # [block_M, block_N, block_K, num_stages, threads, policy, enable_rasteration]
+        # [BLOCK_M, BLOCK_N, BLOCK_K, num_stages, threads, policy, enable_rasteration]
         return [64, 64, 64, 3, 128, 0, False]
         
     def get_kernel(self, selected_hparams):
-        kernel = self.matmul(self.M, self.N, self.K, *selected_hparams, self.dtype, self.accum_dtype) 
+        kernel = self.kernel_main(self.M, self.N, self.K, *selected_hparams, self.dtype, self.accum_dtype) 
         return kernel
     
     # @tilelang.jit(out_idx=[-1])
-    # def matmul(M, N, K, girdDim_x, girdDim_y, block_M, block_N, block_K, threads, dtype, accum_dtype):
+    # def kernel_main(M, N, K, girdDim_x, girdDim_y, BLOCK_M, BLOCK_N, BLOCK_K, threads, dtype, accum_dtype):
     #     @T.prim_func
     #     def linear(
     #         A: T.Tensor((M, K), dtype),
@@ -76,44 +157,39 @@ class _GemmStrategy:
     #         C: T.Tensor((M, N), dtype),
     #     ):
     #         with T.Kernel(girdDim_x, girdDim_y, threads=threads) as (bx, by): # tilelang.next_power_of_2(128)
-    #             A_shared = T.alloc_shared((block_M, block_K), dtype)
-    #             B_shared = T.alloc_shared((block_N, block_K), dtype)
-    #             C_local = T.alloc_fragment((block_M, block_N), accum_dtype)
+    #             A_shared = T.alloc_shared((BLOCK_M, BLOCK_K), dtype)
+    #             B_shared = T.alloc_shared((BLOCK_N, BLOCK_K), dtype)
+    #             C_local = T.alloc_fragment((BLOCK_M, BLOCK_N), accum_dtype)
 
     #             T.clear(C_local)
-    #             for k in T.Pipelined(T.ceildiv(K, block_K), num_stages=3):
-    #                 T.copy(A[by * block_M, k * block_K], A_shared)
-    #                 T.copy(B[bx * block_N, k * block_K], B_shared)
+    #             for k in T.Pipelined(T.ceildiv(K, BLOCK_K), num_stages=3):
+    #                 T.copy(A[by * BLOCK_M, k * BLOCK_K], A_shared)
+    #                 T.copy(B[bx * BLOCK_N, k * BLOCK_K], B_shared)
     #                 T.gemm(A_shared, B_shared, C_local, transpose_B=True)
 
-    #             T.copy(C_local, C[by * block_M, bx * block_N])
+    #             T.copy(C_local, C[by * BLOCK_M, bx * BLOCK_N])
 
     #     return linear
     
-    @staticmethod
-    def get_grid_dims(M, N, block_M, block_N):
-        return T.ceildiv(N, block_N), T.ceildiv(M, block_M)
-        
     @tilelang.jit(out_idx=[-1])
-    def matmul(M, N, K, block_M, block_N, block_K, num_stages, thread_num, policy, enable_rasteration, dtype=T.float16, accum_dtype=T.float32):
-        gridDim_x, gridDim_y = _GemmStrategy.get_grid_dims(M, N, block_M, block_N)
-        
+    def kernel_main(M, N, K, BLOCK_M, BLOCK_N, BLOCK_K, num_stages, thread_num, policy, enable_rasteration, dtype=T.float16, accum_dtype=T.float32):
+
         @T.prim_func
         def linear(
             A: T.Tensor((M, K), dtype),
             B: T.Tensor((N, K), dtype),
             C: T.Tensor((M, N), dtype),
         ):
-            with T.Kernel(gridDim_x, gridDim_y, threads=thread_num) as (bx, by):
-                A_shared = T.alloc_shared((block_M, block_K), dtype)
-                B_shared = T.alloc_shared((block_N, block_K), dtype)
-                C_local = T.alloc_fragment((block_M, block_N), accum_dtype)
-                C_shared = T.alloc_shared((block_M, block_N), dtype)
+            with T.Kernel(T.ceildiv(N, BLOCK_N), T.ceildiv(M, BLOCK_M), threads=thread_num) as (bx, by):
+                A_shared = T.alloc_shared((BLOCK_M, BLOCK_K), dtype)
+                B_shared = T.alloc_shared((BLOCK_N, BLOCK_K), dtype)
+                C_local = T.alloc_fragment((BLOCK_M, BLOCK_N), accum_dtype)
+                C_shared = T.alloc_shared((BLOCK_M, BLOCK_N), dtype)
                 T.use_swizzle(panel_size=10, enable=enable_rasteration)
                 T.clear(C_local)
-                for k in T.Pipelined(T.ceildiv(K, block_K), num_stages=num_stages):
-                    T.copy(A[by * block_M, k * block_K], A_shared)
-                    T.copy(B[bx * block_N, k * block_K], B_shared)
+                for k in T.Pipelined(T.ceildiv(K, BLOCK_K), num_stages=num_stages):
+                    T.copy(A[by * BLOCK_M, k * BLOCK_K], A_shared)
+                    T.copy(B[bx * BLOCK_N, k * BLOCK_K], B_shared)
                     T.gemm(
                         A_shared,
                         B_shared,
@@ -122,7 +198,7 @@ class _GemmStrategy:
                         policy=policy,
                     )
                 T.copy(C_local, C_shared)
-                T.copy(C_shared, C[by * block_M, bx * block_N])
+                T.copy(C_shared, C[by * BLOCK_M, bx * BLOCK_N])
 
         return linear
     
@@ -136,7 +212,7 @@ class MicroLinear(BaseMicroKernel):
         self.K = K
         self.dtype = dtype
         self.accum_dtype = accum_dtype
-        self.strategy = _GemmStrategy(M, N, K, dtype, accum_dtype)
+        self.strategy = _GemvStrategy(M, N, K, dtype, accum_dtype)
         
     def get_source(self, kernel, selected_hparams):
         head_str = \
@@ -169,15 +245,18 @@ template <typename T,
   const <dtype>* __restrict__ B = static_cast<const <dtype>* __restrict__>(weight_ptr);
   const <dtype>* __restrict__ C = static_cast<const <dtype>* __restrict__>(output_ptr);
 '''
-
-        block_M, block_N, block_K, num_stages, threads, policy, enable_rasteration = selected_hparams
-        # gridDim_x, gridDim_y = self.get_grid_dims(self.M, self.N, block_M, block_N)
+        if (isinstance(self.strategy, _GemvStrategy)):
+            BLOCK_N, reduce_threads = selected_hparams
+            BLOCK_M, BLOCK_K, threads = 1, 1, 128 # todo
+        else:
+            BLOCK_M, BLOCK_N, BLOCK_K, num_stages, threads, policy, enable_rasteration = selected_hparams
+        # gridDim_x, gridDim_y = self.get_grid_dims(self.M, self.N, BLOCK_M, BLOCK_N)
         # print(f"gridDim: ({gridDim_x}, {gridDim_y})")
         
         head_str = head_str.replace('<threads>', str(threads))
-        head_str = head_str.replace('<BLOCK_M>', str(block_M))
-        head_str = head_str.replace('<BLOCK_N>', str(block_N)) 
-        head_str = head_str.replace('<BLOCK_K>', str(block_K)) 
+        head_str = head_str.replace('<BLOCK_M>', str(BLOCK_M))
+        head_str = head_str.replace('<BLOCK_N>', str(BLOCK_N)) 
+        head_str = head_str.replace('<BLOCK_K>', str(BLOCK_K)) 
         head_str = head_str.replace('<M>', str(self.M))
         head_str = head_str.replace('<N>', str(self.N)) 
         head_str = head_str.replace('<K>', str(self.K)) 
@@ -210,8 +289,13 @@ template <typename T,
         kernel = self.strategy.get_kernel(selected_hparams)
         kernel.export_sources(kernel_path=file_path+"_src.cuh", host_path=file_path+"_src.cpp")
         
-        extra_attr = f"\n// Smem: {self.get_smem_bytes(kernel.prim_func)} bytes."
+        analyzer = LaunchInfoAnalyzer(kernel.prim_func)
+        analyzer.get_threads_layout()
         extra_attr = f"\n// Strategy: {self.strategy.name}"
+        extra_attr += f"\n// grid_dim: {analyzer.grid_dim}."
+        extra_attr += f"\n// block_dim: {analyzer.block_dim}."
+        extra_attr += f"\n// Smem: {analyzer.get_smem_bytes()} bytes."
+        
         with open(file_path+".cuh", "w", encoding="utf-8") as f:
             f.write(self.get_source(kernel, selected_hparams) + extra_attr)
             

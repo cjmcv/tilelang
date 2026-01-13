@@ -9,7 +9,9 @@ from pathlib import Path
 # from concurrent.futures import ProcessPoolExecutor, as_completed
 # from concurrent.futures import ThreadPoolExecutor
 import torch
+import tvm
 from tvm.tir import stmt_functor, Block, For, PrimFunc
+from tvm.tir.stmt_functor import ir_transform
 import tilelang
 import tilelang.language as T
 
@@ -20,17 +22,79 @@ class HparamSelectMode(Enum):
     TUNING = 1
     TUNED = 2
 
-class BaseMicroKernel:
-    def __init__(self):
-        self.megakernel_home = os.getenv("MEGAKERNEL_HOME", default=None)
-        if self.megakernel_home is None:
-            raise EnvironmentError("The environment variable MEGAKERNEL_HOME is not set.")
-        prop = torch.cuda.get_device_properties(0)
-        self.save_path = self.megakernel_home + "/demo/gen/sm" + str(prop.major) + str(prop.minor) + "/"
-        target_dir = Path(self.save_path)
-        target_dir.mkdir(parents=True, exist_ok=True)
+# print("artifact: ", artifact)
+# T.func_attr({"calling_conv": 2, "dyn_shared_memory_buf": 49152, "target": T.target({"arch": "sm_89", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 304, "blockIdx.y": 1, "threadIdx.x": 128, "threadIdx.y": 1, "threadIdx.z": 1}, "tir.is_global_func": T.bool(True), "tir.kernel_launch_params": ["blockIdx.x", "blockIdx.y", "threadIdx.x", "threadIdx.y", "threadIdx.z", "tir.use_dyn_shared_memory"], "tir.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [0, 1]})
+class LaunchInfoAnalyzer:
+    def __init__(self, fn: PrimFunc):
+        self.prim_func = fn
+        self.ir_module = tvm.IRModule({"main": fn})
+        self.grid_dim = {"blockIdx.x": 1, "blockIdx.y": 1, "blockIdx.z": 1}
+        self.block_dim = {"threadIdx.x": 1, "threadIdx.y": 1, "threadIdx.z": 1}
+        self.dyn_shared_memory_buf = 0
+        self.loop_stack = []
+        
+    def get_threads_layout(self):
+        """
+        Traverse and transform the IR module to extract performance-related information.
+        Returns:
+            self: The LaunchInfoAnalyzer instance.
+        """
 
-    def get_smem_bytes(self, prim_func: PrimFunc):
+        def _ftransform(f, mod, ctx):
+            # Initialize the set of global buffers
+            self.global_buffers = set(f.buffer_map.values())
+
+            def _pre_visit(stmt):
+                """
+                Pre-visit callback for IR nodes.
+                Args:
+                    stmt: The current IR node being visited.
+                """
+                # print(type(stmt), stmt, "\n\n")
+                if isinstance(stmt, tvm.tir.AttrStmt):
+                    # Handle thread extent attributes
+                    # print(stmt.attr_key)
+                    if stmt.attr_key == "thread_extent":
+                        iter_var = stmt.node
+                        thread_tag = iter_var.thread_tag
+                        if thread_tag in self.grid_dim:
+                            extent = stmt.value.value if hasattr(stmt.value, "value") else stmt.value
+                            self.grid_dim[thread_tag] = extent
+                        elif thread_tag in self.block_dim:
+                            extent = stmt.value.value if hasattr(stmt.value, "value") else stmt.value
+                            self.block_dim[thread_tag] = extent
+                elif isinstance(stmt, tvm.tir.For):
+                    # Push loop extent onto the stack
+                    self.loop_stack.append(stmt.extent)
+                # elif isinstance(stmt, tvm.tir.Evaluate):
+                #     # Handle Evaluate nodes containing calls
+                #     value = stmt.value
+                #     if isinstance(value, tvm.tir.Call):
+                #         if value.op.name == "tl.copy":
+                #             self._analyze_copy(value)
+                #         elif value.op.name == "tl.gemm":
+                #             self._analyze_gemm(value)
+                return None
+
+            def _post_visit(stmt):
+                """
+                Post-visit callback for IR nodes.
+                Args:
+                    stmt: The current IR node being visited.
+                """
+                if isinstance(stmt, tvm.tir.For) and self.loop_stack:
+                    self.loop_stack.pop()
+                return None
+
+            # Use IR transformation to traverse and modify the function body
+            new_body = ir_transform(f.body, _pre_visit, _post_visit)
+            return f.with_body(new_body)
+
+        # Apply the custom PrimFunc pass
+        tvm.tir.transform.prim_func_pass(_ftransform, opt_level=0)(self.ir_module)
+        return self
+    
+    def get_smem_bytes(self):
         smem_bytes = 0
         num_stages = 1
         
@@ -48,8 +112,17 @@ class BaseMicroKernel:
             if isinstance(node, For):
                 num_stages = node.annotations.get("num_stages", 1)
                     
-        stmt_functor.post_order_visit(prim_func.body, collect)
+        stmt_functor.post_order_visit(self.prim_func.body, collect)
         return smem_bytes*num_stages
+class BaseMicroKernel:
+    def __init__(self):
+        self.megakernel_home = os.getenv("MEGAKERNEL_HOME", default=None)
+        if self.megakernel_home is None:
+            raise EnvironmentError("The environment variable MEGAKERNEL_HOME is not set.")
+        prop = torch.cuda.get_device_properties(0)
+        self.save_path = self.megakernel_home + "/demo/gen/sm" + str(prop.major) + str(prop.minor) + "/"
+        target_dir = Path(self.save_path)
+        target_dir.mkdir(parents=True, exist_ok=True)
 
     def replace_line(self, text: str, src_target: str, skip_count: int, dst_target: str) -> str:
         lines = text.splitlines(True)
@@ -117,13 +190,23 @@ class BaseMicroKernel:
     #             print(f"Failed: Schema {idx+1}: {status}")
     #     return results
     
-    def run_tuning(self, kerne_name, hparam_space, tuning_func):
+    def _tune_single(self, idx, hparams, get_kernel_func):
+        # idx, hparams = tasks
+        try:
+            kernel = get_kernel_func(hparams)
+            profiler = kernel.get_profiler()
+            latency = profiler.do_bench(backend="cupti")
+            return idx, hparams, round(latency, 5), "success"
+        except Exception as e:
+            return idx, hparams, None, f"{e}"   
+        
+    def run_tuning(self, kerne_name, hparam_space, get_kernel_func):
         file_path = self.save_path + kerne_name
         print(f"Start tuning with a total of {len(hparam_space)} schemes.")
         
         latency_hparams_list = []
         for idx, hparams in enumerate(hparam_space):
-            _, _, latency, status = tuning_func(idx, hparams)
+            _, _, latency, status = self._tune_single(idx, hparams, get_kernel_func)
             if status == "success":
                 latency_hparams_list.append((latency, hparams))
             print(f">>>>> tuning({idx}-{status}): {latency} -> {hparams}")
