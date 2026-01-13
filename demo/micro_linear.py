@@ -5,9 +5,7 @@ import json
 
 import tilelang
 import tilelang.language as T
-from tilelang.autotuner import autotune
 
-import util
 from common.pkt_util import TestUtil, TorchRef
 from common.tl_ops import HparamSelectMode, LinearTL
 
@@ -17,7 +15,7 @@ def main():
     K = 2560
     # config = [64,64,64,2,128,0,true]
     linear = LinearTL(M,N,K, dtype=T.bfloat16, accum_dtype=T.float32)
-    kernel = linear.get_kernel(HparamSelectMode.HEURISTIC)
+    kernel = linear.get_kernel(HparamSelectMode.TUNING) # HEURISTIC
 
     import torch
 
@@ -45,9 +43,6 @@ def main():
     print("4:", kernel.prim_func)
     # print("5:", kernel.prim_func.body)
     
-    smem_bytes = util.get_smem_bytes(kernel.prim_func)
-    print("shared memory =", smem_bytes, "B")
-
     latency = profiler.do_bench()
     print(f"tilelang Latency: {latency}ms")
 

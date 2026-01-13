@@ -9,10 +9,10 @@ from pathlib import Path
 # from concurrent.futures import ProcessPoolExecutor, as_completed
 # from concurrent.futures import ThreadPoolExecutor
 import torch
+from tvm.tir import stmt_functor, Block, For, PrimFunc
 import tilelang
 import tilelang.language as T
 
-import util
 from common.pkt_util import TestUtil, TorchRef
   
 class HparamSelectMode(Enum):
@@ -29,7 +29,28 @@ class BaseTLOps:
         self.save_path = self.megakernel_home + "/demo/gen/sm" + str(prop.major) + str(prop.minor) + "/"
         target_dir = Path(self.save_path)
         target_dir.mkdir(parents=True, exist_ok=True)
+
+    def get_smem_bytes(self, prim_func: PrimFunc):
+        smem_bytes = 0
+        num_stages = 1
         
+        def collect(node):
+            nonlocal smem_bytes
+            nonlocal num_stages
+            if isinstance(node, Block):
+                for buf in node.alloc_buffers:
+                    scope = buf.scope()
+                    if str(scope).startswith("shared"):
+                        numel = 1
+                        for s in buf.shape:
+                            numel *= int(s)
+                        smem_bytes += numel * (buf.dtype.bits // 8)
+            if isinstance(node, For):
+                num_stages = node.annotations.get("num_stages", 1)
+                    
+        stmt_functor.post_order_visit(prim_func.body, collect)
+        return smem_bytes*num_stages
+
     def replace_line(self, text: str, src_target: str, skip_count: int, dst_target: str) -> str:
         lines = text.splitlines(True)
         processed_lines = []
@@ -79,7 +100,7 @@ class BaseTLOps:
 class LinearTL(BaseTLOps):
     def __init__(self, M, N, K, dtype=T.bfloat16, accum_dtype=T.float32):
         super().__init__()
-        self.kerne_name = "linear_gemm_tl"
+        self.kerne_name = "linear_gemm_tl"+f"_{M}_{N}_{K}"
         
         self.M = M
         self.N = N
@@ -163,10 +184,12 @@ class LinearTL(BaseTLOps):
             self.selected_hparams = [64, 64, 64, 3, 128, 0, False]
             print("[Heuristic] selected_hparams: ", self.selected_hparams)
         
-        self.kernel = LinearTL.matmul(self.M, self.N, self.K, 
-                                      *self.selected_hparams, self.dtype, self.accum_dtype) 
+        self.kernel = LinearTL.matmul(self.M, self.N, self.K, *self.selected_hparams, self.dtype, self.accum_dtype) 
         self.kernel.export_sources(kernel_path=file_path+"_src.cuh", host_path=file_path+"_src.cpp")
-        util.save_to_file(self.get_source(), file_path+".cuh")
+
+        extra_attr = f"\n// smem: {self.get_smem_bytes(self.kernel.prim_func)} bytes."
+        with open(file_path+".cuh", "w", encoding="utf-8") as f:
+            f.write(self.get_source() + extra_attr)
         return self.kernel
 
     def get_source(self):

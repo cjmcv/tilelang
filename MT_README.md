@@ -30,7 +30,7 @@ cmake -B build -G Ninja && cmake --build build --parallel 8
 
 # 3. 使用tilelang
 export MEGAKERNEL_HOME=/home/cjmcv/project/megakernel && export PYTHONPATH=$MEGAKERNEL_HOME:$PYTHONPATH
-pushd demo && python microkernels/example_gemm.py && popd
+pushd demo && python micro_linear.py && popd
 
 # 4. megakernel 编译
 python megakernel_setup.py build_ext --inplace
