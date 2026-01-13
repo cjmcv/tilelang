@@ -7,14 +7,15 @@ import tilelang
 import tilelang.language as T
 
 from common.pkt_util import TestUtil, TorchRef
-from common.tl_ops import HparamSelectMode, LinearTL
+from common.micro_kernel_base import HparamSelectMode
+from common.micro_linear import MicroLinear
 
 def main():
     M = 1
     N = 19456
     K = 2560
     # config = [64,64,64,2,128,0,true]
-    linear = LinearTL(M,N,K, dtype=T.bfloat16, accum_dtype=T.float32)
+    linear = MicroLinear(M,N,K, dtype=T.bfloat16, accum_dtype=T.float32)
     kernel = linear.get_kernel(HparamSelectMode.TUNING) # HEURISTIC
 
     import torch

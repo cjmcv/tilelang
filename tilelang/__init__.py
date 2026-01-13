@@ -161,7 +161,6 @@ from . import (
     engine,  # noqa: F401
 )
 from .language.v2 import dtypes  # noqa: F401
-from .autotuner import autotune  # noqa: F401
 from .transform import PassConfigKey  # noqa: F401
 
 from .engine import lower  # noqa: F401
