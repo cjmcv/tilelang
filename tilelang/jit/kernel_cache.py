@@ -372,6 +372,7 @@ class KernelCache:
         Returns:
             JITKernel: The loaded kernel if found, None otherwise.
         """
+        
         cache_path = self._get_cache_path(key)
         device_kernel_path = os.path.join(cache_path, DEVICE_KERNEL_PATH)
         host_kernel_path = os.path.join(cache_path, HOST_KERNEL_PATH)
@@ -381,7 +382,7 @@ class KernelCache:
             kernel_lib_path = KERNEL_LIB_PATH
         kernel_lib_path = os.path.join(cache_path, kernel_lib_path)
         params_path = os.path.join(cache_path, PARAMS_PATH)
-
+        print("_load_kernel_from_disk:", cache_path)
         # Check required files exist
         required_files = [kernel_lib_path, params_path]
 

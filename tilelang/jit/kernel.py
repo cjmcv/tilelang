@@ -341,6 +341,25 @@ class JITKernel(Generic[_P, _T]):
         str
             The source code of the compiled kernel function.
         """
+        # for g_var, func in self.artifact.device_mod.functions.items():
+        #     attrs = func.attrs
+        #     if "use_cooperative_groups" in attrs:
+        #         use_cooperative_groups = attrs["use_cooperative_groups"]
+        #         print("artifact:", use_cooperative_groups)
+        #     if "dyn_shared_memory_buf" in attrs:
+        #         dynamic_smem_buf = int(attrs["dyn_shared_memory_buf"])
+        #         print("artifact:", dyn_shared_memory_buf)
+        #     if "thread_extent" in attrs:
+        #         # Extract block and grid sizes from thread extents
+        #         thread_extent = attrs["thread_extent"]
+        #         for tag, extent in thread_extent.items():
+        #             if "threadIdx" in tag:
+        #                 print("threadIdx", extent)
+        #                 # block_info["xyz".index(tag[-1])] = extent
+        #             elif "blockIdx" in tag:
+        #                 # grid_info["xyz".index(tag[-1])] = extent
+        #                 print("blockIdx", extent)
+          
         if self.execution_backend in {"tvm_ffi"}:
             return self.adapter.get_kernel_source(kernel_only=kernel_only)
         return self.artifact.kernel_source
