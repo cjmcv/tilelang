@@ -235,4 +235,4 @@ class BaseMicroKernel:
         best_latency, selected_hparams, idx = latency_hparams_list[0]
         print(f"[Tuning], the best result: {best_latency} ms -> {selected_hparams}")
         
-        return best_latency, selected_hparams
+        return latency_hparams_list

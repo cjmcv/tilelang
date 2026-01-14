@@ -13,8 +13,10 @@
  * limitations under the License.
  */
 
+
 #include "profiler.h"
 #include "tasks/common/copy_sm80.cuh"
+#include "tasks/common/bfloat16.h"
 #ifdef MPK_ENABLE_TMA
 #include "tma.cuh"
 #endif
@@ -34,7 +36,8 @@
 #elif defined(MEGAKERNEL_GRACE_BLACKWELL)
 #include "tasks/blackwell/task_header.cuh"
 #else
-#include "tasks/ampere/task_header.cuh"
+// #include "tasks/ampere/task_header.cuh"
+#include "tasks/autogen/task_header.cuh"
 #endif
 
 using bfloat16 = type::bfloat16_t;

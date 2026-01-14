@@ -19,7 +19,7 @@ def main():
     K = 2560
     # config = [64,64,64,2,128,0,true]
     linear = MicroLinear(MicroLinearStrategy.GEMM, M,N,K, dtype=T.bfloat16, accum_dtype=T.float32)
-    kernel = linear.get_kernel(HparamSelectMode.TUNING) # HEURISTIC, TUNING, TUNED
+    kernel = linear.get_kernel(HparamSelectMode.TUNED) # HEURISTIC, TUNING, TUNED
 
     import torch
 

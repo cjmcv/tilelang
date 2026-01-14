@@ -125,11 +125,11 @@ class _GemmStrategy:
         
     def _get_hparam_space(self):
         BLOCK_M=[64, 128] #, 256
-        BLOCK_N=[64, 128] #, 256
-        BLOCK_K=[32, 64]
-        num_stages=[0]#, 1, 2, 3
+        BLOCK_N=[128, 256] # 64, 
+        BLOCK_K=[64, 128] # 32, 
+        num_stages=[0, 1, 2, 3]#
         thread_nums=[128]#, 256
-        policies=[T.GemmWarpPolicy.Square]
+        policies=[T.GemmWarpPolicy.Square, T.GemmWarpPolicy.FullRow]
         enable_rasterations=[True, False]
         
         res = []
@@ -245,22 +245,14 @@ template <typename T,
                                                 void* __restrict__ output_ptr,
                                                 int num_active_tokens,
                                                 bool residual) {
-  assert(THREAD_NUM==<threads>)
+  assert(THREAD_NUM==<threads>);
   assert(TILE_DIM_X==<BLOCK_N>); assert(TILE_DIM_Y==<BLOCK_M>); assert(TILE_DIM_Z==<BLOCK_K>);
   assert(M==<M>); assert(N==<N>); assert(K==<K>);
   
   const <dtype>* __restrict__ A = static_cast<const <dtype>* __restrict__>(input_ptr);
   const <dtype>* __restrict__ B = static_cast<const <dtype>* __restrict__>(weight_ptr);
   const <dtype>* __restrict__ C = static_cast<const <dtype>* __restrict__>(output_ptr);
-'''
-        grid_dim, block_dim, dynamic_smem_buf, use_cooperative_groups = kernel.get_launch_info()
-        extra_attr = f"\n// Strategy: {self.strategy.name}"
-        extra_attr += f"\n// selected_hparams: {selected_hparams}."
-        extra_attr += f"\n// grid_dim: {grid_dim}."
-        extra_attr += f"\n// block_dim: {block_dim}."
-        extra_attr += f"\n// smem: {dynamic_smem_buf} bytes."
-        extra_attr += f"\n// use_cooperative_groups: {use_cooperative_groups} bytes."
-        
+'''     
         if (isinstance(self.strategy, _GemvStrategy)):
             BLOCK_N, reduce_threads = selected_hparams
             BLOCK_M, BLOCK_K, threads = 1, 1, 128 # todo
@@ -288,14 +280,35 @@ template <typename T,
         source = source.replace("blockIdx.z", "bz")
         source = self.replace_line(source, "extern \"C\" __global__", 1, head_str)
         source += "\n} // kernel"
+        
+        grid_dim, block_dim, dynamic_smem_buf, use_cooperative_groups = kernel.get_launch_info()
+        extra_attr = f"\n// Strategy: {self.strategy.name}"
+        extra_attr += f"\n// selected_hparams: {selected_hparams}."
+        extra_attr += f"\n// smem: {dynamic_smem_buf} bytes."
+        extra_attr += f"\n// use_cooperative_groups: {use_cooperative_groups}."
+        extra_attr += f"\n// grid_dim=({grid_dim['blockIdx.x']}, {grid_dim['blockIdx.y']}, {grid_dim['blockIdx.z']}), "
+        extra_attr += f"tile_dim=({BLOCK_N}, {BLOCK_M}, {BLOCK_K}),"
+        extra_attr += f"\n// block_dim=({block_dim['threadIdx.x']}, {block_dim['threadIdx.y']}, {block_dim['threadIdx.z']})."
         source += extra_attr
+        
         return source
     
     def get_kernel(self, mode: HparamSelectMode):
         file_path = self.save_path+self.strategy.name
         
         if (mode == HparamSelectMode.TUNING):
-            best_latency, selected_hparams = self.run_tuning(*self.strategy.get_tuning_params())
+            latency_hparams_list = self.run_tuning(*self.strategy.get_tuning_params())
+            best_latency, selected_hparams, idx = latency_hparams_list[0]
+            
+            for i in range(len(latency_hparams_list)):
+                latency, selected_hparams, idx = latency_hparams_list[i]
+                kernel = self.strategy.get_kernel(selected_hparams)
+                file_name = self.save_path+f"{self.strategy.name}/"+f"{self.strategy.name}_top{i}.cuh"
+                dir_path = os.path.dirname(file_name)
+                os.makedirs(dir_path, exist_ok=True)
+                with open(file_name, "w", encoding="utf-8") as f:
+                    f.write(self.get_source(kernel, selected_hparams) + f"\n// latency: {latency}, idx: {idx}")
+            
         elif (mode == HparamSelectMode.TUNED):
             latency_hparams_list = self.read_tuned_hparams_from_json(self.strategy.name)
             best_latency, selected_hparams = latency_hparams_list[0]["latency"], latency_hparams_list[0]["hparams"]

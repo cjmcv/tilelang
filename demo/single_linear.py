@@ -61,8 +61,7 @@ if __name__ == "__main__":
         output=linear_out,
         # grid_dim=(152, 1, 1),  # 19456/128
         # block_dim=(128, 1, 1),
-        grid_dim=(152, 1, 1),  # 19456/128
-        block_dim=(128, 128, 32), # tile
+        grid_dim=(152, 1, 1), tile_dim=(128, 64, 128)
     )
     layers.compile_load(args.nc, args.output_dir)
     
