@@ -113,7 +113,6 @@ _init_logger()
 
 logger = logging.getLogger(__name__)
 
-from .env import enable_cache, disable_cache, is_cache_enabled  # noqa: F401
 from .env import env as env  # noqa: F401
 
 import tvm

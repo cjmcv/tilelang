@@ -30,7 +30,6 @@ from tvm.target import Target
 
 from tilelang.jit.kernel import JITKernel
 from tilelang.utils.target import determine_target
-from tilelang.jit.kernel_cache import cached, clear_cache
 from os import path, makedirs
 from logging import getLogger
 # from tilelang.jit.param import Kernel
@@ -103,17 +102,20 @@ def compile(
             ", ".join(sorted(allowed_now)),
         )
 
-    return cached(
-        func=func,
+    from tilelang.utils.target import determine_target as _determine_target
+    # from tilelang.jit.execution_backend import resolve_execution_backend, allowed_backends_for_target
+
+    norm_target = Target(_determine_target(target)) if isinstance(target, str) else target
+    return JITKernel(
+        func,
         out_idx=out_idx,
         execution_backend=execution_backend,
-        target=target,
+        target=norm_target,
         target_host=target_host,
         verbose=verbose,
         pass_configs=pass_configs,
         compile_flags=compile_flags,
     )
-
 
 def par_compile(
     funcs: Iterable[PrimFunc[_KP, _T]],
