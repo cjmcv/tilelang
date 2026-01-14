@@ -110,10 +110,6 @@ class JITKernel(Generic[_P, _T]):
             "tvm_ffi",
         ], f"Invalid execution backend. {execution_backend}"
         
-        # from_database = False
-        # print("hello jit:", from_database)
-        if from_database:
-            return
         # Print log on compilation starts
         # NOTE(Chenggang): printing could let the training/inference framework easier to know
         # whether the communication timeout is from compilation
@@ -134,50 +130,7 @@ class JITKernel(Generic[_P, _T]):
         # The adapter's function is assigned as the callable function for this instance.
         self.adapter = adapter
         self.torch_function = adapter.func
-
-    @classmethod
-    def from_database(
-        cls,
-        func: PrimFunc,
-        host_kernel_source: str,
-        device_kernel_source: str,
-        kernel_lib_path: str,
-        params: list[KernelParam],
-        target: str | Target,
-        target_host: str | Target,
-        out_idx: list[int] | int,
-        execution_backend: Literal["tvm_ffi"],
-        pass_configs: dict[str, Any] | None = None,
-        compile_flags: list[str] | None = None,
-    ):
-        """
-        Alternative constructor to create a TorchFunction directly from a database.
-        """
-        instance = cls(
-            func=func,
-            out_idx=out_idx,
-            execution_backend=execution_backend,
-            target=target,
-            target_host=target_host,
-            pass_configs=pass_configs,
-            from_database=True,
-            compile_flags=compile_flags,
-        )
-
-        instance.adapter = instance._create_adapter_from_database(
-            func_or_mod=func,
-            params=params,
-            result_idx=out_idx,
-            target=target,
-            host_kernel_source=host_kernel_source,
-            device_kernel_source=device_kernel_source,
-            kernel_lib_path=kernel_lib_path,
-            pass_configs=pass_configs,
-            compile_flags=compile_flags,
-        )
-        instance.torch_function = instance.adapter.func
-        return instance
-
+        
     def __call__(self, *args: _P.args, **kwds: _P.kwargs) -> _T:
         """
         Invokes the compiled function with the given arguments.
@@ -196,6 +149,32 @@ class JITKernel(Generic[_P, _T]):
         """
         return self.torch_function(*args, **kwds)
 
+    def get_launch_info(self):
+        assert self.artifact is not None, "self.artifact is not available"
+        
+        grid_dim = {"blockIdx.x": 1, "blockIdx.y": 1, "blockIdx.z": 1}
+        block_dim = {"threadIdx.x": 1, "threadIdx.y": 1, "threadIdx.z": 1}
+        dynamic_smem_buf = 0
+        use_cooperative_groups = 0
+        
+        for g_var, func in self.artifact.device_mod.functions.items():
+            attrs = func.attrs
+            if "use_cooperative_groups" in attrs:
+                use_cooperative_groups = attrs["use_cooperative_groups"]
+            if "dyn_shared_memory_buf" in attrs:
+                dynamic_smem_buf = int(attrs["dyn_shared_memory_buf"])
+            if "thread_extent" in attrs:
+                # Extract block and grid sizes from thread extents
+                thread_extent = attrs["thread_extent"]
+                for tag, extent in thread_extent.items():
+                    if tag in grid_dim:
+                        grid_dim[tag] = extent
+                    elif tag in block_dim:
+                        block_dim[tag] = extent
+                        
+        # print(grid_dim, block_dim, dynamic_smem_buf, use_cooperative_groups)
+        return grid_dim, block_dim, dynamic_smem_buf, use_cooperative_groups
+            
     def _compile_and_create_adapter(self, tilelang_func: PrimFunc, out_idx: list[int]) -> BaseKernelAdapter:
         """
         Compiles the given TileLang PrimFunc using TVM and creates a kernel adapter.
@@ -263,40 +242,6 @@ class JITKernel(Generic[_P, _T]):
 
         return adapter
 
-    def _create_adapter_from_database(
-        self,
-        params: list[KernelParam],
-        result_idx: list[int] | int,
-        target: str | Target,
-        func_or_mod: PrimFunc | tvm.runtime.Module,
-        host_kernel_source: str,
-        device_kernel_source: str,
-        kernel_lib_path: str,
-        pass_configs: dict[str, Any] | None = None,
-        compile_flags: list[str] | None = None,
-    ) -> BaseKernelAdapter:
-        target = self.target
-        execution_backend = self.execution_backend
-
-        # Create an adapter based on the specified execution backend.
-        if execution_backend == "tvm_ffi":
-            adapter = TVMFFIKernelAdapter.from_database(
-                params=params,
-                result_idx=result_idx,
-                target=target,
-                func_or_mod=func_or_mod,
-                host_kernel_source=host_kernel_source,
-                device_kernel_source=device_kernel_source,
-                kernel_lib_path=kernel_lib_path,
-                pass_configs=pass_configs,
-                compile_flags=compile_flags,
-            )
-        else:
-            # Handle invalid backend.
-            raise ValueError(f"Invalid execution backend: {execution_backend}")
-
-        return adapter
-
     @classmethod
     def from_tilelang_function(cls, tilelang_func: PrimFunc, **kwargs):
         """
@@ -341,25 +286,6 @@ class JITKernel(Generic[_P, _T]):
         str
             The source code of the compiled kernel function.
         """
-        # for g_var, func in self.artifact.device_mod.functions.items():
-        #     attrs = func.attrs
-        #     if "use_cooperative_groups" in attrs:
-        #         use_cooperative_groups = attrs["use_cooperative_groups"]
-        #         print("artifact:", use_cooperative_groups)
-        #     if "dyn_shared_memory_buf" in attrs:
-        #         dynamic_smem_buf = int(attrs["dyn_shared_memory_buf"])
-        #         print("artifact:", dyn_shared_memory_buf)
-        #     if "thread_extent" in attrs:
-        #         # Extract block and grid sizes from thread extents
-        #         thread_extent = attrs["thread_extent"]
-        #         for tag, extent in thread_extent.items():
-        #             if "threadIdx" in tag:
-        #                 print("threadIdx", extent)
-        #                 # block_info["xyz".index(tag[-1])] = extent
-        #             elif "blockIdx" in tag:
-        #                 # grid_info["xyz".index(tag[-1])] = extent
-        #                 print("blockIdx", extent)
-          
         if self.execution_backend in {"tvm_ffi"}:
             return self.adapter.get_kernel_source(kernel_only=kernel_only)
         return self.artifact.kernel_source

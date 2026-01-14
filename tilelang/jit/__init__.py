@@ -117,75 +117,6 @@ def compile(
         compile_flags=compile_flags,
     )
 
-def par_compile(
-    funcs: Iterable[PrimFunc[_KP, _T]],
-    out_idx: list[int] | int | None = None,
-    execution_backend: Literal["auto", "tvm_ffi"] = "auto",
-    target: str | Target = "auto",
-    target_host: str | Target | None = None,
-    verbose: bool = False,
-    pass_configs: dict[str, Any] | None = None,
-    compile_flags: list[str] | str | None = None,
-    num_workers: int = None,
-    ignore_error: bool = False,
-) -> list[JITKernel[_KP, _T]]:
-    """
-    Parallel compile multiple TileLang PrimFunc with TVM and build JITKernels.
-    Parameters
-    ----------
-    funcs : Iterable[tvm.tir.PrimFunc]
-        The TileLang TIR functions to compile and wrap.
-    out_idx : Union[List[int], int], optional
-        Index(es) of the output tensors to return (default: None).
-    execution_backend : Literal["auto", "dlpack", "tvm_ffi", "ctypes", "cython", "nvrtc", "torch", "cutedsl"], optional
-        Execution backend to use for kernel execution. Use "auto" to pick a sensible
-        default per target (cuda->tvm_ffi, metal->torch, others->cython).
-    target : Union[str, Target], optional
-        Compilation target, either as a string or a TVM Target object (default: "auto").
-    target_host : Union[str, Target], optional
-        Target host for cross-compilation (default: None).
-    verbose : bool, optional
-        Whether to enable verbose output (default: False).
-    pass_configs : dict, optional
-        Additional keyword arguments to pass to the Compiler PassContext.
-        Refer to `tilelang.transform.PassConfigKey` for supported options.
-    """
-    with concurrent.futures.ThreadPoolExecutor(num_workers, "tl-par-comp") as executor:
-        futures = []
-        future_map = {}
-        for i, func in enumerate(funcs):
-            future = executor.submit(
-                compile,
-                func=func,
-                out_idx=out_idx,
-                execution_backend=execution_backend,
-                target=target,
-                target_host=target_host,
-                verbose=verbose,
-                pass_configs=pass_configs,
-                compile_flags=compile_flags,
-            )
-            future_map[future] = i
-            futures.append(future)
-        results = [... for _ in futures]
-        for future in tqdm(
-            concurrent.futures.as_completed(futures),
-            total=len(futures),
-            desc="Parallel Compiling",
-        ):
-            idx = future_map[future]
-            if ignore_error:
-                try:
-                    results[idx] = future.result()
-                except Exception as e:
-                    logger.warning(f"Error compiling function at index {idx}: {e}")
-                    results[idx] = None
-            else:
-                results[idx] = future.result()
-        return results
-    return results
-
-
 @dataclass
 class JITImpl(Generic[_P, _KP, _T, _Ret]):
     """
@@ -248,13 +179,6 @@ class JITImpl(Generic[_P, _KP, _T, _Ret]):
         PrimFunc into a JITKernel using the module-level `compile` function.
         When `debug_root_path` is set, the compiled C kernel and the source
         Python program are saved for inspection.
-
-    - par_compile(configs, ...)
-        Accepts an iterable of configs (either dicts mapping keyword args or
-        tuples mapping to positional args). Each config is elaborated to a
-        PrimFunc and the resulting set is compiled in parallel via the
-        module-level `par_compile` helper. Returns a list of JITKernel objects
-        in the same order as the provided configs.
     """
 
     out_idx: list[int] | int | None
@@ -300,51 +224,6 @@ class JITImpl(Generic[_P, _KP, _T, _Ret]):
             raise ValueError(f"Invalid function type: {type(self.func)}")
         assert isinstance(tir, PrimFunc), f"target function must be a PrimFunc but got {type(tir)}"
         return tir
-
-    def par_compile(
-        self, configs: Iterable[dict[str, Any] | tuple[str, Any]], num_workers: int = None, ignore_error: bool = False
-    ) -> list[JITKernel[_KP, _T]]:
-        """
-        Parallel compile multiple TileLang PrimFunc with TVM and build JITKernels.
-        Parameters
-        ----------
-        configs : Iterable[Union[dict[str, Any], tuple[Any, ...]]]
-            The configurations to elaborate and compile. Each config can be either
-            a dictionary mapping keyword arguments to values, or a tuple of positional
-            arguments.
-        num_workers : int, optional
-            Number of parallel workers to use for compilation. Defaults to None,
-            which lets the system decide.
-        ignore_error : bool, optional
-            If True, compilation errors for individual configs will be logged
-            as warnings and the corresponding result will be None. If False,
-            any compilation error will raise an exception. Defaults to False.
-        Returns
-        -------
-        List[JITKernel]
-            A list of compiled JITKernel objects corresponding to the provided configs.
-        """
-        configs = list(configs)
-        funcs = []
-        for cfg in tqdm(configs, desc="Elaborating"):
-            if isinstance(cfg, tuple):
-                funcs.append(self.get_tir(*cfg))
-            elif isinstance(cfg, dict):
-                funcs.append(self.get_tir(**cfg))
-            else:
-                raise ValueError(f"Invalid config type: {type(cfg)}, expected tuple or dict.")
-        return par_compile(
-            funcs,
-            out_idx=self.out_idx,
-            execution_backend=self.execution_backend,
-            target=self.target,
-            target_host=self.target_host,
-            verbose=self.verbose,
-            pass_configs=self.pass_configs,
-            compile_flags=self.compile_flags,
-            num_workers=num_workers,
-            ignore_error=ignore_error,
-        )
 
     def compile(self, *args: _P.args, **kwargs: _P.kwargs) -> _Ret:
         func = self.get_tir(*args, **kwargs)

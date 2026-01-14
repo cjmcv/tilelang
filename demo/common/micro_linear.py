@@ -289,12 +289,12 @@ template <typename T,
         kernel = self.strategy.get_kernel(selected_hparams)
         kernel.export_sources(kernel_path=file_path+"_src.cuh", host_path=file_path+"_src.cpp")
         
-        analyzer = LaunchInfoAnalyzer(kernel.prim_func)
-        analyzer.get_threads_layout()
+        grid_dim, block_dim, dynamic_smem_buf, use_cooperative_groups = kernel.get_launch_info()
         extra_attr = f"\n// Strategy: {self.strategy.name}"
-        extra_attr += f"\n// grid_dim: {analyzer.grid_dim}."
-        extra_attr += f"\n// block_dim: {analyzer.block_dim}."
-        extra_attr += f"\n// Smem: {analyzer.get_smem_bytes()} bytes."
+        extra_attr += f"\n// grid_dim: {grid_dim}."
+        extra_attr += f"\n// block_dim: {block_dim}."
+        extra_attr += f"\n// smem: {dynamic_smem_buf} bytes."
+        extra_attr += f"\n// use_cooperative_groups: {use_cooperative_groups} bytes."
         
         with open(file_path+".cuh", "w", encoding="utf-8") as f:
             f.write(self.get_source(kernel, selected_hparams) + extra_attr)

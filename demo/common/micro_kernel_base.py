@@ -2,6 +2,15 @@ import os
 import math
 from enum import Enum
 import itertools
+from collections.abc import Iterable
+from typing import ParamSpec, TypeVar, Literal, Any
+import concurrent.futures
+from tqdm.auto import tqdm
+
+from tilelang.jit.kernel import JITKernel
+from tilelang.language.v2 import PrimFunc
+from tvm.target import Target
+
 import json
 from pathlib import Path
 
@@ -24,6 +33,10 @@ class HparamSelectMode(Enum):
 
 # print("artifact: ", artifact)
 # T.func_attr({"calling_conv": 2, "dyn_shared_memory_buf": 49152, "target": T.target({"arch": "sm_89", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 304, "blockIdx.y": 1, "threadIdx.x": 128, "threadIdx.y": 1, "threadIdx.z": 1}, "tir.is_global_func": T.bool(True), "tir.kernel_launch_params": ["blockIdx.x", "blockIdx.y", "threadIdx.x", "threadIdx.y", "threadIdx.z", "tir.use_dyn_shared_memory"], "tir.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [0, 1]})
+
+# analyzer = LaunchInfoAnalyzer(kernel.prim_func)
+# analyzer.get_threads_layout()
+# print(analyzer.grid_dim)
 class LaunchInfoAnalyzer:
     def __init__(self, fn: PrimFunc):
         self.prim_func = fn
@@ -152,7 +165,7 @@ class BaseMicroKernel:
         print(f"Save: {file_path}")
 
     def read_tuned_hparams_from_json(self, kernel_name):
-        file_path = self.save_path+kerne_name+"_tuned.json"
+        file_path = self.save_path+kernel_name+"_tuned.json"
         latency_hparams_list = []
         try:
             with open(file_path, "r", encoding="utf-8") as f:
@@ -173,40 +186,41 @@ class BaseMicroKernel:
         selected_hparams = latency_hparams_list[0]["hparams"]
         return best_latency, selected_hparams
 
-    # def _tune_parallel(self):
-    #     thread_size = min(8, multiprocessing.cpu_count() // 4)
-    #     print(f"Start tuning with {len(self.hparam_space)} schemes (thread_num: {thread_size})")
-    #     tasks = [(idx, hparams) for idx, hparams in enumerate(self.hparam_space)]
-        
-    #     with ThreadPoolExecutor(max_workers=thread_size) as executor:
-    #         all_results = executor.map(self._tune_single, tasks)
-
-    #     results = []
-    #     for idx, hparams, latency, status in all_results:
-    #         if status == "success":
-    #             print(f">>>>> tuning({idx}): {latency} -> {hparams}")
-    #             results.append({"idx": idx, "latency": latency, "hparams": hparams})
-    #         else:
-    #             print(f"Failed: Schema {idx+1}: {status}")
-    #     return results
-    
-    def _tune_single(self, idx, hparams, get_kernel_func):
-        # idx, hparams = tasks
-        try:
-            kernel = get_kernel_func(hparams)
-            profiler = kernel.get_profiler()
-            latency = profiler.do_bench(backend="cupti")
-            return idx, hparams, round(latency, 5), "success"
-        except Exception as e:
-            return idx, hparams, None, f"{e}"   
-        
     def run_tuning(self, kerne_name, hparam_space, get_kernel_func):
         file_path = self.save_path + kerne_name
         print(f"Start tuning with a total of {len(hparam_space)} schemes.")
         
+        # compile
+        num_workers = 8
+        with concurrent.futures.ThreadPoolExecutor(num_workers, "tl-par-comp") as executor:
+            futures = []
+            future_map = {}
+            for idx, hparams in enumerate(hparam_space):
+                future = executor.submit(get_kernel_func, selected_hparams=hparams)
+                future_map[future] = idx
+                futures.append(future)
+            kernels = [... for _ in futures]
+            for future in tqdm(
+                concurrent.futures.as_completed(futures),
+                total=len(futures),
+                desc="Parallel Compiling",
+            ):
+                idx = future_map[future]
+                kernels[idx] = future.result()
+    
+        # profile
         latency_hparams_list = []
         for idx, hparams in enumerate(hparam_space):
-            _, _, latency, status = self._tune_single(idx, hparams, get_kernel_func)
+            try:
+                # kernel = get_kernel_func(hparams)
+                kernel = kernels[idx]
+                profiler = kernel.get_profiler()
+                latency = round(profiler.do_bench(backend="cupti"), 5)
+                status = "success"
+            except Exception as e:
+                latency = None, 
+                status = f"{e}"   
+        
             if status == "success":
                 latency_hparams_list.append((latency, hparams))
             print(f">>>>> tuning({idx}-{status}): {latency} -> {hparams}")

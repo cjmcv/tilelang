@@ -342,41 +342,6 @@ class TVMFFIKernelAdapter(BaseKernelAdapter):
 
         return func
 
-    @classmethod
-    def from_database(
-        cls,
-        params: list[TensorType],
-        result_idx: list[int],
-        target: str,
-        func_or_mod: tir.PrimFunc | tvm.IRModule,
-        host_kernel_source: str,
-        device_kernel_source: str,
-        kernel_lib_path: str,
-        verbose: bool = False,
-        pass_configs: dict[str, Any] | None = None,
-        compile_flags: list[str] | None = None,
-    ):
-        adapter = cls.__new__(cls)
-        adapter.params = params
-        adapter.result_idx = adapter._legalize_result_idx(result_idx)
-        adapter.host_kernel_source = host_kernel_source
-        adapter.device_kernel_source = device_kernel_source
-        adapter.wrapped_source = device_kernel_source + "\n\n" + host_kernel_source
-        adapter.pass_configs = pass_configs
-
-        if isinstance(func_or_mod, tir.PrimFunc):
-            adapter.ir_module = tvm.IRModule({func_or_mod.attrs["global_symbol"]: func_or_mod})
-        else:
-            adapter.ir_module = func_or_mod
-
-        target = determine_target(target, return_object=True)
-        adapter.target = Target.canon_target(determine_target(target))
-
-        adapter.verbose = verbose
-        adapter.executable = runtime.load_module(kernel_lib_path)
-        adapter._post_init()
-        return adapter
-
     def get_host_source(self):
         """Returns the source code of the host module."""
         if self.host_kernel_source is not None:
