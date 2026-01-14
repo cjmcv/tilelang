@@ -10,7 +10,7 @@ import tvm
 from tvm.tir.stmt_functor import ir_transform
 
 from common.pkt_util import TestUtil, TorchRef
-from common.micro_kernel_base import HparamSelectMode
+from common.micro_base import HparamSelectMode
 from common.micro_linear import MicroLinear
 
 def main():

@@ -15,7 +15,7 @@ import tilelang
 import tilelang.language as T
 
 from common.pkt_util import TestUtil, TorchRef
-from common.micro_kernel_base import BaseMicroKernel, LaunchInfoAnalyzer, HparamSelectMode
+from common.micro_base import BaseMicroKernel, HparamSelectMode
 
 
 class _GemvStrategy:
@@ -280,7 +280,8 @@ template <typename T,
         if (mode == HparamSelectMode.TUNING):
             best_latency, selected_hparams = self.run_tuning(*self.strategy.get_tuning_params())
         elif (mode == HparamSelectMode.TUNED):
-            best_latency, selected_hparams = self.read_tuned_hparams_from_json(self.strategy.name)
+            latency_hparams_list = self.read_tuned_hparams_from_json(self.strategy.name)
+            best_latency, selected_hparams = latency_hparams_list[0]["latency"], latency_hparams_list[0]["hparams"]
             print("[Tuned] selected_hparams: ", selected_hparams)
         else:
             selected_hparams = self.strategy.get_heuristic_hparams()
