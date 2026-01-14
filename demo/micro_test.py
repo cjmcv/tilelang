@@ -11,15 +11,15 @@ from tvm.tir.stmt_functor import ir_transform
 
 from common.pkt_util import TestUtil, TorchRef
 from common.micro_base import HparamSelectMode
-from common.micro_linear import MicroLinear
+from common.micro_linear import MicroLinearStrategy, MicroLinear
 
 def main():
     M = 1
     N = 19456
     K = 2560
     # config = [64,64,64,2,128,0,true]
-    linear = MicroLinear(M,N,K, dtype=T.bfloat16, accum_dtype=T.float32)
-    kernel = linear.get_kernel(HparamSelectMode.TUNING) # HEURISTIC, TUNING
+    linear = MicroLinear(MicroLinearStrategy.GEMM, M,N,K, dtype=T.bfloat16, accum_dtype=T.float32)
+    kernel = linear.get_kernel(HparamSelectMode.TUNING) # HEURISTIC, TUNING, TUNED
 
     import torch
 
@@ -31,13 +31,7 @@ def main():
 
     print("c:")
     print(c)
-    
-    for i in range(100):
-        c.zero_()
-        c = kernel(a, b)
-    print("c2:")
-    print(c)
-    
+
     print("ref_c:")
     print(ref_c)
     
@@ -61,7 +55,6 @@ def main():
     
     latency = profiler.do_bench()
     print(f"tilelang Latency: {latency}ms")
-
 
 if __name__ == "__main__":
     main()

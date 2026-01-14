@@ -191,29 +191,34 @@ class BaseMicroKernel:
         print(f"Start tuning with a total of {len(hparam_space)} schemes.")
 
         latency_hparams_list = []
-        # compile
-        num_workers = 8
-        with concurrent.futures.ThreadPoolExecutor(num_workers, "tl-par-comp") as executor:
-            futures = []
-            future_map = {}
-            for idx, hparams in enumerate(hparam_space):
-                future = executor.submit(get_kernel_func, selected_hparams=hparams)
-                future_map[future] = idx
-                futures.append(future)
-            kernels = [... for _ in futures]
-            for future in tqdm(
-                concurrent.futures.as_completed(futures),
-                total=len(futures),
-                desc="Parallel Compiling",
-            ):
-                idx = future_map[future]
-                kernels[idx] = future.result()
+        
+        is_compile_parallel = True
+        # # compile
+        if (is_compile_parallel):
+            num_workers = 8
+            with concurrent.futures.ThreadPoolExecutor(num_workers, "tl-par-comp") as executor:
+                futures = []
+                future_map = {}
+                for idx, hparams in enumerate(hparam_space):
+                    future = executor.submit(get_kernel_func, selected_hparams=hparams)
+                    future_map[future] = idx
+                    futures.append(future)
+                kernels = [... for _ in futures]
+                for future in tqdm(
+                    concurrent.futures.as_completed(futures),
+                    total=len(futures),
+                    desc="Parallel Compiling",
+                ):
+                    idx = future_map[future]
+                    kernels[idx] = future.result()
     
         # profile
         for idx, hparams in enumerate(hparam_space):
             try:
-                # kernel = get_kernel_func(hparams)
-                kernel = kernels[idx]
+                if (is_compile_parallel):
+                    kernel = kernels[idx]
+                else:
+                    kernel = get_kernel_func(hparams)
                 profiler = kernel.get_profiler()
                 latency = round(profiler.do_bench(backend="cupti"), 5)
                 status = "success"

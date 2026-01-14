@@ -54,7 +54,7 @@ if __name__ == "__main__":
     w = mpk.attach_input(torch_tensor=w_torch, name="w")
     linear_out = mpk.attach_input(torch_tensor=out_torch, name="linear_out")
 
-    # grid_dim, block_dim, thread_num
+    # grid_dim, block_dim(实际是tile_dim), thread_num(实际是block_dim, 固定为threadIdx.x==128或256, 其他维度为1)
     mpk.linear_layer(
         input=x,
         weight=w,
@@ -62,7 +62,7 @@ if __name__ == "__main__":
         # grid_dim=(152, 1, 1),  # 19456/128
         # block_dim=(128, 1, 1),
         grid_dim=(152, 1, 1),  # 19456/128
-        block_dim=(128, 128, 32),
+        block_dim=(128, 128, 32), # tile
     )
     layers.compile_load(args.nc, args.output_dir)
     

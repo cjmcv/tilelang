@@ -17,7 +17,9 @@ import tilelang.language as T
 from common.pkt_util import TestUtil, TorchRef
 from common.micro_base import BaseMicroKernel, HparamSelectMode
 
-
+# TODO: megakernel约束线程维度是一维128/256，而目前gemv方案是二维线程，且语法糖约束下，
+# 无法对tn = T.get_thread_binding(0)进行二次操作，即无法由threadIdx.x // N, threadIdx.x % N, 来转换成二维。
+# 解决方案是：在get_source里进行替换。
 class _GemvStrategy:
     def __init__(self, M, N, K, dtype, accum_dtype):
         self.name = "linear_gemv_tl"+f"_{M}_{N}_{K}"
@@ -201,18 +203,24 @@ class _GemmStrategy:
                 T.copy(C_shared, C[by * BLOCK_M, bx * BLOCK_N])
 
         return linear
+
+class MicroLinearStrategy(Enum):
+    GEMM = 0
+    GEMV = 1
     
 class MicroLinear(BaseMicroKernel):
-    def __init__(self, M, N, K, dtype=T.bfloat16, accum_dtype=T.float32):
+    def __init__(self, strategy:MicroLinearStrategy, M, N, K, dtype=T.bfloat16, accum_dtype=T.float32):
         super().__init__()
-        self.kernel_name = "linear_tl"+f"_{M}_{N}_{K}"
         
         self.M = M
         self.N = N
         self.K = K
         self.dtype = dtype
         self.accum_dtype = accum_dtype
-        self.strategy = _GemvStrategy(M, N, K, dtype, accum_dtype)
+        if strategy == MicroLinearStrategy.GEMV:
+            self.strategy = _GemvStrategy(M, N, K, dtype, accum_dtype)
+        else:
+            self.strategy = _GemmStrategy(M, N, K, dtype, accum_dtype)
         
     def get_source(self, kernel, selected_hparams):
         head_str = \
@@ -245,6 +253,14 @@ template <typename T,
   const <dtype>* __restrict__ B = static_cast<const <dtype>* __restrict__>(weight_ptr);
   const <dtype>* __restrict__ C = static_cast<const <dtype>* __restrict__>(output_ptr);
 '''
+        grid_dim, block_dim, dynamic_smem_buf, use_cooperative_groups = kernel.get_launch_info()
+        extra_attr = f"\n// Strategy: {self.strategy.name}"
+        extra_attr += f"\n// selected_hparams: {selected_hparams}."
+        extra_attr += f"\n// grid_dim: {grid_dim}."
+        extra_attr += f"\n// block_dim: {block_dim}."
+        extra_attr += f"\n// smem: {dynamic_smem_buf} bytes."
+        extra_attr += f"\n// use_cooperative_groups: {use_cooperative_groups} bytes."
+        
         if (isinstance(self.strategy, _GemvStrategy)):
             BLOCK_N, reduce_threads = selected_hparams
             BLOCK_M, BLOCK_K, threads = 1, 1, 128 # todo
@@ -272,10 +288,11 @@ template <typename T,
         source = source.replace("blockIdx.z", "bz")
         source = self.replace_line(source, "extern \"C\" __global__", 1, head_str)
         source += "\n} // kernel"
+        source += extra_attr
         return source
     
     def get_kernel(self, mode: HparamSelectMode):
-        file_path = self.save_path+self.kernel_name
+        file_path = self.save_path+self.strategy.name
         
         if (mode == HparamSelectMode.TUNING):
             best_latency, selected_hparams = self.run_tuning(*self.strategy.get_tuning_params())
@@ -290,14 +307,7 @@ template <typename T,
         kernel = self.strategy.get_kernel(selected_hparams)
         kernel.export_sources(kernel_path=file_path+"_src.cuh", host_path=file_path+"_src.cpp")
         
-        grid_dim, block_dim, dynamic_smem_buf, use_cooperative_groups = kernel.get_launch_info()
-        extra_attr = f"\n// Strategy: {self.strategy.name}"
-        extra_attr += f"\n// grid_dim: {grid_dim}."
-        extra_attr += f"\n// block_dim: {block_dim}."
-        extra_attr += f"\n// smem: {dynamic_smem_buf} bytes."
-        extra_attr += f"\n// use_cooperative_groups: {use_cooperative_groups} bytes."
-        
         with open(file_path+".cuh", "w", encoding="utf-8") as f:
-            f.write(self.get_source(kernel, selected_hparams) + extra_attr)
+            f.write(self.get_source(kernel, selected_hparams))
             
         return kernel
