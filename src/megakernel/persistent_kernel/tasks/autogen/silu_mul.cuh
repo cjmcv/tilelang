@@ -103,7 +103,7 @@ __device__ __forceinline__ void silu_mul_task_impl(const int bx, const int by, c
   // if (threadIdx.x == 0) {
   //   printf("[%d-(%d,%d,%d)]-tile(%d,%d,%d)(%d) silu_mul input_ptr: %lld, output_ptr: %lld: %d.\n", blockIdx.x, bx, by, bz, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, THREAD_NUM, input_ptr, output_ptr, OUTPUT_SIZE);
   // }  
-  printf("silu_mul_task_impl: (%d, %d, %d)-(%d, %d, %d).\n", bx, by, bz, blockIdx.x, blockIdx.y, blockIdx.z);
+  // printf("silu_mul_task_impl: (%d, %d, %d)-(%d, %d, %d).\n", bx, by, bz, blockIdx.x, blockIdx.y, blockIdx.z);
   T const *__restrict__ d_input = static_cast<T const *>(input_ptr) + bx * TILE_DIM_X; // by * 2*O_STRIDE + // by == 0
   T const *__restrict__ d_mul = d_input + O_STRIDE;
   T *__restrict__ d_output = static_cast<T *>(output_ptr) + bx * TILE_DIM_X; // by * O_STRIDE + 

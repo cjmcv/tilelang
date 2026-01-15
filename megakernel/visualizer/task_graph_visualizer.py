@@ -75,17 +75,24 @@ def display_task_graph(task_graph_json_filename: str, use_xdot: bool) -> None:
         g.node(f"event_{base_event}", "Base Event")
         g.attr("node", shape="rectangle")
         for task_idx, task in enumerate(task_graph["all_tasks"]):
-            inputs_len = str(len(task['inputs'])) if task['inputs'] is not None else "None"
-            outputs_len = str(len(task['outputs'])) if task['outputs'] is not None else "None"
             if task["inputs"] is not None:
-                input_str = "\n".join([f"in: {input['base_ptr']}" for input in task["inputs"]]) # + {get_offset_in_number_of_elements(input)} # CJM
+                input_str = "in: "
+                block_str = "block: "
+                for idx, input in enumerate(task["inputs"]):
+                    input_str += f"{input['base_ptr']}" + ","
+                    if idx == 0:
+                        block_str += f"({input['bx']}, {input['by']}, {input['bz']})"
             else:
                 input_str = f"in: None"
+                block_str = f"block: None"
             if task["outputs"] is not None:
-                output_str = "\n".join([f"out: {output['base_ptr']}" for output in task["outputs"]]) # + {get_offset_in_number_of_elements(output)}
+                output_str = "out: "
+                for output in task["outputs"]:
+                    output_str += f"{output['base_ptr']}" + ","
             else:
                 output_str = f"out: None"
-            description = f"task_idx: {task_idx}\n{input_str}\n{output_str}\ntask_type: {task_type_color_map[task['task_type']][1]}\nvariant_id: {task['variant_id']}"
+            
+            description = f"task_idx: {task_idx}\n{input_str}\n{output_str}\n{block_str}\ntask_type: {task_type_color_map[task['task_type']][1]}\nvariant_id: {task['variant_id']}"
             g.attr("node", fillcolor=task_type_color_map[task['task_type']][0], style="filled")
             g.node(f"task_{task_idx}", description)
 

@@ -6,6 +6,7 @@ pip install . -v -e
 mkdir build && cmake -B build -G Ninja && cmake --build build --parallel 4
 export PYTHONPATH=/home/cjmcv/project/tilelang:$PYTHONPATH
 
+################################
 # 1. 先编译tvm
 cd 3rdparty/tvm && rm -rf build && mkdir build && cd build
 cp ../cmake/config.cmake .
@@ -34,7 +35,7 @@ pushd demo && python micro_test.py && popd
 
 # 4. megakernel 编译
 python megakernel_setup.py build_ext --inplace
-pushd demo && python single_silu_mul.py && popd
+pushd demo && python fused_half_mlp.py && popd
 
 # 清submodule
 git submodule deinit -f 3rdparty/tvm/
@@ -43,7 +44,10 @@ rm -rf .git/modules/3rdparty/tvm/
 git submodule add https://github.com/apache/tvm.git 3rdparty/tvm
 
 # TODO
-
+修改 register_mugraph / dfs_create_events_add_tasks，根据input_map / output_map 改成手动指定映射关系。
+bx, bx+gridDIm.x -> bx
+by -> by
+bz -> bz
 
 
 # 备注

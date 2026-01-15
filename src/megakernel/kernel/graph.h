@@ -588,6 +588,72 @@ private:
     return true;
   }
 
+  // void create_events_add_tasks(
+  //   TaskType task_type,
+  //   int depth,
+  //   int const my_gpu_id,
+  //   std::vector<int> const &event_dims,
+  //   int3 const input_map,
+  //   int3 const output_map,
+  //   dim3 const consumer_grid_dim,
+  //   dim3 const producer_grid_dim,
+  //   dim3 consumer_lo_bid,
+  //   dim3 consumer_hi_bid,
+  //   dim3 producer_lo_bid,
+  //   dim3 producer_hi_bid,
+  //   std::vector<EventDesc> &all_events,
+  //   std::vector<FullTaskDesc> &all_tasks,
+  //   std::vector<FullTaskDesc> const &cur_op_tasks,
+  //   std::map<dim3, TaskId, Dim3Comparator> const &pre_task_map,
+  //   std::map<dim3, TaskId, Dim3Comparator> &cur_task_map) {
+
+  //   dim3 bid;
+  //   for (bid.x = 0; bid.x < consumer_grid_dim.x; bid.x++) {
+  //     for (bid.y = 0; bid.y < consumer_grid_dim.y; bid.y++) {
+  //       for (bid.z = 0; bid.z < consumer_grid_dim.z; bid.z++) {
+  //     // 一个新的event，之前的最后一个task的下一位id就是当前event的第一个task
+  //         EventDesc event_desc;
+  //         event_desc.num_triggers = 0;
+  //         event_desc.first_task_id = all_tasks.size();
+  //         // Add consumer tasks
+  //         // 添加当前算子的task
+  //         dim3 bid;
+  //         for (bid.x = consumer_lo_bid.x; bid.x < consumer_hi_bid.x; bid.x++) {
+  //           for (bid.y = consumer_lo_bid.y; bid.y < consumer_hi_bid.y; bid.y++) {
+  //             for (bid.z = consumer_lo_bid.z; bid.z < consumer_hi_bid.z; bid.z++) {
+  //               cur_task_map[bid] = all_tasks.size();
+  //               int offset = bid.x * consumer_grid_dim.y * consumer_grid_dim.z +
+  //                           bid.y * consumer_grid_dim.z + bid.z;
+  //               all_tasks.push_back(cur_op_tasks[offset]);
+  //             }
+  //           }
+  //         }
+  //         event_desc.last_task_id = all_tasks.size();
+  //         // Set producer tasks
+  //         // 设置前置算子的task
+  //         for (bid.x = producer_lo_bid.x; bid.x < producer_hi_bid.x; bid.x++) {
+  //           for (bid.y = producer_lo_bid.y; bid.y < producer_hi_bid.y; bid.y++) {
+  //             for (bid.z = producer_lo_bid.z; bid.z < producer_hi_bid.z; bid.z++) {
+  //               assert(pre_task_map.find(bid) != pre_task_map.end());
+  //               int task_id = pre_task_map.find(bid)->second;
+  //               // encode gpu_id
+  //               all_tasks[task_id].trigger_event = get_event_id(
+  //                   my_gpu_id, all_events.size(), false /*nvshmem_event*/);
+  //               event_desc.num_triggers++;
+  //             }
+  //           }
+  //         }
+
+  //         event_desc.event_type =
+  //             event_desc.last_task_id >= event_desc.first_task_id + 8
+  //                 ? EVENT_LAUNCH_MASSIVE_TASKS
+  //                 : EVENT_LAUNCH_TASKS;
+  //         all_events.push_back(event_desc);
+  //       }
+  //     }
+  //   }
+  // }
+
   void dfs_create_events_add_tasks(
     TaskType task_type,
     int depth,
@@ -629,44 +695,18 @@ private:
       }
       event_desc.last_task_id = all_tasks.size();
       // Set producer tasks
-      // if (task_type == TASK_SILU_MUL) {
-      //   int factor_x = producer_grid_dim.x / event_dims[1] / 2; // cjm-hard code!! only support index 1.
-      //   printf("factor_x: %d, (%d, %d, %d).\n", factor_x, event_dims[1], event_dims[2], event_dims[3]);
-      //   for (bid.y = producer_lo_bid.y; bid.y < producer_hi_bid.y; bid.y++) {
-      //     for (bid.z = producer_lo_bid.z; bid.z < producer_hi_bid.z; bid.z++) {    
-      //       for (bid.x = producer_lo_bid.x; bid.x < producer_lo_bid.x + factor_x; bid.x++) {
-      //         assert(pre_task_map.find(bid) != pre_task_map.end());
-      //         int task_id = pre_task_map.find(bid)->second;
-      //         // encode gpu_id
-      //         all_tasks[task_id].trigger_event = get_event_id(
-      //             my_gpu_id, all_events.size(), false /*nvshmem_event*/);
-      //         event_desc.num_triggers++;
-      //       }
-      //       for (bid.x = producer_hi_bid.x; bid.x < producer_hi_bid.x + factor_x; bid.x++) {
-      //         assert(pre_task_map.find(bid) != pre_task_map.end());
-      //         int task_id = pre_task_map.find(bid)->second;
-      //         // encode gpu_id
-      //         all_tasks[task_id].trigger_event = get_event_id(
-      //             my_gpu_id, all_events.size(), false /*nvshmem_event*/);
-      //         event_desc.num_triggers++;            
-      //       }
-      //     }
-      //   }
-      // }
-      // else {
-        for (bid.x = producer_lo_bid.x; bid.x < producer_hi_bid.x; bid.x++) {
-          for (bid.y = producer_lo_bid.y; bid.y < producer_hi_bid.y; bid.y++) {
-            for (bid.z = producer_lo_bid.z; bid.z < producer_hi_bid.z; bid.z++) {
-              assert(pre_task_map.find(bid) != pre_task_map.end());
-              int task_id = pre_task_map.find(bid)->second;
-              // encode gpu_id
-              all_tasks[task_id].trigger_event = get_event_id(
-                  my_gpu_id, all_events.size(), false /*nvshmem_event*/);
-              event_desc.num_triggers++;
-            }
+      for (bid.x = producer_lo_bid.x; bid.x < producer_hi_bid.x; bid.x++) {
+        for (bid.y = producer_lo_bid.y; bid.y < producer_hi_bid.y; bid.y++) {
+          for (bid.z = producer_lo_bid.z; bid.z < producer_hi_bid.z; bid.z++) {
+            assert(pre_task_map.find(bid) != pre_task_map.end());
+            int task_id = pre_task_map.find(bid)->second;
+            // encode gpu_id
+            all_tasks[task_id].trigger_event = get_event_id(
+                my_gpu_id, all_events.size(), false /*nvshmem_event*/);
+            event_desc.num_triggers++;
           }
-        }      
-      // }
+        }
+      }
 
       event_desc.event_type =
           event_desc.last_task_id >= event_desc.first_task_id + 8
@@ -833,6 +873,7 @@ private:
       }
       // Step 2: create events between operators
       if (pre_op == nullptr) {
+        // 无前置算子，直接创建task即可
         dim3 bid;
         for (bid.x = 0; bid.x < bgraph.grid_dim.x; bid.x++) {
           for (bid.y = 0; bid.y < bgraph.grid_dim.y; bid.y++) {
@@ -843,7 +884,7 @@ private:
                           bid.y * bgraph.grid_dim.z + bid.z;
 
               first_tasks.push_back(all_tasks.size());
-              all_tasks.push_back(tasks[offset]);
+              all_tasks.push_back(tasks[offset]); // 每一个block是一个task，下标按将三维grid压扁，形成abcabc的顺序
             }
           }
         }
@@ -884,7 +925,7 @@ private:
           if (d == output_map.z) {
             producer_partition[d] = pre_op->bgraph.grid_dim.z;
           }
-          printf("consumer %d vs producer %d.\n", consumer_partition[d], producer_partition[d]);
+          printf("producer %d vs consumer %d.\n", producer_partition[d], consumer_partition[d]);
         }
         // Step 2.2: create events and add tasks
         // number of events is the product of gcd of producer/consumer
