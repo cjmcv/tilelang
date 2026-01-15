@@ -34,6 +34,7 @@ template <typename T,
   assert(TILE_DIM_X==128); assert(TILE_DIM_Y==64); assert(TILE_DIM_Z==128);
   assert(M==1); assert(N==19456); assert(K==2560);
   
+  printf("linear_kernel: (%d, %d, %d)-(%d, %d, %d).\n", bx, by, bz, blockIdx.x, blockIdx.y, blockIdx.z);
   const bfloat16* __restrict__ A = static_cast<const bfloat16* __restrict__>(input_ptr);
   const bfloat16* __restrict__ B = static_cast<const bfloat16* __restrict__>(weight_ptr);
   const bfloat16* __restrict__ C = static_cast<const bfloat16* __restrict__>(output_ptr);

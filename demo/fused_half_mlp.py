@@ -26,7 +26,6 @@ if __name__ == "__main__":
 
     print("Input arguments:", args)
     print(f"world_size({world_size}) rank({rank})")
-    # model_name = args.model
     torch.set_default_dtype(torch.bfloat16)
     
     reporter = MpkReporter() 
@@ -44,30 +43,35 @@ if __name__ == "__main__":
     
     # w_torch = w_gatedup_torch 
     w_torch = torch.randn((intermediate_size*2, hidden_size), dtype=torch.bfloat16, device="cuda")
-    # a = torch.ones((100000, 30000), dtype=torch.bfloat16, device="cuda")
     x_torch = torch.randn((max_batch_size, hidden_size), dtype=torch.bfloat16, device="cuda")
-    out_torch = torch.zeros((max_batch_size, intermediate_size*2), dtype=torch.bfloat16, device="cuda")
+    out_torch = torch.zeros((max_batch_size, intermediate_size), dtype=torch.bfloat16, device="cuda")
     print("x: ", x_torch.data_ptr(), "w: ", w_torch.data_ptr(), "o: ", out_torch.data_ptr())
     
     x = mpk.attach_input(torch_tensor=x_torch, name="in")
     w = mpk.attach_input(torch_tensor=w_torch, name="w")
-    linear_out = mpk.attach_input(torch_tensor=out_torch, name="linear_out")
+    silu_mul_out = mpk.attach_input(torch_tensor=out_torch, name="linear_out")
 
     # grid_dim, block_dim(实际是tile_dim), thread_num(实际是block_dim, 固定为threadIdx.x==128或256, 其他维度为1)
+    mlp_mid = mpk.new_tensor(dims=(max_batch_size, intermediate_size*2), dtype=mi.bfloat16, name="mlp_mid", io_category="cuda_tensor")
     mpk.linear_layer(
         input=x,
         weight=w,
-        output=linear_out,
-        # grid_dim=(152, 1, 1),  # 19456/128
-        # block_dim=(128, 1, 1),
+        output=mlp_mid,
         grid_dim=(152, 1, 1), tile_dim=(128, 64, 128)
+    )
+    # silu_mul_out = mpk.new_tensor(dims=(max_batch_size, intermediate_size), dtype=mi.bfloat16, name="silu_mul_out", io_category="cuda_tensor")
+    mpk.silu_mul_layer(
+        input=mlp_mid,
+        output=silu_mul_out,
+        grid_dim=(76, 1, 1),
+        block_dim=(128, 1, 1),
     )
     layers.compile_load(args.nc, args.output_dir)
     
-    
     # ###
     def ref_run():
-        return TorchRef.linear(x_torch[:batch_size], w_torch)
+        mid = TorchRef.linear(x_torch[:batch_size], w_torch)
+        return TorchRef.silu_and_mul(mid)
     
     def mpk_run():
         mpk(batch_size)
