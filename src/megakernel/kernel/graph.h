@@ -588,71 +588,109 @@ private:
     return true;
   }
 
-  // void create_events_add_tasks(
-  //   TaskType task_type,
-  //   int depth,
-  //   int const my_gpu_id,
-  //   std::vector<int> const &event_dims,
-  //   int3 const input_map,
-  //   int3 const output_map,
-  //   dim3 const consumer_grid_dim,
-  //   dim3 const producer_grid_dim,
-  //   dim3 consumer_lo_bid,
-  //   dim3 consumer_hi_bid,
-  //   dim3 producer_lo_bid,
-  //   dim3 producer_hi_bid,
-  //   std::vector<EventDesc> &all_events,
-  //   std::vector<FullTaskDesc> &all_tasks,
-  //   std::vector<FullTaskDesc> const &cur_op_tasks,
-  //   std::map<dim3, TaskId, Dim3Comparator> const &pre_task_map,
-  //   std::map<dim3, TaskId, Dim3Comparator> &cur_task_map) {
+  void print_register_info(std::string prefix_str,
+                          TaskType task_type,
+                          std::vector<EventDesc> &all_events,
+                          std::vector<FullTaskDesc> &all_tasks,
+                          std::map<dim3, TaskId, Dim3Comparator> const &pre_task_map,
+                          std::map<dim3, TaskId, Dim3Comparator> &cur_task_map) {
+    printf("%s: task[%d] register_info (all_tasks: %d, all_events: %d, pre_task_map: %d, cur_task_map: %d).\n", 
+      prefix_str.c_str(), task_type, all_tasks.size(), all_events.size(), pre_task_map.size(), cur_task_map.size());
+    for (size_t i=0; i<all_tasks.size(); i++) {
+      printf("task %d: depend: %d, trigger: %d\n", i, all_tasks[i].dependent_event, all_tasks[i].trigger_event);
+    }
+    for (size_t i=0; i<all_events.size(); i++) {
+      printf("event %d: num: %d, first: %d, last: %d\n", i, all_events[i].num_triggers, all_events[i].first_task_id, all_events[i].last_task_id);
+    }
+    for (const auto& [key, task_id] : cur_task_map) {
+      printf("dim3(%d, %d, %d)->TaskId: %d.\n", key.x, key.y, key.z, task_id);
+    }
+  }
+  void print_final_register_info(std::string prefix_str,
+                          std::vector<EventDesc> &all_events,
+                          std::vector<FullTaskDesc> &all_tasks) {
+    printf("%s: final_register_info (all_tasks: %d, all_events: %d).\n", 
+      prefix_str.c_str(), all_tasks.size(), all_events.size());
+    for (size_t i=0; i<all_tasks.size(); i++)
+      printf("task %d: depend: %d, trigger: %d\n", i, all_tasks[i].dependent_event, all_tasks[i].trigger_event);
+    for (size_t i=0; i<all_events.size(); i++)
+      printf("event %d: num: %d, first: %d, last: %d\n", i, all_events[i].num_triggers, all_events[i].first_task_id, all_events[i].last_task_id);
+  }
+  void create_events_add_tasks(
+    TaskType task_type,
+    int depth,
+    int const my_gpu_id,
+    std::vector<int> const &event_dims,
+    int3 const input_map,
+    int3 const output_map,
+    dim3 const consumer_grid_dim,
+    dim3 const producer_grid_dim,
+    dim3 consumer_lo_bid,
+    dim3 consumer_hi_bid,
+    dim3 producer_lo_bid,
+    dim3 producer_hi_bid,
+    std::vector<EventDesc> &all_events,
+    std::vector<FullTaskDesc> &all_tasks,
+    std::vector<FullTaskDesc> const &cur_op_tasks,
+    std::map<dim3, TaskId, Dim3Comparator> const &pre_task_map,
+    std::map<dim3, TaskId, Dim3Comparator> &cur_task_map) {
 
-  //   dim3 bid;
-  //   for (bid.x = 0; bid.x < consumer_grid_dim.x; bid.x++) {
-  //     for (bid.y = 0; bid.y < consumer_grid_dim.y; bid.y++) {
-  //       for (bid.z = 0; bid.z < consumer_grid_dim.z; bid.z++) {
-  //     // 一个新的event，之前的最后一个task的下一位id就是当前event的第一个task
-  //         EventDesc event_desc;
-  //         event_desc.num_triggers = 0;
-  //         event_desc.first_task_id = all_tasks.size();
-  //         // Add consumer tasks
-  //         // 添加当前算子的task
-  //         dim3 bid;
-  //         for (bid.x = consumer_lo_bid.x; bid.x < consumer_hi_bid.x; bid.x++) {
-  //           for (bid.y = consumer_lo_bid.y; bid.y < consumer_hi_bid.y; bid.y++) {
-  //             for (bid.z = consumer_lo_bid.z; bid.z < consumer_hi_bid.z; bid.z++) {
-  //               cur_task_map[bid] = all_tasks.size();
-  //               int offset = bid.x * consumer_grid_dim.y * consumer_grid_dim.z +
-  //                           bid.y * consumer_grid_dim.z + bid.z;
-  //               all_tasks.push_back(cur_op_tasks[offset]);
-  //             }
-  //           }
-  //         }
-  //         event_desc.last_task_id = all_tasks.size();
-  //         // Set producer tasks
-  //         // 设置前置算子的task
-  //         for (bid.x = producer_lo_bid.x; bid.x < producer_hi_bid.x; bid.x++) {
-  //           for (bid.y = producer_lo_bid.y; bid.y < producer_hi_bid.y; bid.y++) {
-  //             for (bid.z = producer_lo_bid.z; bid.z < producer_hi_bid.z; bid.z++) {
-  //               assert(pre_task_map.find(bid) != pre_task_map.end());
-  //               int task_id = pre_task_map.find(bid)->second;
-  //               // encode gpu_id
-  //               all_tasks[task_id].trigger_event = get_event_id(
-  //                   my_gpu_id, all_events.size(), false /*nvshmem_event*/);
-  //               event_desc.num_triggers++;
-  //             }
-  //           }
-  //         }
+    // CJM hardcode
+    size_t producer_block_num = 4; //152;
+    size_t consumer_block_num = 2; //76;
+    size_t producer_group_size = 4;//152; // 2;
+    size_t consumer_group_size = 2;//76; // 1;
+    size_t event_num = 1; // 76; // producer_group_size = 2, consumer_group_size = 1; assert(152/2=76 == 76/1=76)
+    std::vector<std::pair<std::vector<int>, std::vector<int>>> pv;
+    for (size_t i=0; i<event_num; i++) {
+      std::vector<int> producer;
+      std::vector<int> consumer;
+      for (size_t j=0; j<producer_group_size; j++)
+        producer.push_back(i+j);
+      for (size_t j=0; j<consumer_group_size; j++)
+        consumer.push_back(i+j);
+      
+      std::pair<std::vector<int>, std::vector<int>> p{producer, consumer};
+      pv.push_back(p);
+    }
 
-  //         event_desc.event_type =
-  //             event_desc.last_task_id >= event_desc.first_task_id + 8
-  //                 ? EVENT_LAUNCH_MASSIVE_TASKS
-  //                 : EVENT_LAUNCH_TASKS;
-  //         all_events.push_back(event_desc);
-  //       }
-  //     }
-  //   }
-  // }
+    for (size_t i=0; i<event_num; i++) {
+      // 一个新的event，之前的最后一个task的下一位id就是当前event的第一个task
+      EventDesc event_desc;
+      event_desc.num_triggers = 0;
+      event_desc.first_task_id = all_tasks.size();
+
+      // 添加当前算子的task
+      const std::vector<int>& producer = pv[i].first;
+      const std::vector<int>& consumer = pv[i].second;
+      for (size_t i=0; i<consumer.size(); i++) {
+        dim3 bid{consumer[i], 0, 0};
+        cur_task_map[bid] = all_tasks.size();
+        int offset = bid.x * consumer_grid_dim.y * consumer_grid_dim.z +
+                    bid.y * consumer_grid_dim.z + bid.z;
+        all_tasks.push_back(cur_op_tasks[offset]);
+      }
+      event_desc.last_task_id = all_tasks.size();
+      
+      // Set producer tasks
+      // 设置前置算子的task
+      for (size_t i=0; i<producer.size(); i++) {
+        dim3 bid{producer[i], 0, 0};
+        assert(pre_task_map.find(bid) != pre_task_map.end());
+        int task_id = pre_task_map.find(bid)->second;
+        // encode gpu_id
+        all_tasks[task_id].trigger_event = get_event_id(
+            my_gpu_id, all_events.size(), false /*nvshmem_event*/);
+        event_desc.num_triggers++;
+      }
+
+      event_desc.event_type =
+          event_desc.last_task_id >= event_desc.first_task_id + 8
+              ? EVENT_LAUNCH_MASSIVE_TASKS
+              : EVENT_LAUNCH_TASKS;
+      all_events.push_back(event_desc);
+    }
+  }
 
   void dfs_create_events_add_tasks(
     TaskType task_type,
@@ -932,9 +970,14 @@ private:
         std::vector<int> event_dims(megakernel::config::MAX_TENSOR_DIMS, 1);
         for (int d = 0; d < megakernel::config::MAX_TENSOR_DIMS; d++) {
           event_dims[d] = std::gcd(producer_partition[d], consumer_partition[d]);
+          // // CJM hardcode
+          // if (d==1) {
+          //   event_dims[d] = 76;
+          // }
           printf("event_dims %d .\n", event_dims[d]);
         }
-        dfs_create_events_add_tasks(task_type,
+        // dfs_create_events_add_tasks
+        create_events_add_tasks(task_type,
                                     0,                       /*depth*/
                                     my_gpu_id,               /*my_gpu_id*/
                                     event_dims,              /*event_dims*/
@@ -952,12 +995,12 @@ private:
                                     pre_task_map, /*pre_task_map*/
                                     cur_task_map /*cur_task_map)*/);
       }
+      print_register_info("a", task_type, all_events, all_tasks, pre_task_map, cur_task_map);
       pre_output_ops = output_ops;
       pre_op = cur_op;
       pre_task_map = cur_task_map;
       all_task_maps.emplace(op, cur_task_map);
     }
-
     // Update the trigger event for all tasks in pre_task_map
     for (auto const &it : pre_task_map) {
       all_tasks[it.second].trigger_event =
@@ -985,6 +1028,7 @@ private:
         }
       }
     }
+    print_final_register_info("final", all_events, all_tasks);
   }
 
   TaskGraphResult print_task_graph(
@@ -1000,6 +1044,7 @@ private:
                         std::tuple<int, int, TaskType, int>> const &task_configs,
       std::map<megakernel::type::GuidType, IODesc> const &io_configs,
       bool use_json_format) {
+
     using megakernel::runtime::IODesc;
     megakernel::transpiler::CodeKeeper code;
     megakernel::transpiler::CodeKeeper tgbody;
@@ -1243,6 +1288,7 @@ private:
           assert(false);
       }
     }
+
     json json_task_graph = {
         {"all_tasks", {}}, {"all_events", {}}, {"first_tasks", {}}};
     // generate task[0]
@@ -1276,6 +1322,7 @@ private:
               {"kv_idx", -1},
               {"merge_task_offset", -1}});
     }
+
     // generate all other tasks
     size_t task_pos = 2;
     for (auto const &op : graph.operators) {
@@ -1311,21 +1358,22 @@ private:
       for (int i = 0;
           i < bgraph.grid_dim.x * bgraph.grid_dim.y * bgraph.grid_dim.z;
           i++) {
+        // printf("iii0: %d\n", i);
         FullTaskDesc task_desc = all_tasks[task_pos];
         assert(task_desc.task_type == task_type || task_type == TASK_ALLREDUCE);
         // find current task in grid_dim
-        for (int j = 0;
-            j < bgraph.grid_dim.x * bgraph.grid_dim.y * bgraph.grid_dim.z;
-            j++) {
+        for (int j = 0; j < bgraph.grid_dim.x * bgraph.grid_dim.y * bgraph.grid_dim.z; j++) {
           bid.x = j / (bgraph.grid_dim.y * bgraph.grid_dim.z);
-          bid.y =
-              (j % (bgraph.grid_dim.y * bgraph.grid_dim.z)) / bgraph.grid_dim.z;
+          bid.y = (j % (bgraph.grid_dim.y * bgraph.grid_dim.z)) / bgraph.grid_dim.z;
           bid.z = j % bgraph.grid_dim.z;
+          // printf("iiiz: %d, %d, %d\n", bid.x, bid.y, bid.z);
           TaskId task_id = task_map.at(bid);
+          // printf("iiiz1: %d, %d, %d\n", bid.x, bid.y, bid.z);
           if (task_pos == (task_id & 0xffffffff)) {
             break;
           }
         }
+        // printf("iii1: %d\n", i);
         TaskId task_id = task_map.at(bid);
         assert(task_pos == (task_id & 0xffffffff));
         tgbody.e("// task[$]", task_pos);
@@ -1354,14 +1402,12 @@ private:
         /////////////////////////
         // Input 
         /////////////////////////
-
         for (int i = 0; i < task_desc.num_inputs; i++) {
           if (input_ops[i]->dtensor == kernel::DTensor::EMPTY_TENSOR) {
             json json_dims = json::array();
             json json_strides = json::array();
                                                         //  {"offset", 0}, CJM
             json_task["inputs"].push_back(json{{"base_ptr", "nullptr"},
-
                                               {"bx", 0},
                                               {"by", 0},
                                               {"bz", 0},
@@ -1415,27 +1461,6 @@ private:
                 fused_dim_off_in_group;
             // Assert that it is within range
             assert(fused_dim_off_subtensor < sub_desc.tensor.dim[0]);
-            // if (input_map.x > 0) {
-            //   size_t block_size = sub_desc.tensor.dim[input_map.x] / bgraph.grid_dim.x;
-            //   offset += block_size * bid.x * sub_desc.tensor.stride[input_map.x];
-            // } else if (input_map.x == 0) {
-            //   offset += fused_dim_off_subtensor * sub_desc.tensor.stride[input_map.x];
-            // }
-            // if (input_map.y > 0) {
-            //   size_t block_size = sub_desc.tensor.dim[input_map.y] / bgraph.grid_dim.y;
-            //   offset += block_size * bid.y * sub_desc.tensor.stride[input_map.y];
-            // } else if (input_map.y == 0) {
-            //   offset += fused_dim_off_subtensor * sub_desc.tensor.stride[input_map.y];
-            // }
-            // if (input_map.z > 0) {
-            //   size_t block_size = sub_desc.tensor.dim[input_map.z] / bgraph.grid_dim.z;
-            //   offset += block_size * bid.z * sub_desc.tensor.stride[input_map.z];
-            // } else if (input_map.z == 0) {
-            //   offset += fused_dim_off_subtensor * sub_desc.tensor.stride[input_map.z];
-            // }
-            // if (task_type == TASK_SILU_MUL) { // CJM-TODO: input_map
-            //   offset /= 2;
-            // }
             int blockIdx_x = bid.x;  // CJM
             int blockIdx_y = bid.y;
             int blockIdx_z = bid.z;
@@ -1465,25 +1490,6 @@ private:
                 {"dims", json_dims},
                 {"strides", json_strides}});
           } else {
-            // Non-fused case, use io_desc
-            // if (input_map.x >= 0) {
-            //   size_t block_size =
-            //       io_desc.tensor.dim[input_map.x] / bgraph.grid_dim.x;
-            //   offset += block_size * bid.x * io_desc.tensor.stride[input_map.x];
-            // }
-            // if (input_map.y >= 0) {
-            //   size_t block_size =
-            //       io_desc.tensor.dim[input_map.y] / bgraph.grid_dim.y;
-            //   offset += block_size * bid.y * io_desc.tensor.stride[input_map.y];
-            // }
-            // if (input_map.z >= 0) {
-            //   size_t block_size =
-            //       io_desc.tensor.dim[input_map.z] / bgraph.grid_dim.z;
-            //   offset += block_size * bid.z * io_desc.tensor.stride[input_map.z];
-            // }
-            // if (task_type == TASK_SILU_MUL) { // CJM-TODO: ?????????input_map
-            //   offset /= 2;
-            // }
             int blockIdx_x = bid.x;  // CJM
             int blockIdx_y = bid.y;
             int blockIdx_z = bid.z;
@@ -1514,7 +1520,6 @@ private:
                 {"strides", json_strides}});
           }
         }
-
         /////////////////////////
         // Output 
         /////////////////////////
@@ -1522,24 +1527,6 @@ private:
         for (int i = 0; i < task_desc.num_outputs; i++) {
           IODesc io_desc = io_configs.find(output_ops[i]->dtensor.guid)->second;
           
-          // off_t offset = 0;
-          // int3 output_map = output_ops[i]->input_map;
-          // assert(io_desc.type != IODesc::FusedTorchTensor);
-          // if (output_map.x >= 0) {
-          //   size_t block_size =
-          //       io_desc.tensor.dim[output_map.x] / bgraph.grid_dim.x;
-          //   offset += block_size * bid.x * io_desc.tensor.stride[output_map.x];
-          // }
-          // if (output_map.y >= 0) {
-          //   size_t block_size =
-          //       io_desc.tensor.dim[output_map.y] / bgraph.grid_dim.y;
-          //   offset += block_size * bid.y * io_desc.tensor.stride[output_map.y];
-          // }
-          // if (output_map.z >= 0) {
-          //   size_t block_size =
-          //       io_desc.tensor.dim[output_map.z] / bgraph.grid_dim.z;
-          //   offset += block_size * bid.z * io_desc.tensor.stride[output_map.z];
-          // }
           int blockIdx_x = bid.x;  // CJM
           int blockIdx_y = bid.y;
           int blockIdx_z = bid.z;
@@ -1575,6 +1562,7 @@ private:
         task_pos++;
       }
     }
+
     assert(task_pos == all_tasks.size());
     // Add all events
     for (auto const &event : all_events) {

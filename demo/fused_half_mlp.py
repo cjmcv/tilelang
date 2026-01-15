@@ -57,33 +57,33 @@ if __name__ == "__main__":
         input=x,
         weight=w,
         output=mlp_mid,
-        grid_dim=(152, 1, 1), tile_dim=(128, 64, 128)
+        grid_dim=(4, 1, 1), tile_dim=(128, 64, 128)
     )
     # silu_mul_out = mpk.new_tensor(dims=(max_batch_size, intermediate_size), dtype=mi.bfloat16, name="silu_mul_out", io_category="cuda_tensor")
     mpk.silu_mul_layer(
         input=mlp_mid,
         output=silu_mul_out,
-        grid_dim=(76, 1, 1),
+        grid_dim=(2, 1, 1),
         block_dim=(128, 1, 1),
     )
     layers.compile_load(args.nc, args.output_dir)
     
+    # # ###
+    # def ref_run():
+    #     mid = TorchRef.linear(x_torch[:batch_size], w_torch)
+    #     return TorchRef.silu_and_mul(mid)
+    
+    # def mpk_run():
+    #     mpk(batch_size)
+    
+    # ref_output = ref_run()
+    # mpk(batch_size)
+    # mpk_output = out_torch[:batch_size]
+    # # if (torch.allclose(out_torch, ref_output, rtol=1e-2, atol=0)):
+    # #     print("allclose: True")
     # ###
-    def ref_run():
-        mid = TorchRef.linear(x_torch[:batch_size], w_torch)
-        return TorchRef.silu_and_mul(mid)
     
-    def mpk_run():
-        mpk(batch_size)
-    
-    ref_output = ref_run()
-    mpk(batch_size)
-    mpk_output = out_torch[:batch_size]
-    # if (torch.allclose(out_torch, ref_output, rtol=1e-2, atol=0)):
-    #     print("allclose: True")
-    ###
-    
-    reporter.generate_report(mpk_run, mpk_output, splitk, 
-                            ref_run, ref_output, 
-                            warnup_iter=100, test_iter=200, 
-                            allclose_iter=5, print_all=False)
+    # reporter.generate_report(mpk_run, mpk_output, splitk, 
+    #                         ref_run, ref_output, 
+    #                         warnup_iter=100, test_iter=200, 
+    #                         allclose_iter=5, print_all=False)
