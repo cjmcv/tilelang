@@ -125,17 +125,18 @@ class _GemmStrategy:
         
     def _get_hparam_space(self):
         BLOCK_M=[64, 128] #, 256
-        BLOCK_N=[128, 256] # 64, 
+        BLOCK_N=[64, 128, 256] # 
         BLOCK_K=[64, 128] # 32, 
+        splitks=[1] #, 2, 4
         num_stages=[0, 1, 2, 3]#
         thread_nums=[128]#, 256
         policies=[T.GemmWarpPolicy.Square, T.GemmWarpPolicy.FullRow]
         enable_rasterations=[True, False]
         
         res = []
-        for m, n, k, num_stage, thread_num, policy, enable_rasteration in itertools.product(
-            BLOCK_M, BLOCK_N, BLOCK_K, num_stages, thread_nums, policies, enable_rasterations):
-            res.append([m, n, k, num_stage, thread_num, policy, enable_rasteration])
+        for m, n, k, splitk, num_stage, thread_num, policy, enable_rasteration in itertools.product(
+            BLOCK_M, BLOCK_N, BLOCK_K, splitks, num_stages, thread_nums, policies, enable_rasterations):
+            res.append([m, n, k, splitk, num_stage, thread_num, policy, enable_rasteration])
 
         return res 
     
@@ -143,39 +144,19 @@ class _GemmStrategy:
         return self.name, self.hparam_space, self.get_kernel
     
     def get_heuristic_hparams(self):
-        # [BLOCK_M, BLOCK_N, BLOCK_K, num_stages, threads, policy, enable_rasteration]
-        return [64, 64, 64, 3, 128, 0, False]
+        # [BLOCK_M, BLOCK_N, BLOCK_K, splitk, num_stages, threads, policy, enable_rasteration]
+        return [64, 64, 64, 1, 3, 128, 0, False]
         
     def get_kernel(self, selected_hparams):
-        kernel = self.kernel_main(self.M, self.N, self.K, *selected_hparams, self.dtype, self.accum_dtype) 
-        return kernel
-    
-    # @tilelang.jit(out_idx=[-1])
-    # def kernel_main(M, N, K, girdDim_x, girdDim_y, BLOCK_M, BLOCK_N, BLOCK_K, threads, dtype, accum_dtype):
-    #     @T.prim_func
-    #     def linear(
-    #         A: T.Tensor((M, K), dtype),
-    #         B: T.Tensor((N, K), dtype),
-    #         C: T.Tensor((M, N), dtype),
-    #     ):
-    #         with T.Kernel(girdDim_x, girdDim_y, threads=threads) as (bx, by): # tilelang.next_power_of_2(128)
-    #             A_shared = T.alloc_shared((BLOCK_M, BLOCK_K), dtype)
-    #             B_shared = T.alloc_shared((BLOCK_N, BLOCK_K), dtype)
-    #             C_local = T.alloc_fragment((BLOCK_M, BLOCK_N), accum_dtype)
-
-    #             T.clear(C_local)
-    #             for k in T.Pipelined(T.ceildiv(K, BLOCK_K), num_stages=3):
-    #                 T.copy(A[by * BLOCK_M, k * BLOCK_K], A_shared)
-    #                 T.copy(B[bx * BLOCK_N, k * BLOCK_K], B_shared)
-    #                 T.gemm(A_shared, B_shared, C_local, transpose_B=True)
-
-    #             T.copy(C_local, C[by * BLOCK_M, bx * BLOCK_N])
-
-    #     return linear
-    
+        splitk = selected_hparams[3]
+        if splitk == 1:
+            return self.kernel_main(self.M, self.N, self.K, *selected_hparams, self.dtype, self.accum_dtype) 
+        else:
+            return self.kernel_splitk_main(self.M, self.N, self.K, *selected_hparams, self.dtype, self.accum_dtype) 
+        
     @tilelang.jit(out_idx=[-1])
-    def kernel_main(M, N, K, BLOCK_M, BLOCK_N, BLOCK_K, num_stages, thread_num, policy, enable_rasteration, dtype=T.float16, accum_dtype=T.float32):
-
+    def kernel_main(M, N, K, BLOCK_M, BLOCK_N, BLOCK_K, split_k, num_stages, thread_num, policy, enable_rasteration, dtype=T.float16, accum_dtype=T.float32):
+        
         @T.prim_func
         def linear(
             A: T.Tensor((M, K), dtype),
@@ -192,18 +173,66 @@ class _GemmStrategy:
                 for k in T.Pipelined(T.ceildiv(K, BLOCK_K), num_stages=num_stages):
                     T.copy(A[by * BLOCK_M, k * BLOCK_K], A_shared)
                     T.copy(B[bx * BLOCK_N, k * BLOCK_K], B_shared)
-                    T.gemm(
-                        A_shared,
-                        B_shared,
-                        C_local,
-                        transpose_B=True,
-                        policy=policy,
-                    )
+                    T.gemm(A_shared, B_shared, C_local, transpose_B=True, policy=policy)
+                    
                 T.copy(C_local, C_shared)
                 T.copy(C_shared, C[by * BLOCK_M, bx * BLOCK_N])
 
         return linear
 
+    @tilelang.jit(out_idx=[-1])
+    def kernel_splitk_main(M, N, K, block_M, block_N, block_K, split_k, num_stages, thread_num, policy, enable_rasteration, dtype=T.float16, accum_dtype=T.float32):
+        splitK = K // split_k
+
+        @T.prim_func
+        def linear(
+            A: T.Tensor((M, K), dtype),
+            B: T.Tensor((N, K), dtype),
+            C: T.Tensor((M, N), dtype),
+        ):
+            with T.Kernel(T.ceildiv(N, block_N), T.ceildiv(M, block_M), split_k, threads=thread_num) as (bx, by, bz):
+                A_shared = T.alloc_shared((block_M, block_K), dtype)
+                B_shared = T.alloc_shared((block_N, block_K), dtype)
+                C_shared = T.alloc_shared((block_M, block_N), dtype)
+                C_local = T.alloc_fragment((block_M, block_N), accum_dtype)
+                T.use_swizzle(panel_size=10, enable=enable_rasteration)
+                T.clear(C_local)
+                for ko in T.Pipelined(T.ceildiv(splitK, block_K), num_stages=num_stages):
+                    T.copy(A[by * block_M, bz * splitK + ko * block_K], A_shared)
+                    T.copy(B[bx * block_N, bz * splitK + ko * block_K], B_shared)
+                    T.gemm(A_shared, B_shared, C_local, transpose_B=True, policy=policy)
+
+                T.copy(C_local, C_shared)
+                T.atomic_add(C[by * block_M, bx * block_N], C_shared)
+
+        return linear
+
+    def kernel_profix_main(M, N, K, block_M, block_N, block_K, split_k, num_stages, thread_num, policy, enable_rasteration, dtype=T.float16, accum_dtype=T.float32):
+        splitK = K // split_k
+
+        @T.prim_func
+        def linear(
+            A: T.Tensor((M, K), dtype),
+            B: T.Tensor((N, K), dtype),
+            C: T.Tensor((M, N), dtype),
+        ):
+            with T.Kernel(T.ceildiv(N, block_N), T.ceildiv(M, block_M), split_k, threads=thread_num) as (bx, by, bz):
+                A_shared = T.alloc_shared((block_M, block_K), dtype)
+                B_shared = T.alloc_shared((block_N, block_K), dtype)
+                C_shared = T.alloc_shared((block_M, block_N), dtype)
+                C_local = T.alloc_fragment((block_M, block_N), accum_dtype)
+                T.use_swizzle(panel_size=10, enable=enable_rasteration)
+                T.clear(C_local)
+                for ko in T.Pipelined(T.ceildiv(splitK, block_K), num_stages=num_stages):
+                    T.copy(A[by * block_M, bz * splitK + ko * block_K], A_shared)
+                    T.copy(B[bx * block_N, bz * splitK + ko * block_K], B_shared)
+                    T.gemm(A_shared, B_shared, C_local, transpose_B=True, policy=policy)
+
+                T.copy(C_local, C_shared)
+                T.atomic_add(C[by * block_M, bx * block_N], C_shared)
+
+        return linear
+    
 class MicroLinearStrategy(Enum):
     GEMM = 0
     GEMV = 1
@@ -257,7 +286,7 @@ template <typename T,
             BLOCK_N, reduce_threads = selected_hparams
             BLOCK_M, BLOCK_K, threads = 1, 1, 128 # todo
         else:
-            BLOCK_M, BLOCK_N, BLOCK_K, num_stages, threads, policy, enable_rasteration = selected_hparams
+            BLOCK_M, BLOCK_N, BLOCK_K, splitk, num_stages, threads, policy, enable_rasteration = selected_hparams
         # gridDim_x, gridDim_y = self.get_grid_dims(self.M, self.N, BLOCK_M, BLOCK_N)
         # print(f"gridDim: ({gridDim_x}, {gridDim_y})")
         
@@ -271,9 +300,9 @@ template <typename T,
         head_str = head_str.replace('<K>', str(self.K)) 
         head_str = head_str.replace('<name_suffix>', str(self.M)+"_"+str(self.N)+"_"+str(self.K))
         if self.dtype == T.bfloat16:
-            dtype = "bfloat16"
+            dtype = "bfloat16_t"
         else:
-            dtype = "float16"
+            dtype = "float16_t"
         head_str = head_str.replace('<dtype>', str(dtype))
                 
         origin_source = kernel.get_kernel_source()

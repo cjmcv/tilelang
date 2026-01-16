@@ -35,9 +35,9 @@ template <typename T,
   static_assert(M==1); static_assert(N==19456); static_assert(K==2560);
   
   // printf("linear_kernel: (%d, %d, %d)-(%d, %d, %d).\n", bx, by, bz, blockIdx.x, blockIdx.y, blockIdx.z);
-  const bfloat16* __restrict__ A = static_cast<const bfloat16* __restrict__>(input_ptr);
-  const bfloat16* __restrict__ B = static_cast<const bfloat16* __restrict__>(weight_ptr);
-  const bfloat16* __restrict__ C = static_cast<const bfloat16* __restrict__>(output_ptr);
+  const bfloat16_t* __restrict__ A = static_cast<const bfloat16_t*>(input_ptr);
+  const bfloat16_t* __restrict__ B = static_cast<const bfloat16_t*>(weight_ptr);
+  const bfloat16_t* __restrict__ C = static_cast<const bfloat16_t*>(output_ptr);
   extern __shared__ __align__(1024) uchar buf_dyn_shmem[];
   float C_local[64];
   bfloat16_t A_local[16];

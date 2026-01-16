@@ -186,7 +186,13 @@ def get_compile_command(
         common_cmd = common_cmd + nvshmem_cmd
         flags = flags + nvshmem_flags
 
-    if target_cc == 90:
+    if target_cc == 89:
+        specific_cmd = [
+            "-arch=sm_89",
+            "-gencode=arch=compute_89,code=sm_89",
+            "-DNDEBUG",
+        ] + (["-DMEGAKERNEL_ENABLE_PROFILER"] if profiling else [])
+    elif target_cc == 90:
         specific_cmd = [
             "-arch=sm_90a",
             "-gencode=arch=compute_90a,code=sm_90a",

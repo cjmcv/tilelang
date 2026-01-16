@@ -78,7 +78,7 @@ if __name__ == "__main__":
         input=silu_mul_out,
         weight=w_down_proj,
         output=mlp_out,
-        grid_dim=(20, 1, 1), tile_dim=(128, 64, 64),
+        grid_dim=(40, 1, 1), tile_dim=(64, 64, 64),
         sync_mode=(0, 0, 0),
         # grid_dim=(8, 1, 1), tile_dim=(128, 64, 64),
         # sync_mode=(0, 0, 0),
@@ -101,7 +101,7 @@ if __name__ == "__main__":
     mpk_run()
     ##
     
-    # reporter.generate_report(mpk_run, mpk_output, splitk, 
-    #                         graph.replay, ref_output, 
-    #                         warnup_iter=100, test_iter=200, 
-    #                         allclose_iter=5, print_all=False)
+    reporter.generate_report(mpk_run, mpk_output, splitk, 
+                            graph.replay, ref_output, 
+                            warnup_iter=100, test_iter=200, 
+                            allclose_iter=5, print_all=False)

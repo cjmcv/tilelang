@@ -631,19 +631,13 @@ private:
     std::map<dim3, TaskId, Dim3Comparator> &cur_task_map) {
     
     int fence_mode = input_map.x + input_map.y*10 + input_map.z*100;
-    // CJM hardcode
-    size_t producer_block_num = producer_grid_dim.x * producer_grid_dim.y * producer_grid_dim.z;
-    size_t consumer_block_num = consumer_grid_dim.x * consumer_grid_dim.y * consumer_grid_dim.z;
 
     std::vector<std::pair<std::vector<dim3>, std::vector<dim3>>> pv;
-    size_t event_num, producer_group_size, consumer_group_size;
+    size_t event_num = 1;
+    // 获取映射信息
     if (fence_mode == 0) {
       // 同步所有
-      producer_group_size = producer_block_num; //152; // 2;
-      consumer_group_size = consumer_block_num; //76; // 1;
-      event_num = 1;                            // 76; // producer_group_size = 2, consumer_group_size = 1; assert(152/2=76 == 76/1=76)
-
-      // 获取映射信息
+      event_num = 1;
       for (size_t i=0; i<event_num; i++) {
         std::vector<dim3> producer;
         std::vector<dim3> consumer;
@@ -746,6 +740,7 @@ private:
     }
     else {
       printf("fence_mode (%d) is not supported!\n", fence_mode);
+      assert(0);
     }
 
     // 使用映射信息构建当前节点task，并填充上一节点task的trigger event
@@ -787,133 +782,6 @@ private:
     }
   }
 
-  void dfs_create_events_add_tasks(
-    TaskType task_type,
-    int depth,
-    int const my_gpu_id,
-    std::vector<int> const &event_dims,
-    int3 const input_map,
-    int3 const output_map,
-    dim3 const consumer_grid_dim,
-    dim3 const producer_grid_dim,
-    dim3 consumer_lo_bid,
-    dim3 consumer_hi_bid,
-    dim3 producer_lo_bid,
-    dim3 producer_hi_bid,
-    std::vector<EventDesc> &all_events,
-    std::vector<FullTaskDesc> &all_tasks,
-    std::vector<FullTaskDesc> const &cur_op_tasks,
-    std::map<dim3, TaskId, Dim3Comparator> const &pre_task_map,
-    std::map<dim3, TaskId, Dim3Comparator> &cur_task_map) {
-    printf("task_type: %d, depth: %d, inmap(%d, %d, %d) - outmap(%d, %d, %d).\n", (int)task_type, depth, input_map.x, input_map.y, input_map.z, input_map.x, input_map.y, input_map.z);
-    if (depth >= megakernel::config::MAX_TENSOR_DIMS) {
-      printf("task_type inner: %d, consumer((%d, %d, %d) - (%d, %d, %d)) / producer((%d, %d, %d) - (%d, %d, %d)).\n", (int)task_type, 
-        consumer_lo_bid.x, consumer_lo_bid.y, consumer_lo_bid.z, consumer_hi_bid.x, consumer_hi_bid.y, consumer_hi_bid.z,
-        producer_lo_bid.x, producer_lo_bid.y, producer_lo_bid.z, producer_hi_bid.x, producer_hi_bid.y, producer_hi_bid.z);
-
-      EventDesc event_desc;
-      event_desc.num_triggers = 0;
-      event_desc.first_task_id = all_tasks.size();
-      // Add consumer tasks
-      dim3 bid;
-      for (bid.x = consumer_lo_bid.x; bid.x < consumer_hi_bid.x; bid.x++) {
-        for (bid.y = consumer_lo_bid.y; bid.y < consumer_hi_bid.y; bid.y++) {
-          for (bid.z = consumer_lo_bid.z; bid.z < consumer_hi_bid.z; bid.z++) {
-            cur_task_map[bid] = all_tasks.size();
-            int offset = bid.x * consumer_grid_dim.y * consumer_grid_dim.z +
-                        bid.y * consumer_grid_dim.z + bid.z;
-            all_tasks.push_back(cur_op_tasks[offset]);
-          }
-        }
-      }
-      event_desc.last_task_id = all_tasks.size();
-      // Set producer tasks
-      for (bid.x = producer_lo_bid.x; bid.x < producer_hi_bid.x; bid.x++) {
-        for (bid.y = producer_lo_bid.y; bid.y < producer_hi_bid.y; bid.y++) {
-          for (bid.z = producer_lo_bid.z; bid.z < producer_hi_bid.z; bid.z++) {
-            assert(pre_task_map.find(bid) != pre_task_map.end());
-            int task_id = pre_task_map.find(bid)->second;
-            // encode gpu_id
-            all_tasks[task_id].trigger_event = get_event_id(
-                my_gpu_id, all_events.size(), false /*nvshmem_event*/);
-            event_desc.num_triggers++;
-          }
-        }
-      }
-
-      event_desc.event_type =
-          event_desc.last_task_id >= event_desc.first_task_id + 8
-              ? EVENT_LAUNCH_MASSIVE_TASKS
-              : EVENT_LAUNCH_TASKS;
-      all_events.push_back(event_desc);
-    } else {
-      for (int i = 0; i < event_dims[depth]; i++) {
-        dim3 new_consumer_lo_bid = consumer_lo_bid;
-        dim3 new_consumer_hi_bid = consumer_hi_bid;
-        dim3 new_producer_lo_bid = producer_lo_bid;
-        dim3 new_producer_hi_bid = producer_hi_bid;
-        if (depth == input_map.x) {
-          int factor = consumer_grid_dim.x / event_dims[depth];
-          new_consumer_lo_bid.x = i * factor;
-          new_consumer_hi_bid.x = (i + 1) * factor;
-        }
-        if (depth == input_map.y) {
-          int factor = consumer_grid_dim.y / event_dims[depth];
-          new_consumer_lo_bid.y = i * factor;
-          new_consumer_hi_bid.y = (i + 1) * factor;
-        }
-        if (depth == input_map.z) {
-          int factor = consumer_grid_dim.z / event_dims[depth];
-          new_consumer_lo_bid.z = i * factor;
-          new_consumer_hi_bid.z = (i + 1) * factor;
-        }
-        if (depth == output_map.x) {
-          int factor = producer_grid_dim.x / event_dims[depth];
-          if (task_type == TASK_SILU_MUL) {
-            // 4->2 : factor==2, i==range(0/1), producer_grid_dim.x==4
-            // => {0,3)->1, {1,4)->2 => 0/2->1, 1/3->2
-            // 8->2 : factor==4, i==range(0/1), producer_grid_dim.x==8
-            // => {0,4)->1, {2,6)->2 => 0/1/4/5->1, 2/3/6/7->2
-            new_producer_lo_bid.x = i * factor / 2;
-            new_producer_hi_bid.x = new_producer_lo_bid.x + producer_grid_dim.x / 2;
-          }
-          else {
-            // 4->2 : factor==2, i==range(0/1)
-            // => [0,2)->1, [2,4)->2 => 0/1->1, 2/3->2
-            new_producer_lo_bid.x = i * factor;
-            new_producer_hi_bid.x = (i + 1) * factor;  
-          }
-        }
-        if (depth == output_map.y) {
-          int factor = producer_grid_dim.y / event_dims[depth];
-          new_producer_lo_bid.y = i * factor;
-          new_producer_hi_bid.y = (i + 1) * factor;
-        }
-        if (depth == output_map.z) {
-          int factor = producer_grid_dim.z / event_dims[depth];
-          new_producer_lo_bid.z = i * factor;
-          new_producer_hi_bid.z = (i + 1) * factor;
-        }
-        dfs_create_events_add_tasks(task_type,
-                                    depth + 1,
-                                    my_gpu_id,
-                                    event_dims,
-                                    input_map,
-                                    output_map,
-                                    consumer_grid_dim,
-                                    producer_grid_dim,
-                                    new_consumer_lo_bid,
-                                    new_consumer_hi_bid,
-                                    new_producer_lo_bid,
-                                    new_producer_hi_bid,
-                                    all_events,
-                                    all_tasks,
-                                    cur_op_tasks,
-                                    pre_task_map,
-                                    cur_task_map);
-      }
-    }
-  }
   void register_mugraph(
       megakernel::kernel::Graph const &graph,
       int num_gpus,
@@ -1022,8 +890,6 @@ private:
         }
       } else {
         // Step 2.1: analyze dependencies between thread blocks of the two ops
-        std::vector<int> producer_partition(megakernel::config::MAX_TENSOR_DIMS, 1);
-        std::vector<int> consumer_partition(megakernel::config::MAX_TENSOR_DIMS, 1);
         int num_shared_tensors = 0;
         int3 input_map, output_map;
         for (auto const &input : input_ops) {
@@ -1036,29 +902,7 @@ private:
             printf("task_type: %d: guid: %ld, %ld.\n", task_type, input->dtensor.guid, output->dtensor.guid);
           }
         }
-        // assert that their is at least a single tensor shared between ops
-        assert(num_shared_tensors >= 1);
-        for (int d = 0; d < megakernel::config::MAX_TENSOR_DIMS; d++) {
-          if (d == input_map.x) {
-            consumer_partition[d] = bgraph.grid_dim.x;
-          }
-          if (d == input_map.y) {
-            consumer_partition[d] = bgraph.grid_dim.y;
-          }
-          if (d == input_map.z) {
-            consumer_partition[d] = bgraph.grid_dim.z;
-          }
-          if (d == output_map.x) {
-            producer_partition[d] = pre_op->bgraph.grid_dim.x;
-          }
-          if (d == output_map.y) {
-            producer_partition[d] = pre_op->bgraph.grid_dim.y;
-          }
-          if (d == output_map.z) {
-            producer_partition[d] = pre_op->bgraph.grid_dim.z;
-          }
-          printf("producer %d vs consumer %d.\n", producer_partition[d], consumer_partition[d]);
-        }
+
         // Step 2.2: create events and add tasks
         // dfs_create_events_add_tasks
         create_events_add_tasks(task_type,
@@ -1068,217 +912,6 @@ private:
                                     output_map,              /*output_map*/
                                     bgraph.grid_dim,         /*consumer_grid_dim*/
                                     pre_op->bgraph.grid_dim, /*producer_grid_dim*/
-                                    all_events,
-                                    all_tasks,
-                                    tasks,        /*cur_op_tasks*/
-                                    pre_task_map, /*pre_task_map*/
-                                    cur_task_map /*cur_task_map)*/);
-      }
-      print_register_info("a", task_type, all_events, all_tasks, pre_task_map, cur_task_map);
-      pre_output_ops = output_ops;
-      pre_op = cur_op;
-      pre_task_map = cur_task_map;
-      all_task_maps.emplace(op, cur_task_map);
-    }
-    // Update the trigger event for all tasks in pre_task_map
-    for (auto const &it : pre_task_map) {
-      all_tasks[it.second].trigger_event =
-          get_event_id(my_gpu_id, all_events.size(), false /*nvshmem_event*/);
-    }
-    all_events.push_back(
-        EventDesc(EVENT_END_OF_TASK_GRAPH, pre_task_map.size(), 0, 0));
-
-    // Prelaunch all tasks at the begining of an iteration
-    all_events[1].first_task_id = 2;
-    all_events[1].last_task_id = all_tasks.size();
-    for (size_t e = 2; e < all_events.size(); e++) {
-      if (all_events[e].event_type == EVENT_LAUNCH_TASKS ||
-          all_events[e].event_type == EVENT_LAUNCH_MASSIVE_TASKS) {
-        all_events[e].event_type = EVENT_EMPTY;
-        bool is_nvshmem_event = false;
-        if (nvshmem_events_idx.count(e) > 0) {
-          is_nvshmem_event = true;
-        }
-        for (size_t t = all_events[e].first_task_id;
-            t < all_events[e].last_task_id;
-            t++) {
-          all_tasks[t].dependent_event =
-              get_event_id(my_gpu_id, e, is_nvshmem_event /*nvshmem_event*/);
-        }
-      }
-    }
-    print_final_register_info("final", all_events, all_tasks);
-  }
-
-  void register_mugraph_org(
-      megakernel::kernel::Graph const &graph,
-      int num_gpus,
-      int my_gpu_id,
-      std::vector<FullTaskDesc> &all_tasks,
-      std::vector<EventDesc> &all_events,
-      std::vector<TaskId> &first_tasks,
-      std::map<kernel::KNOperator *, std::map<dim3, TaskId, Dim3Comparator>>
-          &all_task_maps,
-      std::unordered_map<kn::KNOperator const *,
-                        std::tuple<int, int, TaskType, int>> const
-          &task_configs) {
-    // push a begin-graph task and a event to launch dependent asks
-    {
-      EventDesc e(EVENT_LAUNCH_DEPENDENT_TASKS, 1, 0, 0);
-      FullTaskDesc t(TASK_BEGIN_TASK_GRAPH, 0 /*variant_id*/);
-      t.trigger_event = get_event_id(my_gpu_id, all_events.size(), false);
-      all_tasks.push_back(t);
-      all_events.push_back(e);
-    }
-    std::vector<tb::TBInputOp *> pre_output_ops;
-    kn::KNCustomizedOp const *pre_op = nullptr;
-    std::map<dim3, TaskId, Dim3Comparator> pre_task_map;
-    std::unordered_set<size_t> nvshmem_events_idx;
-    for (auto const &op : graph.operators) {
-      if (op->op_type == type::KNOperatorType::KN_INPUT_OP) {
-        continue;
-      }
-      std::tuple<int, int, TaskType, int> task_config = task_configs.find(op)->second;
-      std::map<dim3, TaskId, Dim3Comparator> cur_task_map;
-      assert(op->op_type == type::KNOperatorType::KN_CUSTOMIZED_OP);
-      // Customized op
-      kn::KNCustomizedOp const *cur_op = dynamic_cast<kn::KNCustomizedOp const *>(op);
-      tb::Graph const &bgraph = cur_op->bgraph;
-      dim3 bid;
-      std::vector<FullTaskDesc> tasks;
-      std::vector<tb::TBInputOp *> input_ops;
-      std::vector<tb::TBInputOp *> output_ops;
-      int num_inputs = std::get<0>(task_config);
-      int num_outputs = std::get<1>(task_config);
-      TaskType task_type = std::get<2>(task_config);
-      int variant_id = std::get<3>(task_config);
-      assert(bgraph.operators.size() == (size_t)num_inputs + num_outputs);
-      for (auto const &op : bgraph.operators) {
-        assert(op->op_type == megakernel::type::TB_INPUT_OP);
-        if (input_ops.size() < (size_t)num_inputs) {
-          input_ops.push_back(static_cast<tb::TBInputOp *>(op));
-        } else {
-          output_ops.push_back(static_cast<tb::TBInputOp *>(op));
-        }
-      }
-      
-      // Step 1: add all tasks based on their blockIdx
-      // (bid.x, bid.y, bid.z) ordering
-      for (bid.x = 0; bid.x < bgraph.grid_dim.x; bid.x++) {
-        for (bid.y = 0; bid.y < bgraph.grid_dim.y; bid.y++) {
-          for (bid.z = 0; bid.z < bgraph.grid_dim.z; bid.z++) {
-            FullTaskDesc task(task_type, variant_id);
-            // Initialize input tensors to the task
-            for (auto const &input : input_ops) {
-              TensorDesc desc;
-              assert(input->output_tensors.size() == 1);
-              tb::STensor stensor = input->output_tensors[0];
-              desc.num_dims = stensor.num_dims;
-              desc.data_type = stensor.data_type;
-              // Assume always partition head group on gridDim.y dimension
-              for (int d = stensor.num_dims - 1; d >= 0; d--) {
-                desc.dim[d] = stensor.dim[d];
-                desc.stride[d] = (d == stensor.num_dims - 1) ? 1 : desc.stride[d + 1] * input->dtensor.dim[d + 1];
-              }
-              task.inputs[task.num_inputs++] = desc;
-            }
-            // Initialize output tensors to the task
-            for (auto const &output : output_ops) {
-              TensorDesc desc;
-              assert(output->output_tensors.size() == 1);
-              tb::STensor stensor = output->output_tensors[0];
-              desc.num_dims = stensor.num_dims;
-              desc.data_type = stensor.data_type;
-              for (int d = stensor.num_dims - 1; d >= 0; d--) {
-                desc.dim[d] = stensor.dim[d];
-                desc.stride[d] = (d == stensor.num_dims - 1) ? 1 : desc.stride[d + 1] * output->dtensor.dim[d + 1];
-              }
-              task.outputs[task.num_outputs++] = desc;
-            }
-            tasks.push_back(task);
-          }
-        }
-      }
-      // Step 2: create events between operators
-      if (pre_op == nullptr) {
-        // 无前置算子，直接创建task即可
-        dim3 bid;
-        for (bid.x = 0; bid.x < bgraph.grid_dim.x; bid.x++) {
-          for (bid.y = 0; bid.y < bgraph.grid_dim.y; bid.y++) {
-            for (bid.z = 0; bid.z < bgraph.grid_dim.z; bid.z++) {
-              cur_task_map[bid] = all_tasks.size();
-
-              int offset = bid.x * bgraph.grid_dim.y * bgraph.grid_dim.z +
-                          bid.y * bgraph.grid_dim.z + bid.z;
-
-              first_tasks.push_back(all_tasks.size());
-              all_tasks.push_back(tasks[offset]); // 每一个block是一个task，下标按将三维grid压扁，形成abcabc的顺序
-            }
-          }
-        }
-      } else {
-        // Step 2.1: analyze dependencies between thread blocks of the two ops
-        std::vector<int> producer_partition(megakernel::config::MAX_TENSOR_DIMS, 1);
-        std::vector<int> consumer_partition(megakernel::config::MAX_TENSOR_DIMS, 1);
-        int num_shared_tensors = 0;
-        int3 input_map, output_map;
-        for (auto const &input : input_ops) {
-          for (auto const &output : pre_output_ops) {
-            if (input->dtensor.guid == output->dtensor.guid) {
-              input_map = input->input_map;
-              output_map = output->input_map;
-              num_shared_tensors++;
-            }
-            printf("task_type: %d: guid: %ld, %ld.\n", task_type, input->dtensor.guid, output->dtensor.guid);
-          }
-        }
-        // assert that their is at least a single tensor shared between ops
-        assert(num_shared_tensors >= 1);
-        for (int d = 0; d < megakernel::config::MAX_TENSOR_DIMS; d++) {
-          if (d == input_map.x) {
-            consumer_partition[d] = bgraph.grid_dim.x;
-          }
-          if (d == input_map.y) {
-            consumer_partition[d] = bgraph.grid_dim.y;
-          }
-          if (d == input_map.z) {
-            consumer_partition[d] = bgraph.grid_dim.z;
-          }
-          if (d == output_map.x) {
-            producer_partition[d] = pre_op->bgraph.grid_dim.x;
-          }
-          if (d == output_map.y) {
-            producer_partition[d] = pre_op->bgraph.grid_dim.y;
-          }
-          if (d == output_map.z) {
-            producer_partition[d] = pre_op->bgraph.grid_dim.z;
-          }
-          printf("producer %d vs consumer %d.\n", producer_partition[d], consumer_partition[d]);
-        }
-        // Step 2.2: create events and add tasks
-        // number of events is the product of gcd of producer/consumer
-        std::vector<int> event_dims(megakernel::config::MAX_TENSOR_DIMS, 1);
-        for (int d = 0; d < megakernel::config::MAX_TENSOR_DIMS; d++) {
-          event_dims[d] = std::gcd(producer_partition[d], consumer_partition[d]);
-          // // CJM hardcode
-          // if (d==1) {
-          //   event_dims[d] = 76;
-          // }
-          printf("event_dims %d .\n", event_dims[d]);
-        }
-        // dfs_create_events_add_tasks
-        dfs_create_events_add_tasks(task_type,
-                                    0,                       /*depth*/
-                                    my_gpu_id,               /*my_gpu_id*/
-                                    event_dims,              /*event_dims*/
-                                    input_map,               /*input_map*/
-                                    output_map,              /*output_map*/
-                                    bgraph.grid_dim,         /*consumer_grid_dim*/
-                                    pre_op->bgraph.grid_dim, /*producer_grid_dim*/
-                                    dim3(0, 0, 0),           /*consumer_lo_bid*/
-                                    bgraph.grid_dim,         /*consumer_hi_bid*/
-                                    dim3(0, 0, 0),           /*producer_lo_bid*/
-                                    pre_op->bgraph.grid_dim, /*producer_hi_bid*/
                                     all_events,
                                     all_tasks,
                                     tasks,        /*cur_op_tasks*/
