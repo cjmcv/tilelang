@@ -238,16 +238,16 @@ template <typename T,
     int O_STRIDE = N,
     int PIPE_MAX = 3,
     bool FUSE_RES = false>
-    __device__ __forceinline__ void linear_kernel(const int bx, const int by, const int bz,
+    __device__ __forceinline__ void linear_kernel_<name_suffix>(const int bx, const int by, const int bz,
                                                 const void* __restrict__ input_ptr,
                                                 const void* __restrict__ weight_ptr,
                                                 const void* __restrict__ residual_ptr,
                                                 void* __restrict__ output_ptr,
                                                 int num_active_tokens,
                                                 bool residual) {
-  assert(THREAD_NUM==<threads>);
-  assert(TILE_DIM_X==<BLOCK_N>); assert(TILE_DIM_Y==<BLOCK_M>); assert(TILE_DIM_Z==<BLOCK_K>);
-  assert(M==<M>); assert(N==<N>); assert(K==<K>);
+  static_assert(THREAD_NUM==<threads>);
+  static_assert(TILE_DIM_X==<BLOCK_N>); static_assert(TILE_DIM_Y==<BLOCK_M>); static_assert(TILE_DIM_Z==<BLOCK_K>);
+  static_assert(M==<M>); static_assert(N==<N>); static_assert(K==<K>);
   
   const <dtype>* __restrict__ A = static_cast<const <dtype>* __restrict__>(input_ptr);
   const <dtype>* __restrict__ B = static_cast<const <dtype>* __restrict__>(weight_ptr);
@@ -261,6 +261,7 @@ template <typename T,
         # gridDim_x, gridDim_y = self.get_grid_dims(self.M, self.N, BLOCK_M, BLOCK_N)
         # print(f"gridDim: ({gridDim_x}, {gridDim_y})")
         
+        
         head_str = head_str.replace('<threads>', str(threads))
         head_str = head_str.replace('<BLOCK_M>', str(BLOCK_M))
         head_str = head_str.replace('<BLOCK_N>', str(BLOCK_N)) 
@@ -268,6 +269,7 @@ template <typename T,
         head_str = head_str.replace('<M>', str(self.M))
         head_str = head_str.replace('<N>', str(self.N)) 
         head_str = head_str.replace('<K>', str(self.K)) 
+        head_str = head_str.replace('<name_suffix>', str(self.M)+"_"+str(self.N)+"_"+str(self.K))
         if self.dtype == T.bfloat16:
             dtype = "bfloat16"
         else:

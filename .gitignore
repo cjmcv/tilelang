@@ -9,6 +9,7 @@ a.out
 gen/
 core.cpp
 trace.json
+abc.txt
 
 # Precompiled Headers
 *.gch

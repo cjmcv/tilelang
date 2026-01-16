@@ -35,7 +35,7 @@ pushd demo && python micro_test.py && popd
 
 # 4. megakernel 编译
 python megakernel_setup.py build_ext --inplace
-pushd demo && python fused_half_mlp.py && popd
+pushd demo && python fused_mlp.py && popd
 
 # 清submodule
 git submodule deinit -f 3rdparty/tvm/

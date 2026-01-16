@@ -923,6 +923,7 @@ class PersistentKernel:
         output: DTensor,
         grid_dim: tuple,
         tile_dim: tuple,
+        sync_mode: tuple,
     ):
         # Currently assume that input/output
         assert input.num_dims == 2  # (batch_size, hidden_size / world_size)
@@ -932,8 +933,8 @@ class PersistentKernel:
         # tb_graph.new_input(input, (-1, -1, -1), True)
         # tb_graph.new_input(weight, (0, -1, -1), True)
         # tb_graph.new_input(output, (1, -1, -1), True)
-        tb_graph.new_input(input, (-1, -1, -1), True)
-        tb_graph.new_input(weight, (-1, -1, -1), True)
+        tb_graph.new_input(input, sync_mode, True)
+        tb_graph.new_input(weight, sync_mode, True)
         tb_graph.new_input(output, (-1, -1, -1), True)
         self.kn_graph.customized([input, weight, output], tb_graph)
 
@@ -1040,13 +1041,14 @@ class PersistentKernel:
         input: DTensor,
         output: DTensor,
         grid_dim: tuple,
-        block_dim: tuple,
+        tile_dim: tuple,
+        sync_mode: tuple, 
     ):
         # Currently assume that input/output
         assert input.num_dims == 2 # (batch_size, 2 * intermediate_size)
         assert output.num_dims == 2 # (batch_size, intermediate_size)
-        tb_graph = TBGraph(CyTBGraph(grid_dim, block_dim, 128, 64)) # CJM_TODO: thread_num应由megakernel初始化时指定，不能更改
-        tb_graph.new_input(input, (-1, -1, -1), True)
+        tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128, 64)) # CJM_TODO: thread_num应由megakernel初始化时指定，不能更改
+        tb_graph.new_input(input, sync_mode, True)
         tb_graph.new_input(output, (-1, -1, -1), True)
         self.kn_graph.customized([input, output], tb_graph)
         self.kn_graph.register_task(tb_graph, "silu_mul" if self.target_cc == 90 else "silu_mul")

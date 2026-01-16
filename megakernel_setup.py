@@ -73,5 +73,6 @@ setup(name='megakernel',
       #**setup_args,
       )
 
+print("[megakernel] Setup Success!")
 # python cython_setup.py build_ext --inplace
 # python -c "import megakernel"

@@ -57,15 +57,25 @@ if __name__ == "__main__":
         input=x,
         weight=w,
         output=mlp_mid,
-        grid_dim=(4, 1, 1), tile_dim=(128, 64, 128)
+        grid_dim=(4, 4, 1), tile_dim=(128, 64, 128),
+        sync_mode=(0, 0, 0),
     )
     # silu_mul_out = mpk.new_tensor(dims=(max_batch_size, intermediate_size), dtype=mi.bfloat16, name="silu_mul_out", io_category="cuda_tensor")
     mpk.silu_mul_layer(
         input=mlp_mid,
         output=silu_mul_out,
         grid_dim=(2, 1, 1),
+        tile_dim=(128, 1, 1),
+        sync_mode=(0, 0, 0)
+    )
+    mpk.linear_layer(
+        input=silu_mul_out,
+        weight=w_down_proj,
+        output=mlp_out,
+        grid_dim=(gridsize[2], 1, 1),    # (2560) / 128 = 40 / 20
         block_dim=(128, 1, 1),
     )
+        
     layers.compile_load(args.nc, args.output_dir)
     
     # # ###

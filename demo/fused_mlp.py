@@ -43,9 +43,6 @@ if __name__ == "__main__":
     w_down_proj_torch = torch.randn((hidden_size, intermediate_size), dtype=torch.bfloat16, device="cuda")
     out_torch = torch.zeros((max_batch_size, hidden_size), dtype=torch.bfloat16, device="cuda")
     
-    # (38, 19, 20) => 512, 512, 128 => 19456/38, 9728/19, 2560/20
-    # (76, 38, 40) => 256, 256, 64 => 19456/76, 9728/38, 2560/40
-    gridsize = [152, 76, 20] # 19456/128, 9728/128, 2560/128, 128是TILE_DIM_X
     x = mpk.attach_input(torch_tensor=x_torch, name="in")
     w_gatedup = mpk.attach_input(torch_tensor=w_gatedup_torch, name="w_gatedup")
     w_down_proj = mpk.attach_input(torch_tensor=w_down_proj_torch, name="w_down_proj")
@@ -58,8 +55,8 @@ if __name__ == "__main__":
         input=x,
         weight=w_gatedup,
         output=mlp_mid,
-        grid_dim=(gridsize[0], 1, 1),
-        block_dim=(128, 1, 1),
+        grid_dim=(152, 1, 1), tile_dim=(128, 64, 128),
+        sync_mode=(0, 0, 0),
     )
     
     # silu_mul_out_torch = torch.zeros((max_batch_size, intermediate_size), dtype=torch.bfloat16, device="cuda")
@@ -69,18 +66,17 @@ if __name__ == "__main__":
     mpk.silu_mul_layer(
         input=mlp_mid,
         output=silu_mul_out,
-        grid_dim=(gridsize[1], 1, 1),
-        block_dim=(128, 1, 1),
+        grid_dim=(76, 1, 1), tile_dim=(128, 1, 1),
+        sync_mode=(0, 0, 0),
     )
 
     mpk.linear_layer(
         input=silu_mul_out,
         weight=w_down_proj,
         output=mlp_out,
-        grid_dim=(gridsize[2], 1, 1),    # (2560) / 128 = 40 / 20
-        block_dim=(128, 1, 1),
+        grid_dim=(20, 1, 1), tile_dim=(128, 64, 64),
+        sync_mode=(0, 0, 0),
     )
-
     layers.compile_load(args.nc, args.output_dir)
     
     ###

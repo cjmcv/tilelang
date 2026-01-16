@@ -79,31 +79,31 @@ public:
       tensor.dim[i] = dtensor.dim[i];
     }
 
-    for (int d = 0; d < 3; d++) {
-      int dim_idx = -1;
-      int dim_div = 1;
-      if (d == 0 && grid_dim.x > 1) {
-        dim_idx = input_map.x;
-        dim_div = grid_dim.x;
-      }
-      if (d == 1 && grid_dim.y > 1) {
-        dim_idx = input_map.y;
-        dim_div = grid_dim.y;
-      }
-      if (d == 2 && grid_dim.z > 1) {
-        dim_idx = input_map.z;
-        dim_div = grid_dim.z;
-      }
-      if (dim_idx >= 0) {
-        assert(tensor.dim[dim_idx] > 0);
-        // assert(tensor.dim[dim_idx] % dim_div == 0);
-        if (tensor.dim[dim_idx] % dim_div != 0) {
-          fprintf(stderr, "(tensor.dim[dim_idx] %% dim_div != 0): [tensor.dim[%d]=%d, dim_div=%d]\n", dim_idx, tensor.dim[dim_idx], dim_div);
-          abort();
-        }
-        tensor.dim[dim_idx] /= dim_div;
-      }
-    }
+    // for (int d = 0; d < 3; d++) {
+    //   int dim_idx = -1;
+    //   int dim_div = 1;
+    //   if (d == 0 && grid_dim.x > 1) {
+    //     dim_idx = input_map.x;
+    //     dim_div = grid_dim.x;
+    //   }
+    //   if (d == 1 && grid_dim.y > 1) {
+    //     dim_idx = input_map.y;
+    //     dim_div = grid_dim.y;
+    //   }
+    //   if (d == 2 && grid_dim.z > 1) {
+    //     dim_idx = input_map.z;
+    //     dim_div = grid_dim.z;
+    //   }
+    //   if (dim_idx >= 0) {
+    //     assert(tensor.dim[dim_idx] > 0);
+    //     // assert(tensor.dim[dim_idx] % dim_div == 0);
+    //     if (tensor.dim[dim_idx] % dim_div != 0) {
+    //       fprintf(stderr, "(tensor.dim[dim_idx] %% dim_div != 0): [tensor.dim[%d]=%d, dim_div=%d]\n", dim_idx, tensor.dim[dim_idx], dim_div);
+    //       abort();
+    //     }
+    //     tensor.dim[dim_idx] /= dim_div;
+    //   }
+    // }
 
     tensor.owner_op = this;
     tensor.owner_ts_idx = 0;

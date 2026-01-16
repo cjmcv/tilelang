@@ -23,17 +23,18 @@ template <typename T,
     int O_STRIDE = N,
     int PIPE_MAX = 3,
     bool FUSE_RES = false>
-    __device__ __forceinline__ void linear_kernel(const int bx, const int by, const int bz,
+    __device__ __forceinline__ void linear_kernel_1_19456_2560(const int bx, const int by, const int bz,
                                                 const void* __restrict__ input_ptr,
                                                 const void* __restrict__ weight_ptr,
                                                 const void* __restrict__ residual_ptr,
                                                 void* __restrict__ output_ptr,
                                                 int num_active_tokens,
                                                 bool residual) {
-  assert(THREAD_NUM==128);
-  assert(TILE_DIM_X==128); assert(TILE_DIM_Y==64); assert(TILE_DIM_Z==128);
-  assert(M==1); assert(N==19456); assert(K==2560);
+  static_assert(THREAD_NUM==128);
+  static_assert(TILE_DIM_X==128); static_assert(TILE_DIM_Y==64); static_assert(TILE_DIM_Z==128);
+  static_assert(M==1); static_assert(N==19456); static_assert(K==2560);
   
+  // printf("linear_kernel: (%d, %d, %d)-(%d, %d, %d).\n", bx, by, bz, blockIdx.x, blockIdx.y, blockIdx.z);
   const bfloat16* __restrict__ A = static_cast<const bfloat16* __restrict__>(input_ptr);
   const bfloat16* __restrict__ B = static_cast<const bfloat16* __restrict__>(weight_ptr);
   const bfloat16* __restrict__ C = static_cast<const bfloat16* __restrict__>(output_ptr);
@@ -119,9 +120,8 @@ template <typename T,
 
 } // kernel
 // Strategy: linear_gemm_tl_1_19456_2560
-// selected_hparams: [64, 128, 128, 2, 128, <GemmWarpPolicy.Square: 0>, True].
-// grid_dim: {'blockIdx.x': 152, 'blockIdx.y': 1, 'blockIdx.z': 1}.
-// block_dim: {'threadIdx.x': 128, 'threadIdx.y': 1, 'threadIdx.z': 1}.
+// selected_hparams: [64, 128, 128, 2, 128, 0, True].
 // smem: 98304 bytes.
 // use_cooperative_groups: 0.
-// latency: 0.62914, idx: 24
+// grid_dim=(152, 1, 1), tile_dim=(128, 64, 128).
+// block_dim=(128, 1, 1).
