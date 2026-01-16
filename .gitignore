@@ -9,6 +9,7 @@ a.out
 gen/
 core.cpp
 trace.json
+*.perfetto-trace
 abc.txt
 
 # Precompiled Headers

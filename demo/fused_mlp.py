@@ -1,4 +1,4 @@
-
+import os
 import torch
 import argparse
 import megakernel as mi
@@ -10,7 +10,7 @@ if __name__ == "__main__":
     max_batch_size = 1
     batch_size = 1
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output-dir", default="./gen", help="Output files directory")
+    parser.add_argument("--output-dir", default=os.getenv("MEGAKERNEL_HOME", default=None)+"/demo/gen", help="Output files directory")
     parser.add_argument("--trace-name", default="qwen3", help="Perfetto trace output name")
     parser.add_argument("--profiling", action="store_true", help="Use Profiler to generate trace")
     parser.add_argument("--nc", action="store_true", help="no-compile: Use the specified compiled library instead of recompiling it")
@@ -57,6 +57,8 @@ if __name__ == "__main__":
         output=mlp_mid,
         grid_dim=(152, 1, 1), tile_dim=(128, 64, 128),
         sync_mode=(0, 0, 0),
+        # grid_dim=(8, 8, 1), tile_dim=(128, 64, 128),
+        # sync_mode=(0, 0, 0),
     )
     
     # silu_mul_out_torch = torch.zeros((max_batch_size, intermediate_size), dtype=torch.bfloat16, device="cuda")
@@ -67,7 +69,9 @@ if __name__ == "__main__":
         input=mlp_mid,
         output=silu_mul_out,
         grid_dim=(76, 1, 1), tile_dim=(128, 1, 1),
-        sync_mode=(0, 0, 0),
+        sync_mode=(2, 0, 0),
+        # grid_dim=(2, 4, 1), tile_dim=(128, 1, 1),
+        # sync_mode=(2, 0, 0),
     )
 
     mpk.linear_layer(
@@ -76,6 +80,8 @@ if __name__ == "__main__":
         output=mlp_out,
         grid_dim=(20, 1, 1), tile_dim=(128, 64, 64),
         sync_mode=(0, 0, 0),
+        # grid_dim=(8, 1, 1), tile_dim=(128, 64, 64),
+        # sync_mode=(0, 0, 0),
     )
     layers.compile_load(args.nc, args.output_dir)
     
@@ -89,13 +95,13 @@ if __name__ == "__main__":
         
     ref_output = ref_run()
     mpk_output = out_torch[:batch_size]
+
+    for _ in range(100):
+        graph.replay()
+    mpk_run()
+    ##
     
-    # mpk_run()
-    # for _ in range(100):
-    #     graph.replay()
-    ###
-    
-    reporter.generate_report(mpk_run, mpk_output, splitk, 
-                            graph.replay, ref_output, 
-                            warnup_iter=100, test_iter=200, 
-                            allclose_iter=5, print_all=False)
+    # reporter.generate_report(mpk_run, mpk_output, splitk, 
+    #                         graph.replay, ref_output, 
+    #                         warnup_iter=100, test_iter=200, 
+    #                         allclose_iter=5, print_all=False)

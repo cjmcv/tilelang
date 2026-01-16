@@ -668,21 +668,86 @@ private:
       }      
     }
     else if (fence_mode == 1) {
-      // x轴均分
+      // 沿着x轴均分, y轴和z轴则all对all
+      // 如[4,8]-[2,1] => (0-1,0-7)-(0,0), (2-3,0-7)-(1,0)
+      //   [4,8]-[4,1] => (0,0-7)-(0,0), (1,0-7)-(1,0), (2,0-7)-(2,0), (3,0-7)-(3,0)
+      //   [4,8]-[2,8] => (0-1,0-7)-(0,0-7), (2-3,0-7)-(1,0-7)
+      //   [4,8]-[2,4] => (0-1,0-7)-(0,0-3), (2-3,0-7)-(1,0-3)
+      int producer_step_x, consumer_step_x;
+      if (producer_grid_dim.x >= consumer_grid_dim.x) {
+        assert(producer_grid_dim.x % consumer_grid_dim.x == 0);
+        producer_step_x = producer_grid_dim.x / consumer_grid_dim.x;
+        consumer_step_x = 1;
+        event_num = consumer_grid_dim.x;
+      }
+      else {
+        assert(consumer_grid_dim.x % producer_grid_dim.x == 0);
+        consumer_step_x = consumer_grid_dim.x / producer_grid_dim.x;
+        producer_step_x = 1;
+        event_num = producer_grid_dim.x;
+      }
       
-      // for (size_t i=0; i<event_num; i++) {
-      //   std::vector<int> producer;
-      //   std::vector<int> consumer;
-      //   for (size_t j=0; j<producer_group_size; j++)
-      //     producer.push_back(i+j);
-      //   for (size_t j=0; j<consumer_group_size; j++)
-      //     consumer.push_back(i+j);
-        
-      //   std::pair<std::vector<int>, std::vector<int>> p{producer, consumer};
-      //   pv.push_back(p);
-      // }   
+      for (size_t i=0; i<event_num; i++) {
+        dim3 bid;
+        std::vector<dim3> producer;
+        std::vector<dim3> consumer;
+        for (bid.x = i*producer_step_x; bid.x < i*producer_step_x+producer_step_x; bid.x++) {
+          for (bid.y = 0; bid.y < producer_grid_dim.y; bid.y++) {
+            for (bid.z = 0; bid.z < producer_grid_dim.z; bid.z++) {
+              producer.push_back(bid);
+            }
+          }
+        }
+        for (bid.x = i*consumer_step_x; bid.x < i*consumer_step_x+consumer_step_x; bid.x++) {
+          for (bid.y = 0; bid.y < consumer_grid_dim.y; bid.y++) {
+            for (bid.z = 0; bid.z < consumer_grid_dim.z; bid.z++) {
+              consumer.push_back(bid);
+            }
+          }
+        }
+        std::pair<std::vector<dim3>, std::vector<dim3>> p{producer, consumer};
+        pv.push_back(p);
+      }
     }
-    
+    else if (fence_mode == 2) {
+      // 沿着x轴跨一半后均分, y轴和z轴则all对all
+      // silu_mul专用
+      // 如[4,8]-[2,1] => (0/2,0-7)-(0,0), (1/3,0-7)-(1,0)
+      //   [8,8]-[2,1] => (01/45,0-7)-(0,0), (23/67,0-7)-(1,0),
+      //   [8,8]-[2,4] => (01/45,0-7)-(0,0-3), (23/67,0-7)-(1,0-3),
+      assert(producer_grid_dim.x > consumer_grid_dim.x);
+      assert(producer_grid_dim.x % consumer_grid_dim.x == 0);
+
+      int producer_mid_x = producer_grid_dim.x / 2;
+      int producer_step_x = producer_grid_dim.x / consumer_grid_dim.x / 2;
+      event_num = consumer_grid_dim.x;
+      for (size_t i=0; i<event_num; i++) {
+        dim3 bid;
+        std::vector<dim3> producer;
+        std::vector<dim3> consumer;
+        for (bid.x = i*producer_step_x; bid.x < i*producer_step_x+producer_step_x; bid.x++) {
+          for (bid.y = 0; bid.y < producer_grid_dim.y; bid.y++) {
+            for (bid.z = 0; bid.z < producer_grid_dim.z; bid.z++) {
+              producer.push_back(bid);
+              producer.push_back({bid.x+producer_mid_x, bid.y, bid.z});
+            }
+          }
+        }
+        for (bid.x = i; bid.x < i+1; bid.x++) {
+          for (bid.y = 0; bid.y < consumer_grid_dim.y; bid.y++) {
+            for (bid.z = 0; bid.z < consumer_grid_dim.z; bid.z++) {
+              consumer.push_back(bid);
+            }
+          }
+        }
+        std::pair<std::vector<dim3>, std::vector<dim3>> p{producer, consumer};
+        pv.push_back(p);
+      }
+    }
+    else {
+      printf("fence_mode (%d) is not supported!\n", fence_mode);
+    }
+
     // 使用映射信息构建当前节点task，并填充上一节点task的trigger event
     for (size_t i=0; i<event_num; i++) {
       // 一个新的event，之前的最后一个task的下一位id就是当前event的第一个task

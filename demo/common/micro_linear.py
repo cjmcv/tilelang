@@ -249,9 +249,9 @@ template <typename T,
   static_assert(TILE_DIM_X==<BLOCK_N>); static_assert(TILE_DIM_Y==<BLOCK_M>); static_assert(TILE_DIM_Z==<BLOCK_K>);
   static_assert(M==<M>); static_assert(N==<N>); static_assert(K==<K>);
   
-  const <dtype>* __restrict__ A = static_cast<const <dtype>* __restrict__>(input_ptr);
-  const <dtype>* __restrict__ B = static_cast<const <dtype>* __restrict__>(weight_ptr);
-  const <dtype>* __restrict__ C = static_cast<const <dtype>* __restrict__>(output_ptr);
+  const <dtype>* __restrict__ A = static_cast<const <dtype>*>(input_ptr);
+  const <dtype>* __restrict__ B = static_cast<const <dtype>*>(weight_ptr);
+  const <dtype>* __restrict__ C = static_cast<const <dtype>*>(output_ptr);
 '''     
         if (isinstance(self.strategy, _GemvStrategy)):
             BLOCK_N, reduce_threads = selected_hparams

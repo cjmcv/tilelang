@@ -1347,7 +1347,6 @@ class PersistentKernel:
         so_path = os.path.join(output_dir, "test.cpython-38-x86_64-linux-gnu.so")
         self.kn_graph.visualize(os.path.join(output_dir, "kn_graph"))
         
-        print("helloooooooooooooo")
         # if (kernel_id == 1) {
         if 1:
             plugin_code = self.gen_plugin_code()
