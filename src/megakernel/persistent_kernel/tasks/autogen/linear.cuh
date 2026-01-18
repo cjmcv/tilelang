@@ -1,5 +1,5 @@
 #include "linear_gemm_tl_1_19456_2560_top0.cuh"
-#include "linear_gemm_tl_1_2560_9728_top0.cuh"
+#include "linear_gemm_tl_1_2560_9728_top9.cuh"
 
 namespace kernel {
 

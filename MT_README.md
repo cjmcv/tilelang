@@ -44,10 +44,7 @@ rm -rf .git/modules/3rdparty/tvm/
 git submodule add https://github.com/apache/tvm.git 3rdparty/tvm
 
 # TODO
-修改 register_mugraph / dfs_create_events_add_tasks，根据input_map / output_map 改成手动指定映射关系。
-bx, bx+gridDIm.x -> bx
-by -> by
-bz -> bz
+
 
 
 # 备注

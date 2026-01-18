@@ -280,7 +280,7 @@ template <typename T,
   
   const <dtype>* __restrict__ A = static_cast<const <dtype>*>(input_ptr);
   const <dtype>* __restrict__ B = static_cast<const <dtype>*>(weight_ptr);
-  const <dtype>* __restrict__ C = static_cast<const <dtype>*>(output_ptr);
+  <dtype>* __restrict__ C = static_cast<<dtype>*>(output_ptr);
 '''     
         if (isinstance(self.strategy, _GemvStrategy)):
             BLOCK_N, reduce_threads = selected_hparams

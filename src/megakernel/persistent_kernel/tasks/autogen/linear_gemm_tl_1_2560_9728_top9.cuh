@@ -37,7 +37,7 @@ template <typename T,
   
   const bfloat16_t* __restrict__ A = static_cast<const bfloat16_t*>(input_ptr);
   const bfloat16_t* __restrict__ B = static_cast<const bfloat16_t*>(weight_ptr);
-  const bfloat16_t* __restrict__ C = static_cast<const bfloat16_t*>(output_ptr);
+  bfloat16_t* __restrict__ C = static_cast<bfloat16_t*>(output_ptr);
   extern __shared__ __align__(1024) uchar buf_dyn_shmem[];
   float C_local[32];
   bfloat16_t A_local[16];

@@ -78,7 +78,7 @@ if __name__ == "__main__":
         input=silu_mul_out,
         weight=w_down_proj,
         output=mlp_out,
-        grid_dim=(40, 1, 1), tile_dim=(64, 64, 64),
+        grid_dim=(40, 1, 4), tile_dim=(64, 64, 64),
         sync_mode=(0, 0, 0),
         # grid_dim=(8, 1, 1), tile_dim=(128, 64, 64),
         # sync_mode=(0, 0, 0),
