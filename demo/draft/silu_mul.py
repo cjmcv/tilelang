@@ -11,8 +11,6 @@ import tvm
 from tvm.tir.stmt_functor import ir_transform
 
 from common.pkt_util import TestUtil, TorchRef
-from common.micro_base import HparamSelectMode
-from common.micro_linear import MicroLinearStrategy, MicroLinear
 
 @tilelang.jit(out_idx=[-1])
 def silu_mul(M, N, BLOCK_M, BLOCK_N, dtype="bfloat16"):
@@ -60,72 +58,8 @@ def test_silu_mul():
     torch.testing.assert_close(c, ref_c, rtol=1e-1, atol=1e-1)
     
     # benchmark
-    profiler = kernel.get_profiler()
-    latency = profiler.do_bench(backend="cupti")
+    latency = do_bench(lambda: kernel(a), warmup=500, backend="cupti")
     print(f"tilelang Latency: {latency}ms")
-    
-def test_gemm():
-    M = 64
-    # N = 19456
-    # K = 2560
-    N = 2560
-    K = 9728
-    # config = [64,64,64,2,128,0,true]
-    linear = MicroLinear(MicroLinearStrategy.GEMM, M,N,K, dtype=T.bfloat16, accum_dtype=T.float32)
-    kernel = linear.get_kernel(HparamSelectMode.HEURISTIC) # HEURISTIC, TUNING, TUNED
-
-    a = torch.randn((M, K), dtype=torch.bfloat16, device="cuda")
-    b = torch.randn((N, K), dtype=torch.bfloat16, device="cuda")
-
-    c = kernel(a, b)
-    ref_c = TorchRef.linear(a, b)
-
-    print("c:")
-    print(c)
-
-    print("ref_c:")
-    print(ref_c)
-    
-    torch.testing.assert_close(c, ref_c, rtol=1e-1, atol=1e-1)
-
-    # benchmark
-    profiler = kernel.get_profiler()
-    latency = profiler.do_bench(backend="cupti")
-    print(f"tilelang Latency: {latency}ms")
-
-def test_silu_mul_gemm():
-    M = 1
-    # N = 19456
-    # K = 2560
-    N = 2560
-    K = 9728
-    # config = [64,64,64,2,128,0,true]
-    linear = MicroLinear(MicroLinearStrategy.SILU_MUL_GEMM, M,N,K, dtype=T.bfloat16, accum_dtype=T.float32)
-    kernel = linear.get_kernel(HparamSelectMode.HEURISTIC) # HEURISTIC, TUNING, TUNED
-
-    a = torch.randn((M, K*2), dtype=torch.bfloat16, device="cuda")
-    b = torch.randn((N, K), dtype=torch.bfloat16, device="cuda")
-
-    c = kernel(a, b)
-    
-    def torch_ref(a, b):
-        a2 = TorchRef.silu_and_mul(a)
-        return TorchRef.linear(a2, b)
-
-    print("c:")
-    print(kernel(a, b))
-
-    print("ref_c:")
-    print(torch_ref(a, b))
-    
-    # torch.testing.assert_close(c, ref_c, rtol=1e-1, atol=1e-1)
-
-    # benchmark
-    latency = do_bench(lambda: kernel(a, b), warmup=500, backend="cupti")
-    torch_latency = do_bench(lambda: torch_ref(a, b), warmup=500, backend="cupti")
-    print(f"tilelang Latency: {latency}ms vs {torch_latency}(torch) ms")
     
 if __name__ == "__main__":
-    # test_silu_mul()
-    # test_gemm()
-    test_silu_mul_gemm()
+    test_silu_mul()

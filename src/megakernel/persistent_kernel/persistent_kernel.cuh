@@ -433,8 +433,7 @@ __device__ __forceinline__ void execute_worker(RuntimeConfig config) {
               last_task_pos[1],
               get_task_position_index(task_ids[i]),
               config.all_tasks[get_task_position_index(task_ids[i])].task_type,
-              config.all_tasks[get_task_position_index(task_ids[i])]
-                  .trigger_event);
+              config.all_tasks[get_task_position_index(task_ids[i])].trigger_event);
         }
 #endif
         next_task_pos[queue_idx] += num_loaded_tasks;

@@ -390,13 +390,13 @@ public:
       int variant_id = task_register->register_single_batch_extend_attention_task(customized->bgraph, params);
       task_config[op] = std::make_tuple(7, 1, TASK_SINGLE_BATCH_EXTEND_ATTENTION, variant_id);
     } else if (name == "linear") {
-      int variant_id = task_register->register_linear_task(customized->bgraph, params, false /*with_residual*/, 0);
+      int variant_id = task_register->register_linear_task(customized->bgraph, params, false /*with_residual*/, false /*with_silu_mul*/);
       task_config[op] = std::make_tuple(2, 1, TASK_LINEAR, variant_id);
-    } else if (name == "linear_postfix") {
-      int variant_id = task_register->register_linear_task(customized->bgraph, params, false /*with_residual*/, 1);
-      task_config[op] = std::make_tuple(2, 1, TASK_LINEAR_POSTFIX, variant_id);
+    } else if (name == "silu_mul_linear") {
+      int variant_id = task_register->register_linear_task(customized->bgraph, params, false /*with_residual*/, true /*with_silu_mul*/);
+      task_config[op] = std::make_tuple(2, 1, TASK_LINEAR, variant_id);
     } else if (name == "linear_with_residual") {
-      int variant_id = task_register->register_linear_task(customized->bgraph, params, true /*with_residual*/, 0);
+      int variant_id = task_register->register_linear_task(customized->bgraph, params, true /*with_residual*/, false /*with_silu_mul*/);
       task_config[op] = std::make_tuple(3, 1, TASK_LINEAR_WITH_RESIDUAL, variant_id);
     } else if (name == "silu_mul") {
       int variant_id = task_register->register_silu_mul_task(customized->bgraph, params);
@@ -710,15 +710,19 @@ private:
       //   [8,8]-[2,1] => (01/45,0-7)-(0,0), (23/67,0-7)-(1,0),
       //   [8,8]-[2,4] => (01/45,0-7)-(0,0-3), (23/67,0-7)-(1,0-3),
       assert(producer_grid_dim.x > consumer_grid_dim.x);
-      assert(producer_grid_dim.x % consumer_grid_dim.x == 0);
-
+      // assert(producer_grid_dim.x % consumer_grid_dim.x == 0);
       int producer_mid_x = producer_grid_dim.x / 2;
-      int producer_step_x = producer_grid_dim.x / consumer_grid_dim.x / 2;
-      event_num = consumer_grid_dim.x;
+      int gcd = std::gcd(producer_mid_x, consumer_grid_dim.x); // 76, 20 => 4 => 76/4=19，20/4=5 => 19 vs 5
+      int producer_step_x = producer_mid_x / gcd;
+      int consumer_step_x = consumer_grid_dim.x / gcd;
+      // printf("check: %f, %d.\n", producer_step_x, window);
+      event_num = gcd;
       for (size_t i=0; i<event_num; i++) {
         dim3 bid;
         std::vector<dim3> producer;
         std::vector<dim3> consumer;
+
+        // printf("(%d, %d).\n", start, end);
         for (bid.x = i*producer_step_x; bid.x < i*producer_step_x+producer_step_x; bid.x++) {
           for (bid.y = 0; bid.y < producer_grid_dim.y; bid.y++) {
             for (bid.z = 0; bid.z < producer_grid_dim.z; bid.z++) {
@@ -727,7 +731,7 @@ private:
             }
           }
         }
-        for (bid.x = i; bid.x < i+1; bid.x++) {
+        for (bid.x = i*consumer_step_x; bid.x < i*consumer_step_x+consumer_step_x; bid.x++) {
           for (bid.y = 0; bid.y < consumer_grid_dim.y; bid.y++) {
             for (bid.z = 0; bid.z < consumer_grid_dim.z; bid.z++) {
               consumer.push_back(bid);
@@ -903,7 +907,7 @@ private:
           }
         }
 
-        // Step 2.2: create events and add tasks
+        // Step 2.2: create events and add tasks - CJM
         // dfs_create_events_add_tasks
         create_events_add_tasks(task_type,
                                     0,                       /*depth*/
@@ -1237,8 +1241,7 @@ private:
               {"variant_id", 0},
               {"inputs", {}},
               {"outputs", {}},
-              {"trigger_event",
-                get_event_id(my_gpu_id, 1 /*event_pos*/, false /*is_nvshmem*/)},
+              {"trigger_event", get_event_id(my_gpu_id, 1 /*event_pos*/, false /*is_nvshmem*/)},
               {"dependent_event", EVENT_INVALID_ID},
               {"request_id", -1},
               {"expert_offset", -1},
@@ -1531,11 +1534,10 @@ private:
     task_type_to_name[TASK_ATTENTION_1] = "TASK_ATTENTION_1";
     task_type_to_name[TASK_SILU_MUL] = "TASK_SILU_MUL";
     task_type_to_name[TASK_IDENTITY] = "TASK_IDENTITY";
-    task_type_to_name[TASK_SILU_MUL_LINEAR_WITH_RESIDUAL] =
-        "TASK_SILU_MUL_LINEAR_WITH_RESIDUAL";
+    task_type_to_name[TASK_SILU_MUL_LINEAR_WITH_RESIDUAL] = "TASK_SILU_MUL_LINEAR_WITH_RESIDUAL";
     task_type_to_name[TASK_LINEAR] = "TASK_LINEAR";
     task_type_to_name[TASK_LINEAR_WITH_RESIDUAL] = "TASK_LINEAR_WITH_RESIDUAL";
-    task_type_to_name[TASK_LINEAR_POSTFIX] = "TASK_LINEAR_POSTFIX";
+    task_type_to_name[TASK_SILU_MUL_LINEAR] = "TASK_SILU_MUL_LINEAR";
     task_type_to_name[TASK_ARGMAX_PARTIAL] = "TASK_ARGMAX_PARTIAL";
     task_type_to_name[TASK_ARGMAX_REDUCE] = "TASK_ARGMAX_REDUCE";
     task_type_to_name[TASK_NVSHMEM_COPY] = "TASK_NVSHMEM_COPY";
@@ -1543,47 +1545,36 @@ private:
     task_type_to_name[TASK_FIND_NGRAM_PARTIAL] = "TASK_FIND_NGRAM_PARTIAL";
     task_type_to_name[TASK_FIND_NGRAM_GLOBAL] = "TASK_FIND_NGRAM_GLOBAL";
     task_type_to_name[TASK_TARGET_VERIFY_GREEDY] = "TASK_TARGET_VERIFY_GREEDY";
-    task_type_to_name[TASK_SINGLE_BATCH_EXTEND_ATTENTION] =
-        "TASK_SINGLE_BATCH_EXTEND_ATTENTION";
+    task_type_to_name[TASK_SINGLE_BATCH_EXTEND_ATTENTION] = "TASK_SINGLE_BATCH_EXTEND_ATTENTION";
     task_type_to_name[TASK_PAGED_ATTENTION_1] = "TASK_PAGED_ATTENTION_1";
     task_type_to_name[TASK_LINEAR_HOPPER] = "TASK_LINEAR_HOPPER";
-    task_type_to_name[TASK_LINEAR_WITH_RESIDUAL_HOPPER] =
-        "TASK_LINEAR_WITH_RESIDUAL_HOPPER";
-    task_type_to_name[TASK_PAGED_ATTENTION_HOPPER] =
-        "TASK_PAGED_ATTENTION_HOPPER";
+    task_type_to_name[TASK_LINEAR_WITH_RESIDUAL_HOPPER] = "TASK_LINEAR_WITH_RESIDUAL_HOPPER";
+    task_type_to_name[TASK_PAGED_ATTENTION_HOPPER] = "TASK_PAGED_ATTENTION_HOPPER";
     task_type_to_name[TASK_RMS_NORM_HOPPER] = "TASK_RMS_NORM_HOPPER";
     task_type_to_name[TASK_LINEAR_SWAPAB_HOPPER] = "TASK_LINEAR_SWAPAB_HOPPER";
-    task_type_to_name[TASK_LINEAR_SWAPAB_WITH_RESIDUAL_HOPPER] =
-        "TASK_LINEAR_SWAPAB_WITH_RESIDUAL_HOPPER";
+    task_type_to_name[TASK_LINEAR_SWAPAB_WITH_RESIDUAL_HOPPER] = "TASK_LINEAR_SWAPAB_WITH_RESIDUAL_HOPPER";
     task_type_to_name[TASK_LINEAR_CUTLASS_HOPPER] = "TASK_LINEAR_CUTLASS_HOPPER";
-    task_type_to_name[TASK_LINEAR_CUTLASS_WITH_RESIDUAL_HOPPER] =
-        "TASK_LINEAR_CUTLASS_WITH_RESIDUAL_HOPPER";
+    task_type_to_name[TASK_LINEAR_CUTLASS_WITH_RESIDUAL_HOPPER] = "TASK_LINEAR_CUTLASS_WITH_RESIDUAL_HOPPER";
     task_type_to_name[TASK_SILU_MUL_HOPPER] = "TASK_SILU_MUL_HOPPER";
     task_type_to_name[TASK_EMBEDDING_HOPPER] = "TASK_EMBEDDING_HOPPER";
     task_type_to_name[TASK_LINEAR_SM100] = "TASK_LINEAR_SM100";
-    task_type_to_name[TASK_LINEAR_WITH_RESIDUAL_SM100] =
-        "TASK_LINEAR_WITH_RESIDUAL_SM100";
+    task_type_to_name[TASK_LINEAR_WITH_RESIDUAL_SM100] = "TASK_LINEAR_WITH_RESIDUAL_SM100";
     task_type_to_name[TASK_SPLITK_LINEAR_SM100] = "TASK_SPLITK_LINEAR_SM100";
     task_type_to_name[TASK_ATTN_SM100] = "TASK_ATTN_SM100";
     task_type_to_name[TASK_ARGMAX_PARTIAL_SM100] = "TASK_ARGMAX_PARTIAL_SM100";
     task_type_to_name[TASK_ARGMAX_REDUCE_SM100] = "TASK_ARGMAX_REDUCE_SM100";
     task_type_to_name[TASK_SAMPLING_SM100] = "TASK_SAMPLING_SM100";
     task_type_to_name[TASK_TENSOR_INIT] = "TASK_TENSOR_INIT";
-    task_type_to_name[TASK_MOE_TOPK_SOFTMAX_SM100] =
-        "TASK_MOE_TOPK_SOFTMAX_SM100";
+    task_type_to_name[TASK_MOE_TOPK_SOFTMAX_SM100] = "TASK_MOE_TOPK_SOFTMAX_SM100";
     task_type_to_name[TASK_MOE_W13_LINEAR_SM100] = "TASK_MOE_W13_LINEAR_SM100";
     task_type_to_name[TASK_MOE_W2_LINEAR_SM100] = "TASK_MOE_W2_LINEAR_SM100";
     task_type_to_name[TASK_MOE_MUL_SUM_ADD_SM100] = "TASK_MOE_MUL_SUM_ADD_SM100";
     task_type_to_name[TASK_MOE_W13_LINEAR_SM90] = "TASK_MOE_W13_LINEAR_SM90";
     task_type_to_name[TASK_MOE_W2_LINEAR_SM90] = "TASK_MOE_W2_LINEAR_SM90";
-    task_type_to_name[TASK_SPLITK_LINEAR_SWAPAB_HOPPER] =
-        "TASK_SPLITK_LINEAR_SWAPAB_HOPPER";
-    task_type_to_name[TASK_PAGED_ATTENTION_SPLIT_KV_SM100] =
-        "TASK_PAGED_ATTENTION_SPLIT_KV_SM100";
-    task_type_to_name[TASK_PAGED_ATTENTION_SPLIT_KV_MERGE_SM100] =
-        "TASK_PAGED_ATTENTION_SPLIT_KV_MERGE_SM100";
-    task_type_to_name[TASK_PAGED_ATTENTION_SPLIT_KV_HOPPER] =
-        "TASK_PAGED_ATTENTION_SPLIT_KV_HOPPER";
+    task_type_to_name[TASK_SPLITK_LINEAR_SWAPAB_HOPPER] = "TASK_SPLITK_LINEAR_SWAPAB_HOPPER";
+    task_type_to_name[TASK_PAGED_ATTENTION_SPLIT_KV_SM100] = "TASK_PAGED_ATTENTION_SPLIT_KV_SM100";
+    task_type_to_name[TASK_PAGED_ATTENTION_SPLIT_KV_MERGE_SM100] = "TASK_PAGED_ATTENTION_SPLIT_KV_MERGE_SM100";
+    task_type_to_name[TASK_PAGED_ATTENTION_SPLIT_KV_HOPPER] = "TASK_PAGED_ATTENTION_SPLIT_KV_HOPPER";
 
     code.e("__device__ __forceinline__");
     code.e("void _execute_task(TaskDesc const* task_desc,");

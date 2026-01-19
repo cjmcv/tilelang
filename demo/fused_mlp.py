@@ -61,28 +61,37 @@ if __name__ == "__main__":
         # sync_mode=(0, 0, 0),
     )
     
-    # silu_mul_out_torch = torch.zeros((max_batch_size, intermediate_size), dtype=torch.bfloat16, device="cuda")
-    # silu_mul_out = mpk.attach_input(torch_tensor=silu_mul_out_torch, name="silu_mul_out")
-    # mlp_out_torch = silu_mul_out_torch
-    silu_mul_out = mpk.new_tensor(dims=(max_batch_size, intermediate_size), dtype=mi.bfloat16, name="silu_mul_out", io_category="cuda_tensor")
-    mpk.silu_mul_layer(
-        input=mlp_mid,
-        output=silu_mul_out,
-        grid_dim=(76, 1, 1), tile_dim=(128, 1, 1),
-        sync_mode=(2, 0, 0),
-        # grid_dim=(2, 4, 1), tile_dim=(128, 1, 1),
-        # sync_mode=(2, 0, 0),
-    )
+    if 0:
+        # silu_mul_out_torch = torch.zeros((max_batch_size, intermediate_size), dtype=torch.bfloat16, device="cuda")
+        # silu_mul_out = mpk.attach_input(torch_tensor=silu_mul_out_torch, name="silu_mul_out")
+        # mlp_out_torch = silu_mul_out_torch
+        silu_mul_out = mpk.new_tensor(dims=(max_batch_size, intermediate_size), dtype=mi.bfloat16, name="silu_mul_out", io_category="cuda_tensor")
+        mpk.silu_mul_layer(
+            input=mlp_mid,
+            output=silu_mul_out,
+            grid_dim=(76, 1, 1), tile_dim=(128, 1, 1),
+            sync_mode=(2, 0, 0),
+            # grid_dim=(2, 4, 1), tile_dim=(128, 1, 1),
+            # sync_mode=(2, 0, 0),
+        )
 
-    mpk.linear_layer(
-        input=silu_mul_out,
-        weight=w_down_proj,
-        output=mlp_out,
-        grid_dim=(40, 1, 4), tile_dim=(64, 64, 64),
-        sync_mode=(0, 0, 0),
-        # grid_dim=(8, 1, 1), tile_dim=(128, 64, 64),
-        # sync_mode=(0, 0, 0),
-    )
+        mpk.linear_layer(
+            input=silu_mul_out,
+            weight=w_down_proj,
+            output=mlp_out,
+            grid_dim=(40, 1, 4), tile_dim=(64, 64, 64),
+            sync_mode=(0, 0, 0),
+            # grid_dim=(8, 1, 1), tile_dim=(128, 64, 64),
+            # sync_mode=(0, 0, 0),
+        )
+    else:
+        mpk.silu_mul_linear_layer(
+            input=mlp_mid,
+            weight=w_down_proj,
+            output=mlp_out,
+            grid_dim=(20, 1, 1), tile_dim=(128, 64, 64),
+            sync_mode=(2, 0, 0),
+        )
     layers.compile_load(args.nc, args.output_dir)
     
     ###

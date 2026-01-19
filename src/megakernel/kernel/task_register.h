@@ -336,7 +336,7 @@ public:
                                 code.to_string());
   }
 
-  int register_linear_task(threadblock::Graph const &bgraph, std::vector<int> const &params, bool with_residual, int postfix) {
+  int register_linear_task(threadblock::Graph const &bgraph, std::vector<int> const &params, bool with_residual, bool with_silu_mul) {
     assert(params.size() == 0);
     int batch_size = 0, output_size = 0, reduction_size = 0, output_stride = 0;
     std::vector<tb::TBInputOp *> input_ops;
@@ -364,27 +364,19 @@ public:
         static_cast<kn::KNInputOp *>(output_ops[0]->dtensor.owner_op);
     output_stride = static_cast<int>(kn_input_op->input_strides[0]);
 
+    if (with_silu_mul) {
+      reduction_size /= 2;
+    }
     megakernel::transpiler::CodeKeeper code;
-    code.inc_indent();
-    if (postfix != 0) {
-      code.e("kernel::linear_postfix_kernel<bfloat16, $, $, $, $, $, $>(",
-            batch_size,
-            output_size,
-            input_ops[0]->output_tensors[0].dim[1],
-            output_stride,
-            3,
-            with_residual);
-    }
-    else {
-      code.e("kernel::linear_kernel<bfloat16, $, $, $, $, $, $, $, $, $, $>(",
-            bgraph.thread_num, bgraph.block_dim.x, bgraph.block_dim.y, bgraph.block_dim.z, 
-            batch_size,
-            output_size,
-            reduction_size,
-            output_stride,
-            3,
-            with_residual);    
-    }
+    code.e("kernel::linear_kernel<bfloat16, $, $, $, $, $, $, $, $, $, $, $>(",
+          bgraph.thread_num, bgraph.block_dim.x, bgraph.block_dim.y, bgraph.block_dim.z, 
+          batch_size,
+          output_size,
+          reduction_size,
+          output_stride,
+          3,
+          with_residual,
+          with_silu_mul);
 
     code.e("    task_desc->bx, task_desc->by, task_desc->bz,");
     code.e("    task_desc->input_ptrs[0],");
@@ -405,12 +397,7 @@ public:
     if (with_residual) {
       return register_task_variant(TASK_LINEAR_WITH_RESIDUAL, code.to_string());
     } else {
-      if (postfix != 0) {
-        return register_task_variant(TASK_LINEAR_POSTFIX, code.to_string());  
-      }
-      else {
-        return register_task_variant(TASK_LINEAR, code.to_string());      
-      }
+      return register_task_variant(TASK_LINEAR, code.to_string());
     }
   }
   int register_silu_mul_task(threadblock::Graph const &bgraph, std::vector<int> const &params){
@@ -660,8 +647,7 @@ public:
     c.e("size_t event_index = "
         "get_event_position_index(task_desc->trigger_event);");
     c.inc_indent();
-    c.e("int gpu_id = "
-        "static_cast<int>(get_event_gpu_id(task_desc->trigger_event));");
+    c.e("int gpu_id = static_cast<int>(get_event_gpu_id(task_desc->trigger_event));");
     c.e("assert(gpu_id < runtime_config.num_gpus);");
     c.e("assert(gpu_id != runtime_config.my_gpu_id);");
     c.e("for (int i = 0; i < $; i++) {", batch_size);

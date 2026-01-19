@@ -957,31 +957,26 @@ class PersistentKernel:
         else:
             assert False
             
-    def linear_postfix_layer(
+    def silu_mul_linear_layer(
         self,
         input: DTensor,
         weight: DTensor,
         output: DTensor,
         grid_dim: tuple,
-        block_dim: tuple,
+        tile_dim: tuple,
+        sync_mode: tuple,
     ):
         # Currently assume that input/output
         assert input.num_dims == 2  # (batch_size, hidden_size / world_size)
         assert weight.num_dims == 2  # (hidden_size, hidden_size / world_size)
         assert output.num_dims == 2  # (batch_size, hidden_size)
-        tb_graph = TBGraph(CyTBGraph(grid_dim, block_dim, 1, 64))
-        # tb_graph.new_input(input,  (1, -1, -1), 1, True) # 1 跨 x 轴推进，一步size/vir_gridDim.x
-        # tb_graph.new_input(weight, (1, 0, -1), -1, True)  # 第一个 1 跨 x 轴推进，一步size/blockDim.x, 第二个0跨y轴推进，一步跨size.y/blockDim.y
-        # tb_graph.new_input(output, (0, 1, -1), -1, True) # 0 跨 y 轴推进, 一步2560
-
-        tb_graph.new_input(input, (-1, 1, -1), 1, True)
-        tb_graph.new_input(weight, (0, 1, -1), 1, True)
-        tb_graph.new_input(output, (1, -1, -1), -1, True)
-        
+        tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128, 64))
+        tb_graph.new_input(input, sync_mode, True)
+        tb_graph.new_input(weight, sync_mode, True)
+        tb_graph.new_input(output, (-1, -1, -1), True)
         self.kn_graph.customized([input, weight, output], tb_graph)
-
         if self.target_cc == 80 or self.target_cc == 89:
-            self.kn_graph.register_task(tb_graph, "linear_postfix")
+            self.kn_graph.register_task(tb_graph, "silu_mul_linear")
         else:
             assert False
 
