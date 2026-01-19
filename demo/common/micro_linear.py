@@ -111,9 +111,13 @@ class _GemvStrategy:
     
     
 class _GemmStrategy:
-    def __init__(self, M, N, K, dtype, accum_dtype):
-        self.name = "linear_gemm_tl"+f"_{M}_{N}_{K}"
-        
+    def __init__(self, strategy, M, N, K, dtype, accum_dtype):
+        self.strategy = strategy
+        if (strategy == MicroLinearStrategy.SILU_MUL_GEMM):
+            self.name = "linear_silu_mull_gemm_tl"+f"_{M}_{N}_{K}"
+        else:
+            self.name = "linear_gemm_tl"+f"_{M}_{N}_{K}"
+            
         self.M = M
         self.N = N
         self.K = K
@@ -145,14 +149,59 @@ class _GemmStrategy:
     
     def get_heuristic_hparams(self):
         # [BLOCK_M, BLOCK_N, BLOCK_K, splitk, num_stages, threads, policy, enable_rasteration]
-        return [64, 64, 64, 1, 3, 128, 0, False]
+        if self.strategy == MicroLinearStrategy.SILU_MUL_GEMM: 
+            return [64,128,64,1,2,128,0,False]
+        else:
+            return [64, 64, 64, 1, 3, 128, 0, False]
         
     def get_kernel(self, selected_hparams):
         splitk = selected_hparams[3]
         if splitk == 1:
-            return self.kernel_main(self.M, self.N, self.K, *selected_hparams, self.dtype, self.accum_dtype) 
+            if self.strategy == MicroLinearStrategy.SILU_MUL_GEMM:
+                return self.kernel_silu_mul_main(self.M, self.N, self.K, *selected_hparams, self.dtype, self.accum_dtype) 
+            else:
+                return self.kernel_main(self.M, self.N, self.K, *selected_hparams, self.dtype, self.accum_dtype) 
         else:
             return self.kernel_splitk_main(self.M, self.N, self.K, *selected_hparams, self.dtype, self.accum_dtype) 
+    
+    @tilelang.jit(out_idx=[-1])
+    def kernel_silu_mul_main(M, N, K, BLOCK_M, BLOCK_N, BLOCK_K, split_k, num_stages, thread_num, policy, enable_rasteration, dtype=T.float16, accum_dtype=T.float32):
+        
+        @T.prim_func
+        def linear(
+            A: T.Tensor((M, 2*K), dtype),
+            B: T.Tensor((N, K),   dtype),
+            C: T.Tensor((M, N),   dtype)
+        ):
+            with T.Kernel(T.ceildiv(N, BLOCK_N), T.ceildiv(M, BLOCK_M), threads=thread_num) as (bx, by):
+                A_sh  = T.alloc_shared((BLOCK_M, BLOCK_K), dtype)
+                B_sh  = T.alloc_shared((BLOCK_N, BLOCK_K), dtype)
+                C_local = T.alloc_fragment((BLOCK_M, BLOCK_N), accum_dtype)
+                C_sh = T.alloc_shared((BLOCK_M, BLOCK_N), dtype)
+
+                T.use_swizzle(panel_size=10, enable=enable_rasteration)
+                T.clear(C_local)
+                
+                # 把 silu-mul 也做进 pipeline
+                for k in T.Pipelined(T.ceildiv(K, BLOCK_K), num_stages=num_stages):
+                    left  = T.alloc_shared((BLOCK_M, BLOCK_K), dtype)
+                    right = T.alloc_shared((BLOCK_M, BLOCK_K), dtype)
+                    T.copy(A[by * BLOCK_M, k * BLOCK_K], left)
+                    T.copy(A[by * BLOCK_M, K + k * BLOCK_K], right)
+
+                    # 2. 就地 silu-mul，结果写回 A_sh
+                    for i, j in T.Parallel(BLOCK_M, BLOCK_K):
+                        x   = left[i, j].astype("float32")
+                        sig = 1.0 / (1.0 + T.exp(-x))
+                        A_sh[i, j] = (x * sig * right[i, j]).astype(dtype)
+
+                    T.copy(B[bx * BLOCK_N, k * BLOCK_K], B_sh)
+                    T.gemm(A_sh, B_sh, C_local, transpose_B=True, policy=policy)
+
+                T.copy(C_local, C_sh)
+                T.copy(C_sh, C[by * BLOCK_M, bx * BLOCK_N])
+
+        return linear
         
     @tilelang.jit(out_idx=[-1])
     def kernel_main(M, N, K, BLOCK_M, BLOCK_N, BLOCK_K, split_k, num_stages, thread_num, policy, enable_rasteration, dtype=T.float16, accum_dtype=T.float32):
@@ -234,8 +283,9 @@ class _GemmStrategy:
         return linear
     
 class MicroLinearStrategy(Enum):
-    GEMM = 0
-    GEMV = 1
+    GEMV = 0
+    GEMM = 1
+    SILU_MUL_GEMM = 2
     
 class MicroLinear(BaseMicroKernel):
     def __init__(self, strategy:MicroLinearStrategy, M, N, K, dtype=T.bfloat16, accum_dtype=T.float32):
@@ -249,7 +299,7 @@ class MicroLinear(BaseMicroKernel):
         if strategy == MicroLinearStrategy.GEMV:
             self.strategy = _GemvStrategy(M, N, K, dtype, accum_dtype)
         else:
-            self.strategy = _GemmStrategy(M, N, K, dtype, accum_dtype)
+            self.strategy = _GemmStrategy(strategy, M, N, K, dtype, accum_dtype)
         
     def get_source(self, kernel, selected_hparams):
         head_str = \
@@ -354,4 +404,9 @@ template <typename T,
         with open(file_path+".cuh", "w", encoding="utf-8") as f:
             f.write(self.get_source(kernel, selected_hparams))
             
+        # print("0:", kernel.prim_func.attrs)
+        # print("1:", kernel.adapter.params)
+        # print("2:", kernel.adapter.func)
+        # print("3:", kernel.config)
+        # print("4:", kernel.prim_func)
         return kernel
