@@ -127,7 +127,7 @@ if __name__ == "__main__":
     mpk_run()
     ##
     
-    reporter.generate_report(mpk_run, mpk_output, splitk, 
-                            graph.replay, ref_output, 
-                            warnup_iter=100, test_iter=200, 
-                            allclose_iter=5, print_all=False)
+    # reporter.generate_report(mpk_run, mpk_output, splitk, 
+    #                         graph.replay, ref_output, 
+    #                         warnup_iter=100, test_iter=200, 
+    #                         allclose_iter=5, print_all=False)

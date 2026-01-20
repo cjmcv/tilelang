@@ -37,11 +37,8 @@ class _RmsNormStrategy:
         res = []
         for m, n, thread_num in itertools.product(
            BLOCK_M, BLOCK_N, thread_nums):
-            res.append([thread_num])
+            res.append([m, n, thread_num])
         return res 
-    
-    def get_tuning_params(self):
-        return self.name, self.hparam_space, self.get_kernel
     
     def get_heuristic_hparams(self):
         # [threads]
@@ -152,39 +149,4 @@ __device__ __forceinline__ void rms_norm_kernel_<name_suffix>(const int bx, cons
         return source
     
     def get_kernel(self, mode: HparamSelectMode):
-        file_path = self.save_path+self.strategy.name
-        
-        if (mode == HparamSelectMode.TUNING):
-            latency_hparams_list = self.run_tuning(*self.strategy.get_tuning_params())
-            # Save all tuned kernels.
-            for i in range(len(latency_hparams_list)):
-                latency, selected_hparams, idx = latency_hparams_list[i]
-                kernel = self.strategy.get_kernel(selected_hparams)
-                file_name = self.save_path+f"{self.strategy.name}/"+f"{self.strategy.name}_top{i}.cuh"
-                dir_path = os.path.dirname(file_name)
-                os.makedirs(dir_path, exist_ok=True)
-                with open(file_name, "w", encoding="utf-8") as f:
-                    f.write(self.get_source(kernel, selected_hparams) + f"\n// latency: {latency}, idx: {idx}")
-                    
-            best_latency, selected_hparams, idx = latency_hparams_list[0]
-            
-        elif (mode == HparamSelectMode.TUNED):
-            latency_hparams_list = self.read_tuned_hparams_from_json(self.strategy.name)
-            best_latency, selected_hparams = latency_hparams_list[0]["latency"], latency_hparams_list[0]["hparams"]
-            print("[Tuned] selected_hparams: ", selected_hparams)
-        else:
-            selected_hparams = self.strategy.get_heuristic_hparams()
-            print("[Heuristic] selected_hparams: ", selected_hparams)
-        
-        kernel = self.strategy.get_kernel(selected_hparams)
-        kernel.export_sources(kernel_path=file_path+"_src.cuh", host_path=file_path+"_src.cpp")
-        
-        with open(file_path+".cuh", "w", encoding="utf-8") as f:
-            f.write(self.get_source(kernel, selected_hparams))
-            
-        # print("0:", kernel.prim_func.attrs)
-        # print("1:", kernel.adapter.params)
-        # print("2:", kernel.adapter.func)
-        # print("3:", kernel.config)
-        # print("4:", kernel.prim_func)
-        return kernel
+        return self.auto_get_kernel(self.get_source, self.strategy, self.save_path, mode)

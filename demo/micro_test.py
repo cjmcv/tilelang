@@ -69,7 +69,7 @@ def test_rms_norm():
     M = 1
     N = 2560
     linear = MicroRmsNorm(M,N, dtype=T.bfloat16, accum_dtype=T.float32)
-    kernel = linear.get_kernel(HparamSelectMode.HEURISTIC) # HEURISTIC, TUNING, TUNED
+    kernel = linear.get_kernel(HparamSelectMode.TUNING) # HEURISTIC, TUNING, TUNED
 
     a = torch.randn(M, N, dtype=torch.bfloat16, device="cuda")
     b = torch.randn(1, N, dtype=torch.bfloat16, device="cuda")
