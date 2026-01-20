@@ -7,6 +7,7 @@ from common.pkt_util import TorchRef, MpkReporter
 from common.mpk_layers import MpkLayers
 
 WITH_RMS_NORM = 1
+WITH_RESIDUAL = 1
 if __name__ == "__main__":
     max_batch_size = 1
     batch_size = 1
@@ -51,6 +52,7 @@ if __name__ == "__main__":
     w_down_proj = mpk.attach_input(torch_tensor=w_down_proj_torch, name="w_down_proj")
     mlp_out = mpk.attach_input(torch_tensor=out_torch, name="mlp_out")
     
+    x_residual = x
     if WITH_RMS_NORM:
         rms_out = mpk.new_tensor(dims=(max_batch_size, hidden_size), dtype=mi.bfloat16, name="rms_out", io_category="cuda_tensor")
         mpk.rmsnorm_layer(
@@ -75,7 +77,7 @@ if __name__ == "__main__":
         # sync_mode=(0, 0, 0),
     )
     
-    if 0:
+    if 1:
         # silu_mul_out_torch = torch.zeros((max_batch_size, intermediate_size), dtype=torch.bfloat16, device="cuda")
         # silu_mul_out = mpk.attach_input(torch_tensor=silu_mul_out_torch, name="silu_mul_out")
         # mlp_out_torch = silu_mul_out_torch
@@ -83,21 +85,28 @@ if __name__ == "__main__":
         mpk.silu_mul_layer(
             input=mlp_mid,
             output=silu_mul_out,
-            grid_dim=(76, 1, 1), tile_dim=(128, 1, 1),
+            grid_dim=(76, 1, 1), tile_dim=(128, 128, 1),
             sync_mode=(2, 0, 0),
             # grid_dim=(2, 4, 1), tile_dim=(128, 1, 1),
             # sync_mode=(2, 0, 0),
         )
-
-        mpk.linear_layer(
-            input=silu_mul_out,
-            weight=w_down_proj,
-            output=mlp_out,
-            grid_dim=(40, 1, 4), tile_dim=(64, 64, 64),
-            sync_mode=(0, 0, 0),
-            # grid_dim=(8, 1, 1), tile_dim=(128, 64, 64),
-            # sync_mode=(0, 0, 0),
-        )
+        if WITH_RESIDUAL:
+            mpk.linear_with_residual_layer(
+                input=silu_mul_out,
+                weight=w_down_proj,
+                residual=x_residual,
+                output=mlp_out,
+                grid_dim=(40, 1, 1), tile_dim=(64, 64, 64),
+                sync_mode=(0, 0, 0),
+            )
+        else:
+            mpk.linear_layer(
+                input=silu_mul_out,
+                weight=w_down_proj,
+                output=mlp_out,
+                grid_dim=(40, 1, 4), tile_dim=(64, 64, 64),
+                sync_mode=(0, 0, 0),
+            )
     else:
         mpk.silu_mul_linear_layer(
             input=mlp_mid,
@@ -112,6 +121,8 @@ if __name__ == "__main__":
     def ref_run():
         if WITH_RMS_NORM:
             return TorchRef.norm_mlp(x_torch[:batch_size], w_rms_norm_torch, w_gatedup_torch, w_down_proj_torch)
+        elif WITH_RMS_NORM and WITH_RESIDUAL:
+            return TorchRef.norm_mlp(x_torch[:batch_size], w_rms_norm_torch, w_gatedup_torch, w_down_proj_torch) + x_torch[:batch_size]
         else:
             return TorchRef.mlp(x_torch[:batch_size], w_gatedup_torch, w_down_proj_torch)
     graph, ref_output = TorchRef.compile_capture(ref_run, is_compile=False)
@@ -127,7 +138,7 @@ if __name__ == "__main__":
     mpk_run()
     ##
     
-    # reporter.generate_report(mpk_run, mpk_output, splitk, 
-    #                         graph.replay, ref_output, 
-    #                         warnup_iter=100, test_iter=200, 
-    #                         allclose_iter=5, print_all=False)
+    reporter.generate_report(mpk_run, mpk_output, splitk, 
+                            graph.replay, ref_output, 
+                            warnup_iter=100, test_iter=200, 
+                            allclose_iter=5, print_all=False)

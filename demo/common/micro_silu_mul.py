@@ -5,9 +5,9 @@ import tilelang.language as T
 
 from common.micro_base import BaseMicroKernel, HparamSelectMode
     
-class _RmsNormStrategy:
+class _SiluMulStrategy:
     def __init__(self, M, N, dtype, accum_dtype):
-        self.name = "rms_norm_tl"+f"_{M}_{N}"
+        self.name = "silu_mul_tl"+f"_{M}_{N}"
             
         self.M = M
         self.N = N
@@ -18,9 +18,9 @@ class _RmsNormStrategy:
         print(len(self.hparam_space))
         
     def _get_hparam_space(self):
-        BLOCK_M=[1] #, 256
-        BLOCK_N=[1] # 
-        thread_nums=[128, 256]#
+        BLOCK_M=[128] #, 256
+        BLOCK_N=[128] # 
+        thread_nums=[128]#
         
         res = []
         for m, n, thread_num in itertools.product(
@@ -29,43 +29,46 @@ class _RmsNormStrategy:
         return res 
     
     def get_heuristic_hparams(self):
-        # [threads]
-        return [1,1,128]
+        # [BLOCK_M, BLOCK_N, threads]
+        return [128,128,128]
         
     def get_kernel(self, selected_hparams):
         print("selected_hparams: ", selected_hparams)
-        return self.kernel_main(self.M, self.N, *selected_hparams, 1e-12, self.dtype, self.accum_dtype) 
+        return self.kernel_main(self.M, self.N, *selected_hparams, self.dtype, self.accum_dtype) 
 
-    @tilelang.jit(out_idx=[-1], pass_configs={"tl.disable_tma_lower": True})
-    def kernel_main(M, N, BLOCK_M, BLOCK_N, threads, eps=1e-12, dtype="bfloat16", accum_dtype="float32"):
+    @tilelang.jit(out_idx=[-1])
+    def kernel_main(M, N, BLOCK_M, BLOCK_N, threads, dtype="bfloat16", accum_dtype="float32"):
         @T.prim_func
-        def rms_norm(A: T.Tensor((M, N), dtype), B: T.Tensor((1, N), dtype), C: T.Tensor((M, N), dtype)):
-            with T.Kernel(T.ceildiv(M, BLOCK_M), threads=threads) as bx:
-                A_shared = T.alloc_shared((BLOCK_M, N), dtype)
-                A_pow_local = T.alloc_fragment((BLOCK_M, N), accum_dtype)
-                A_local = T.alloc_fragment((BLOCK_M, N), accum_dtype)
-                A_powsum = T.alloc_fragment((BLOCK_M,), accum_dtype)
-                B_shared = T.alloc_shared((1, N), dtype)
-                B_local = T.alloc_fragment((1, N), accum_dtype)
-                
-                T.copy(A[bx * BLOCK_M : (bx + 1) * BLOCK_M, :], A_shared)
-                T.copy(B[0:1, :], B_shared)
-                
-                T.copy(A_shared, A_local)
-                T.copy(B_shared, B_local)
-                
-                for i, j in T.Parallel(BLOCK_M, N):
-                    A_pow_local[i, j] = A_local[i, j] * A_local[i, j]
-                T.reduce_sum(A_pow_local, A_powsum, dim=1)
-                for i in T.Parallel(BLOCK_M):
-                    A_powsum[i] = T.rsqrt(A_powsum[i] / N + eps)
-                for i, j in T.Parallel(BLOCK_M, N):
-                    A_local[i, j] *= A_powsum[i] * B_local[0, j]
-                T.copy(A_local, C[bx * BLOCK_M : (bx + 1) * BLOCK_M, :])
+        def silu_mul(
+            A: T.Tensor((M, N*2), dtype),
+            C: T.Tensor((M, N), dtype),
+        ):
+            with T.Kernel(T.ceildiv(N, BLOCK_N), T.ceildiv(M, BLOCK_M), threads=threads) as (bx, by):
+                n_block_num = T.ceildiv(N, BLOCK_N)
+                # shared tile
+                A_sh = T.alloc_shared((BLOCK_M, BLOCK_N), dtype)
+                B_sh = T.alloc_shared((BLOCK_M, BLOCK_N), dtype)
+                C_sh = T.alloc_shared((BLOCK_M, BLOCK_N), dtype)
 
-        return rms_norm
+                # gmem -> smem
+                T.copy(A[by * BLOCK_M:(by + 1) * BLOCK_M,
+                        bx * BLOCK_N:(bx + 1) * BLOCK_N], A_sh)
+                T.copy(A[by * BLOCK_M:(by + 1) * BLOCK_M,
+                        (bx + n_block_num) * BLOCK_N:(bx + n_block_num + 1) * BLOCK_N], B_sh)
+
+                # silu_mul for each element
+                for i, j in T.Parallel(BLOCK_M, BLOCK_N):
+                    xi = A_sh[i, j].astype(accum_dtype)      # 先转 fp32 求 sigmoid 更稳
+                    sig = 1.0 / (1.0 + T.exp(-xi))           # sigmoid
+                    C_sh[i, j] = (xi * sig * B_sh[i, j]).astype(dtype)
+
+                # smem -> gmem
+                T.copy(C_sh, C[by * BLOCK_M:(by + 1) * BLOCK_M,
+                            bx * BLOCK_N:(bx + 1) * BLOCK_N])
+
+        return silu_mul
     
-class MicroRmsNorm(BaseMicroKernel):
+class MicroSiluMul(BaseMicroKernel):
     def __init__(self, M, N, dtype=T.bfloat16, accum_dtype=T.float32):
         super().__init__()
         
@@ -73,7 +76,7 @@ class MicroRmsNorm(BaseMicroKernel):
         self.N = N
         self.dtype = dtype
         self.accum_dtype = accum_dtype
-        self.strategy = _RmsNormStrategy(M, N, dtype, accum_dtype)
+        self.strategy = _SiluMulStrategy(M, N, dtype, accum_dtype)
         
     def get_source(self, kernel, selected_hparams):
         head_str = \
@@ -81,23 +84,23 @@ class MicroRmsNorm(BaseMicroKernel):
 namespace kernel {
 
 template <typename T,
-        int THREAD_NUM,
-        int TILE_DIM_X, 
-        int TILE_DIM_Y, 
-        int TILE_DIM_Z,
-        int M,
-        int N>
-__device__ __forceinline__ void rms_norm_kernel_<name_suffix>(const int bx, const int by, const int bz,
-                                                            void const *input_ptr,
-                                                            void const *weight_ptr,
-                                                            void *output_ptr,
-                                                            float eps) {
+          int THREAD_NUM,
+          int TILE_DIM_X, 
+          int TILE_DIM_Y, 
+          int TILE_DIM_Z,
+          int M,
+          int N,
+          int I_STRIDE,
+          int O_STRIDE>
+__device__ __forceinline__ void silu_mul_kernel_<name_suffix>(const int bx, const int by, const int bz,
+                                                   void const *input_ptr,
+                                                   void *output_ptr,
+                                                   int num_active_tokens) {
   static_assert(THREAD_NUM==<threads>);
   static_assert(TILE_DIM_X==<BLOCK_N>); static_assert(TILE_DIM_Y==<BLOCK_M>); static_assert(TILE_DIM_Z==<BLOCK_K>);
   static_assert(M==<M>); static_assert(N==<N>);
   
   const <dtype>* __restrict__ A = static_cast<const <dtype>*>(input_ptr);
-  const <dtype>* __restrict__ B = static_cast<const <dtype>*>(weight_ptr);
   <dtype>* __restrict__ C = static_cast<<dtype>*>(output_ptr);
   
 '''     

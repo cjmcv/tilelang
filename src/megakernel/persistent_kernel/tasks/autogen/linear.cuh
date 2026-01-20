@@ -2,7 +2,7 @@
 
 #include "linear_gemm_tl_1_19456_2560_top0.cuh"
 #include "linear_gemm_tl_1_2560_9728_top9.cuh"
-#include "linear_silu_mull_gemm_tl_1_2560_9728_top0.cuh"
+#include "linear_gemm_add_tl_1_2560_9728.cuh"
 
 namespace kernel {
 
@@ -25,9 +25,9 @@ template <typename T,
                                                 void* __restrict__ output_ptr,
                                                 int num_active_tokens,
                                                 bool residual) {
-  if constexpr (FUSE_SILU_MUL == true) {
+  if constexpr (FUSE_RES == true) {
     if constexpr (M == 1 && N == 2560 && K == 9728) {
-      silu_mul_linear_kernel_1_2560_9728<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
+      linear_gemm_add_tl_1_2560_9728<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
         bx, by, bz,
         input_ptr, weight_ptr, residual_ptr, output_ptr,
         num_active_tokens, residual

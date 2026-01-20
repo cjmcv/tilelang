@@ -937,9 +937,6 @@ class PersistentKernel:
         assert weight.num_dims == 2  # (hidden_size, hidden_size / world_size)
         assert output.num_dims == 2  # (batch_size, hidden_size)
         tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128, 64))
-        # tb_graph.new_input(input, (-1, -1, -1), True)
-        # tb_graph.new_input(weight, (0, -1, -1), True)
-        # tb_graph.new_input(output, (1, -1, -1), True)
         tb_graph.new_input(input, sync_mode, True)
         tb_graph.new_input(weight, sync_mode, True)
         tb_graph.new_input(output, (-1, -1, -1), True)
@@ -957,7 +954,42 @@ class PersistentKernel:
             self.kn_graph.register_task(tb_graph, "linear")
         else:
             assert False
-            
+    
+    def linear_with_residual_layer(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        residual: DTensor,
+        output: DTensor,
+        grid_dim: tuple,
+        tile_dim: tuple,
+        sync_mode: tuple,
+    ):
+        # Currently assume that input/output
+        assert input.num_dims == 2  # (batch_size, hidden_size / world_size)
+        assert weight.num_dims == 2  # (hidden_size, hidden_size / world_size)
+        assert residual.num_dims == 2  # (batch_size, hidden_size)
+        assert output.num_dims == 2  # (batch_size, hidden_size)
+        tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128, 64))
+        tb_graph.new_input(input, sync_mode, True)
+        tb_graph.new_input(weight, sync_mode, True)
+        tb_graph.new_input(residual, sync_mode, True)
+        tb_graph.new_input(output, (-1, -1, -1), True)
+        self.kn_graph.customized([input, weight, residual, output], tb_graph)
+        
+        if self.target_cc == 100:
+            self.kn_graph.register_task(tb_graph, "linear_with_residual_sm100")
+        elif self.target_cc == 90:
+            if weight.dim(0) // grid_dim[0] <= 64:
+                # self.kn_graph.register_task(tb_graph, "linear_cutlass_with_residual_hopper")
+                self.kn_graph.register_task(tb_graph, "linear_swapAB_with_residual_hopper")
+            else:
+                self.kn_graph.register_task(tb_graph, "linear_swapAB_with_residual_hopper")
+        elif self.target_cc == 80 or self.target_cc == 89:
+            self.kn_graph.register_task(tb_graph, "linear_with_residual")
+        else:
+            assert False
+                    
     def silu_mul_linear_layer(
         self,
         input: DTensor,
@@ -978,41 +1010,6 @@ class PersistentKernel:
         self.kn_graph.customized([input, weight, output], tb_graph)
         if self.target_cc == 80 or self.target_cc == 89:
             self.kn_graph.register_task(tb_graph, "silu_mul_linear")
-        else:
-            assert False
-
-
-    def linear_with_residual_layer(
-        self,
-        input: DTensor,
-        weight: DTensor,
-        residual: DTensor,
-        output: DTensor,
-        grid_dim: tuple,
-        block_dim: tuple,
-    ):
-        # Currently assume that input/output
-        assert input.num_dims == 2  # (batch_size, hidden_size / world_size)
-        assert weight.num_dims == 2  # (hidden_size, hidden_size / world_size)
-        assert residual.num_dims == 2  # (batch_size, hidden_size)
-        assert output.num_dims == 2  # (batch_size, hidden_size)
-        tb_graph = TBGraph(CyTBGraph(grid_dim, block_dim, 1, 64))
-        tb_graph.new_input(input, (-1, -1, -1), 1, True)
-        tb_graph.new_input(weight, (0, -1, -1), 1, True)
-        tb_graph.new_input(residual, (1, -1, -1), -1, True)
-        tb_graph.new_input(output, (1, -1, -1), -1, True)
-        self.kn_graph.customized([input, weight, residual, output], tb_graph)
-        
-        if self.target_cc == 100:
-            self.kn_graph.register_task(tb_graph, "linear_with_residual_sm100")
-        elif self.target_cc == 90:
-            if weight.dim(0) // grid_dim[0] <= 64:
-                # self.kn_graph.register_task(tb_graph, "linear_cutlass_with_residual_hopper")
-                self.kn_graph.register_task(tb_graph, "linear_swapAB_with_residual_hopper")
-            else:
-                self.kn_graph.register_task(tb_graph, "linear_swapAB_with_residual_hopper")
-        elif self.target_cc == 80 or self.target_cc == 89:
-            self.kn_graph.register_task(tb_graph, "linear_with_residual")
         else:
             assert False
 

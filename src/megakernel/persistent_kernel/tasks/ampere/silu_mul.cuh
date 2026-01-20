@@ -27,7 +27,7 @@ namespace kernel {
 //           int OUTPUT_SIZE,
 //           int I_STRIDE,
 //           int O_STRIDE>
-// __device__ __forceinline__ void silu_mul_task_impl(void const *input_ptr,
+// __device__ __forceinline__ void silu_mul_kernel(void const *input_ptr,
 //                                                    void *output_ptr,
 //                                                    int num_active_tokens) {
 //   T const *__restrict__ d_input = static_cast<T const *>(input_ptr);
@@ -96,7 +96,7 @@ template <typename T,
           int OUTPUT_SIZE,
           int I_STRIDE,
           int O_STRIDE>
-__device__ __forceinline__ void silu_mul_task_impl(const int bx, const int by, const int bz,
+__device__ __forceinline__ void silu_mul_kernel(const int bx, const int by, const int bz,
                                                    void const *input_ptr,
                                                    void *output_ptr,
                                                    int num_active_tokens) {

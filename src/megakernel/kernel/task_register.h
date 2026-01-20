@@ -439,7 +439,7 @@ public:
     output_stride = static_cast<int>(kn_input_op->input_strides[0]);
     megakernel::transpiler::CodeKeeper code;
     code.inc_indent();
-    code.e("kernel::silu_mul_task_impl<bfloat16, $, $, $, $, $, $, $, $>(",
+    code.e("kernel::silu_mul_kernel<bfloat16, $, $, $, $, $, $, $, $>(",
           bgraph.thread_num, bgraph.block_dim.x, bgraph.block_dim.y, bgraph.block_dim.z, 
           batch_size, output_size,
           input_stride, output_stride);
@@ -2759,7 +2759,7 @@ public:
     output_stride = static_cast<int>(kn_input_op->input_strides[1]);
     megakernel::transpiler::CodeKeeper code;
     code.inc_indent();
-    code.e("kernel::silu_mul_task_impl<bfloat16, $, $, $, $>(",
+    code.e("kernel::silu_mul_kernel<bfloat16, $, $, $, $>(",
           batch_size,
           output_size,
           input_stride,

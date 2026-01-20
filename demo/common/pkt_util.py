@@ -81,7 +81,7 @@ class TorchRef:
         O1 = TorchRef.rms_norm(x, w_rms_norm)
         O2 = TorchRef.linear(O1, w_gatedup)
         O3 = TorchRef.silu_and_mul(O2)
-        D  = TorchRef.linear(O3, w_down_proj) + x
+        D  = TorchRef.linear(O3, w_down_proj)
         return D
     
     @staticmethod

@@ -112,6 +112,8 @@ class _GemmStrategy:
         self.strategy = strategy
         if (strategy == MicroLinearStrategy.SILU_MUL_GEMM):
             self.name = "linear_silu_mull_gemm_tl"+f"_{M}_{N}_{K}"
+        elif (strategy == MicroLinearStrategy.GEMM_ADD):
+            self.name = "linear_gemm_add_tl"+f"_{M}_{N}_{K}"
         else:
             self.name = "linear_gemm_tl"+f"_{M}_{N}_{K}"
             
@@ -143,8 +145,8 @@ class _GemmStrategy:
     
     def get_heuristic_hparams(self):
         # [BLOCK_M, BLOCK_N, BLOCK_K, splitk, num_stages, threads, policy, enable_rasteration]
-        if self.strategy == MicroLinearStrategy.SILU_MUL_GEMM: 
-            return [64,128,64,1,2,128,0,False]
+        if self.strategy == MicroLinearStrategy.SILU_MUL_GEMM:
+            return [64, 128, 64, 1, 2, 128, 0, False]
         else:
             return [64, 64, 64, 1, 3, 128, 0, False]
         
@@ -153,6 +155,8 @@ class _GemmStrategy:
         if splitk == 1:
             if self.strategy == MicroLinearStrategy.SILU_MUL_GEMM:
                 return self.kernel_silu_mul_main(self.M, self.N, self.K, *selected_hparams, self.dtype, self.accum_dtype) 
+            elif self.strategy == MicroLinearStrategy.GEMM_ADD:
+                return self.kernel_add_main(self.M, self.N, self.K, *selected_hparams, self.dtype, self.accum_dtype) 
             else:
                 return self.kernel_main(self.M, self.N, self.K, *selected_hparams, self.dtype, self.accum_dtype) 
         else:
@@ -186,7 +190,7 @@ class _GemmStrategy:
 
                     # 2. 就地 silu-mul，结果写回 A_sh
                     for i, j in T.Parallel(BLOCK_M, BLOCK_K):
-                        x   = left[i, j].astype("float32")
+                        x   = left[i, j].astype(accum_dtype)
                         sig = 1.0 / (1.0 + T.exp(-x))
                         A_sh[i, j] = (x * sig * right[i, j]).astype(dtype)
 
@@ -198,6 +202,40 @@ class _GemmStrategy:
 
         return linear
         
+    @tilelang.jit(out_idx=[-1])
+    def kernel_add_main(M, N, K, BLOCK_M, BLOCK_N, BLOCK_K, split_k, num_stages, thread_num, policy, enable_rasteration, dtype=T.float16, accum_dtype=T.float32):
+        @T.prim_func
+        def linear(
+            A: T.Tensor((M, K), dtype),
+            B: T.Tensor((N, K), dtype),
+            R: T.Tensor((M, N), dtype),
+            C: T.Tensor((M, N), dtype)
+        ):
+            with T.Kernel(T.ceildiv(N, BLOCK_N), T.ceildiv(M, BLOCK_M), threads=thread_num) as (bx, by):
+                A_shared = T.alloc_shared((BLOCK_M, BLOCK_K), dtype)
+                B_shared = T.alloc_shared((BLOCK_N, BLOCK_K), dtype)
+                C_local = T.alloc_fragment((BLOCK_M, BLOCK_N), accum_dtype)
+                C_shared = T.alloc_shared((BLOCK_M, BLOCK_N), dtype)
+                T.use_swizzle(panel_size=10, enable=enable_rasteration)
+                T.annotate_layout({C_shared: tilelang.layout.make_swizzled_layout(C_shared)})
+                T.clear(C_local)
+                for k in T.Pipelined(T.ceildiv(K, BLOCK_K), num_stages=num_stages):
+                    T.copy(A[by * BLOCK_M, k * BLOCK_K], A_shared)
+                    T.copy(B[bx * BLOCK_N, k * BLOCK_K], B_shared)
+                    T.gemm(A_shared, B_shared, C_local, transpose_B=True, policy=policy)
+                
+                R_sh = T.alloc_shared((BLOCK_M, BLOCK_N), dtype)
+                T.copy(R[by * BLOCK_M, bx * BLOCK_N], R_sh)
+                for i, j in T.Parallel(BLOCK_M, BLOCK_N):
+                    c_val = C_local[i, j]
+                    r_val = R_sh[i, j].astype(accum_dtype)
+                    C_shared[i, j] = (c_val + r_val).astype(dtype)
+                    
+                # T.copy(C_local, C_sh)
+                T.copy(C_shared, C[by * BLOCK_M, bx * BLOCK_N])
+
+        return linear
+    
     @tilelang.jit(out_idx=[-1])
     def kernel_main(M, N, K, BLOCK_M, BLOCK_N, BLOCK_K, split_k, num_stages, thread_num, policy, enable_rasteration, dtype=T.float16, accum_dtype=T.float32):
         
@@ -257,6 +295,7 @@ class MicroLinearStrategy(Enum):
     GEMV = 0
     GEMM = 1
     SILU_MUL_GEMM = 2
+    GEMM_ADD = 3
     
 class MicroLinear(BaseMicroKernel):
     def __init__(self, strategy:MicroLinearStrategy, M, N, K, dtype=T.bfloat16, accum_dtype=T.float32):
@@ -288,7 +327,7 @@ template <typename T,
     int O_STRIDE = N,
     int PIPE_MAX = 3,
     bool FUSE_RES = false>
-    __device__ __forceinline__ void linear_kernel_<name_suffix>(const int bx, const int by, const int bz,
+    __device__ __forceinline__ void <kernel_name>(const int bx, const int by, const int bz,
                                                 const void* __restrict__ input_ptr,
                                                 const void* __restrict__ weight_ptr,
                                                 const void* __restrict__ residual_ptr,
@@ -301,6 +340,7 @@ template <typename T,
   
   const <dtype>* __restrict__ A = static_cast<const <dtype>*>(input_ptr);
   const <dtype>* __restrict__ B = static_cast<const <dtype>*>(weight_ptr);
+  const <dtype>* __restrict__ R = static_cast<const <dtype>*>(residual_ptr);
   <dtype>* __restrict__ C = static_cast<<dtype>*>(output_ptr);
   
 '''     
@@ -320,7 +360,7 @@ template <typename T,
         head_str = head_str.replace('<M>', str(self.M))
         head_str = head_str.replace('<N>', str(self.N)) 
         head_str = head_str.replace('<K>', str(self.K)) 
-        head_str = head_str.replace('<name_suffix>', str(self.M)+"_"+str(self.N)+"_"+str(self.K))
+        head_str = head_str.replace('<kernel_name>', self.strategy.name)
         if self.dtype == T.bfloat16:
             dtype = "bfloat16_t"
         else:
