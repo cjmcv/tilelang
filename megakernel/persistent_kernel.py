@@ -346,15 +346,16 @@ class PersistentKernel:
         weight: DTensor,
         output: DTensor,
         grid_dim: tuple,
-        block_dim: tuple,
+        tile_dim: tuple,
+        sync_mode: tuple,
     ):
         # Currently assume that the input/output are 2D tensors
         assert input.num_dims == 2
         assert output.num_dims == 2
-        tb_graph = TBGraph(CyTBGraph(grid_dim, block_dim, 1, 64))
-        tb_graph.new_input(input, (0, -1, -1), 1, True)
-        tb_graph.new_input(weight, (-1, -1, -1), 0, True)
-        tb_graph.new_input(output, (0, -1, -1), 1, True)
+        tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128, 64))
+        tb_graph.new_input(input, sync_mode, True)
+        tb_graph.new_input(weight, sync_mode, True)
+        tb_graph.new_input(output, (-1, -1, -1), True)
         self.kn_graph.customized([input, weight, output], tb_graph)
         self.kn_graph.register_task(tb_graph, "rmsnorm_hopper" if self.target_cc >= 90 else "rmsnorm")
 

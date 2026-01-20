@@ -45,7 +45,7 @@ def silu_mul(M, N, BLOCK_M, BLOCK_N, dtype="bfloat16"):
     return main
 
 def test_silu_mul():
-    M, N = 1, 9728
+    M, N = 32, 9728
     BLOCK_M, BLOCK_N = 64, 64
     kernel = silu_mul(M, N, BLOCK_M, BLOCK_N, dtype="bfloat16")
     a = torch.randn(M, N*2, dtype=torch.bfloat16, device="cuda")
@@ -58,6 +58,8 @@ def test_silu_mul():
     torch.testing.assert_close(c, ref_c, rtol=1e-1, atol=1e-1)
     
     # benchmark
+    latency = do_bench(lambda: TorchRef.silu_and_mul(a), warmup=500, backend="cupti")
+    print(f"torch Latency: {latency}ms")
     latency = do_bench(lambda: kernel(a), warmup=500, backend="cupti")
     print(f"tilelang Latency: {latency}ms")
     

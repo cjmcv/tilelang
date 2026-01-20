@@ -180,6 +180,7 @@ class _GemmStrategy:
                 C_sh = T.alloc_shared((BLOCK_M, BLOCK_N), dtype)
 
                 T.use_swizzle(panel_size=10, enable=enable_rasteration)
+                T.annotate_layout({C_sh: tilelang.layout.make_swizzled_layout(C_sh)})
                 T.clear(C_local)
                 
                 # 把 silu-mul 也做进 pipeline
@@ -218,6 +219,7 @@ class _GemmStrategy:
                 C_local = T.alloc_fragment((BLOCK_M, BLOCK_N), accum_dtype)
                 C_shared = T.alloc_shared((BLOCK_M, BLOCK_N), dtype)
                 T.use_swizzle(panel_size=10, enable=enable_rasteration)
+                T.annotate_layout({C_shared: tilelang.layout.make_swizzled_layout(C_shared)})
                 T.clear(C_local)
                 for k in T.Pipelined(T.ceildiv(K, BLOCK_K), num_stages=num_stages):
                     T.copy(A[by * BLOCK_M, k * BLOCK_K], A_shared)
@@ -245,32 +247,7 @@ class _GemmStrategy:
                 C_shared = T.alloc_shared((block_M, block_N), dtype)
                 C_local = T.alloc_fragment((block_M, block_N), accum_dtype)
                 T.use_swizzle(panel_size=10, enable=enable_rasteration)
-                T.clear(C_local)
-                for ko in T.Pipelined(T.ceildiv(splitK, block_K), num_stages=num_stages):
-                    T.copy(A[by * block_M, bz * splitK + ko * block_K], A_shared)
-                    T.copy(B[bx * block_N, bz * splitK + ko * block_K], B_shared)
-                    T.gemm(A_shared, B_shared, C_local, transpose_B=True, policy=policy)
-
-                T.copy(C_local, C_shared)
-                T.atomic_add(C[by * block_M, bx * block_N], C_shared)
-
-        return linear
-
-    def kernel_profix_main(M, N, K, block_M, block_N, block_K, split_k, num_stages, thread_num, policy, enable_rasteration, dtype=T.float16, accum_dtype=T.float32):
-        splitK = K // split_k
-
-        @T.prim_func
-        def linear(
-            A: T.Tensor((M, K), dtype),
-            B: T.Tensor((N, K), dtype),
-            C: T.Tensor((M, N), dtype),
-        ):
-            with T.Kernel(T.ceildiv(N, block_N), T.ceildiv(M, block_M), split_k, threads=thread_num) as (bx, by, bz):
-                A_shared = T.alloc_shared((block_M, block_K), dtype)
-                B_shared = T.alloc_shared((block_N, block_K), dtype)
-                C_shared = T.alloc_shared((block_M, block_N), dtype)
-                C_local = T.alloc_fragment((block_M, block_N), accum_dtype)
-                T.use_swizzle(panel_size=10, enable=enable_rasteration)
+                T.annotate_layout({C_shared: tilelang.layout.make_swizzled_layout(C_shared)})
                 T.clear(C_local)
                 for ko in T.Pipelined(T.ceildiv(splitK, block_K), num_stages=num_stages):
                     T.copy(A[by * block_M, bz * splitK + ko * block_K], A_shared)
@@ -331,6 +308,7 @@ template <typename T,
   const <dtype>* __restrict__ A = static_cast<const <dtype>*>(input_ptr);
   const <dtype>* __restrict__ B = static_cast<const <dtype>*>(weight_ptr);
   <dtype>* __restrict__ C = static_cast<<dtype>*>(output_ptr);
+  
 '''     
         if (isinstance(self.strategy, _GemvStrategy)):
             BLOCK_N, reduce_threads = selected_hparams
@@ -379,8 +357,7 @@ template <typename T,
         
         if (mode == HparamSelectMode.TUNING):
             latency_hparams_list = self.run_tuning(*self.strategy.get_tuning_params())
-            best_latency, selected_hparams, idx = latency_hparams_list[0]
-            
+            # Save all tuned kernels.
             for i in range(len(latency_hparams_list)):
                 latency, selected_hparams, idx = latency_hparams_list[i]
                 kernel = self.strategy.get_kernel(selected_hparams)
@@ -389,6 +366,8 @@ template <typename T,
                 os.makedirs(dir_path, exist_ok=True)
                 with open(file_name, "w", encoding="utf-8") as f:
                     f.write(self.get_source(kernel, selected_hparams) + f"\n// latency: {latency}, idx: {idx}")
+                    
+            best_latency, selected_hparams, idx = latency_hparams_list[0]
             
         elif (mode == HparamSelectMode.TUNED):
             latency_hparams_list = self.read_tuned_hparams_from_json(self.strategy.name)

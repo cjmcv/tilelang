@@ -75,6 +75,7 @@ public:
     code.e("    task_desc->output_ptrs[0]);");
     return register_task_variant(TASK_EMBEDDING, code.to_string());
   }
+
   int register_rmsnorm_task(threadblock::Graph const &bgraph, std::vector<int> const &params) {
     assert(params.size() == 0);
     std::vector<tb::TBInputOp *> input_ops;
@@ -101,13 +102,17 @@ public:
     assert(output_ops[0]->dtensor.dim[1] == input_ops[0]->dtensor.dim[1]);
     megakernel::transpiler::CodeKeeper code;
     code.inc_indent();
-    code.e("kernel::rms_norm_impl<bfloat16, $, $>(", batch_size, hidden_dim);
+    code.e("kernel::rms_norm_kernel<bfloat16, $, $, $, $, $, $>(", 
+      bgraph.thread_num, bgraph.block_dim.x, bgraph.block_dim.y, bgraph.block_dim.z, 
+      batch_size, hidden_dim);
+    code.e("    task_desc->bx, task_desc->by, task_desc->bz,");
     code.e("    task_desc->input_ptrs[0],");
     code.e("    task_desc->input_ptrs[1],");
     code.e("    task_desc->output_ptrs[0],");
-    code.e("    1e-6f);");
+    code.e("    1e-12f);");
     return register_task_variant(TASK_RMS_NORM, code.to_string());
   }
+
   int register_rmsnorm_linear_task(threadblock::Graph const &bgraph, std::vector<int> const &params) {
     assert(params.size() == 0);
     int batch_size = 0, output_size = 0, reduction_size = 0, output_stride = 0;
@@ -151,6 +156,7 @@ public:
     code.e("    task_desc->output_ptrs[0]);");
     return register_task_variant(TASK_RMS_NORM_LINEAR, code.to_string());
   }
+
   int register_attention_task(threadblock::Graph const &bgraph, std::vector<int> const &params) {
     // params[0]: num_q_heads
     // params[1]: num_kv_heads

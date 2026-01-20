@@ -1,0 +1,190 @@
+import os
+import math
+from enum import Enum
+import itertools
+import json
+from pathlib import Path
+
+# import multiprocessing
+# from concurrent.futures import ProcessPoolExecutor, as_completed
+# from concurrent.futures import ThreadPoolExecutor
+import torch
+from tvm import DataType
+from tvm.tir import stmt_functor, Block, For, PrimFunc
+import tilelang
+import tilelang.language as T
+
+from common.pkt_util import TestUtil, TorchRef
+from common.micro_base import BaseMicroKernel, HparamSelectMode
+    
+class _RmsNormStrategy:
+    def __init__(self, M, N, dtype, accum_dtype):
+        self.name = "rms_norm_tl"+f"_{M}_{N}"
+            
+        self.M = M
+        self.N = N
+        self.dtype = dtype
+        self.accum_dtype = accum_dtype
+        
+        self.hparam_space = self._get_hparam_space()
+        print(len(self.hparam_space))
+        
+    def _get_hparam_space(self):
+        BLOCK_M=[1] #, 256
+        BLOCK_N=[1] # 
+        thread_nums=[128, 256]#
+        
+        res = []
+        for m, n, thread_num in itertools.product(
+           BLOCK_M, BLOCK_N, thread_nums):
+            res.append([thread_num])
+        return res 
+    
+    def get_tuning_params(self):
+        return self.name, self.hparam_space, self.get_kernel
+    
+    def get_heuristic_hparams(self):
+        # [threads]
+        return [1,1,128]
+        
+    def get_kernel(self, selected_hparams):
+        print("selected_hparams: ", selected_hparams)
+        return self.kernel_main(self.M, self.N, *selected_hparams, 1e-12, self.dtype, self.accum_dtype) 
+
+    @tilelang.jit(out_idx=[-1], pass_configs={"tl.disable_tma_lower": True})
+    def kernel_main(M, N, BLOCK_M, BLOCK_N, threads, eps=1e-12, dtype="bfloat16", accum_dtype="float32"):
+        @T.prim_func
+        def rms_norm(A: T.Tensor((M, N), dtype), B: T.Tensor((1, N), dtype), C: T.Tensor((M, N), dtype)):
+            with T.Kernel(T.ceildiv(M, BLOCK_M), threads=threads) as bx:
+                A_shared = T.alloc_shared((BLOCK_M, N), dtype)
+                A_pow_local = T.alloc_fragment((BLOCK_M, N), accum_dtype)
+                A_local = T.alloc_fragment((BLOCK_M, N), accum_dtype)
+                A_powsum = T.alloc_fragment((BLOCK_M,), accum_dtype)
+                B_shared = T.alloc_shared((1, N), dtype)
+                B_local = T.alloc_fragment((1, N), accum_dtype)
+                
+                T.copy(A[bx * BLOCK_M : (bx + 1) * BLOCK_M, :], A_shared)
+                T.copy(B[0:1, :], B_shared)
+                
+                T.copy(A_shared, A_local)
+                T.copy(B_shared, B_local)
+                
+                for i, j in T.Parallel(BLOCK_M, N):
+                    A_pow_local[i, j] = A_local[i, j] * A_local[i, j]
+                T.reduce_sum(A_pow_local, A_powsum, dim=1)
+                for i in T.Parallel(BLOCK_M):
+                    A_powsum[i] = T.rsqrt(A_powsum[i] / N + eps)
+                for i, j in T.Parallel(BLOCK_M, N):
+                    A_local[i, j] *= A_powsum[i] * B_local[0, j]
+                T.copy(A_local, C[bx * BLOCK_M : (bx + 1) * BLOCK_M, :])
+
+        return rms_norm
+    
+class MicroRmsNorm(BaseMicroKernel):
+    def __init__(self, M, N, dtype=T.bfloat16, accum_dtype=T.float32):
+        super().__init__()
+        
+        self.M = M
+        self.N = N
+        self.dtype = dtype
+        self.accum_dtype = accum_dtype
+        self.strategy = _RmsNormStrategy(M, N, dtype, accum_dtype)
+        
+    def get_source(self, kernel, selected_hparams):
+        head_str = \
+'''
+namespace kernel {
+
+template <typename T,
+        int THREAD_NUM,
+        int TILE_DIM_X, 
+        int TILE_DIM_Y, 
+        int TILE_DIM_Z,
+        int M,
+        int N>
+__device__ __forceinline__ void rms_norm_kernel_<name_suffix>(const int bx, const int by, const int bz,
+                                                            void const *input_ptr,
+                                                            void const *weight_ptr,
+                                                            void *output_ptr,
+                                                            float eps) {
+  static_assert(THREAD_NUM==<threads>);
+  static_assert(TILE_DIM_X==<BLOCK_N>); static_assert(TILE_DIM_Y==<BLOCK_M>); static_assert(TILE_DIM_Z==<BLOCK_K>);
+  static_assert(M==<M>); static_assert(N==<N>);
+  
+  const <dtype>* __restrict__ A = static_cast<const <dtype>*>(input_ptr);
+  const <dtype>* __restrict__ B = static_cast<const <dtype>*>(weight_ptr);
+  <dtype>* __restrict__ C = static_cast<<dtype>*>(output_ptr);
+  
+'''     
+        BLOCK_M, BLOCK_N, threads = selected_hparams
+        BLOCK_K = 1
+        
+        head_str = head_str.replace('<threads>', str(threads))
+        head_str = head_str.replace('<BLOCK_M>', str(BLOCK_M))
+        head_str = head_str.replace('<BLOCK_N>', str(BLOCK_N)) 
+        head_str = head_str.replace('<BLOCK_K>', str(BLOCK_K)) 
+        head_str = head_str.replace('<M>', str(self.M))
+        head_str = head_str.replace('<N>', str(self.N)) 
+        head_str = head_str.replace('<name_suffix>', str(self.M)+"_"+str(self.N))
+        if self.dtype == T.bfloat16:
+            dtype = "bfloat16_t"
+        else:
+            dtype = "float16_t"
+        head_str = head_str.replace('<dtype>', str(dtype))
+                
+        origin_source = kernel.get_kernel_source()
+        source = origin_source.replace("blockIdx.x", "bx")
+        source = source.replace("blockIdx.y", "by")
+        source = source.replace("blockIdx.z", "bz")
+        source = self.replace_line(source, "extern \"C\" __global__", 1, head_str)
+        source += "\n} // kernel"
+        
+        grid_dim, block_dim, dynamic_smem_buf, use_cooperative_groups = kernel.get_launch_info()
+        extra_attr = f"\n// Strategy: {self.strategy.name}"
+        extra_attr += f"\n// selected_hparams: {selected_hparams}."
+        extra_attr += f"\n// smem: {dynamic_smem_buf} bytes."
+        extra_attr += f"\n// use_cooperative_groups: {use_cooperative_groups}."
+        extra_attr += f"\n// grid_dim=({grid_dim['blockIdx.x']}, {grid_dim['blockIdx.y']}, {grid_dim['blockIdx.z']}), "
+        extra_attr += f"tile_dim=({BLOCK_N}, {BLOCK_M}, {BLOCK_K}),"
+        extra_attr += f"\n// block_dim=({block_dim['threadIdx.x']}, {block_dim['threadIdx.y']}, {block_dim['threadIdx.z']})."
+        source += extra_attr
+        
+        return source
+    
+    def get_kernel(self, mode: HparamSelectMode):
+        file_path = self.save_path+self.strategy.name
+        
+        if (mode == HparamSelectMode.TUNING):
+            latency_hparams_list = self.run_tuning(*self.strategy.get_tuning_params())
+            # Save all tuned kernels.
+            for i in range(len(latency_hparams_list)):
+                latency, selected_hparams, idx = latency_hparams_list[i]
+                kernel = self.strategy.get_kernel(selected_hparams)
+                file_name = self.save_path+f"{self.strategy.name}/"+f"{self.strategy.name}_top{i}.cuh"
+                dir_path = os.path.dirname(file_name)
+                os.makedirs(dir_path, exist_ok=True)
+                with open(file_name, "w", encoding="utf-8") as f:
+                    f.write(self.get_source(kernel, selected_hparams) + f"\n// latency: {latency}, idx: {idx}")
+                    
+            best_latency, selected_hparams, idx = latency_hparams_list[0]
+            
+        elif (mode == HparamSelectMode.TUNED):
+            latency_hparams_list = self.read_tuned_hparams_from_json(self.strategy.name)
+            best_latency, selected_hparams = latency_hparams_list[0]["latency"], latency_hparams_list[0]["hparams"]
+            print("[Tuned] selected_hparams: ", selected_hparams)
+        else:
+            selected_hparams = self.strategy.get_heuristic_hparams()
+            print("[Heuristic] selected_hparams: ", selected_hparams)
+        
+        kernel = self.strategy.get_kernel(selected_hparams)
+        kernel.export_sources(kernel_path=file_path+"_src.cuh", host_path=file_path+"_src.cpp")
+        
+        with open(file_path+".cuh", "w", encoding="utf-8") as f:
+            f.write(self.get_source(kernel, selected_hparams))
+            
+        # print("0:", kernel.prim_func.attrs)
+        # print("1:", kernel.adapter.params)
+        # print("2:", kernel.adapter.func)
+        # print("3:", kernel.config)
+        # print("4:", kernel.prim_func)
+        return kernel

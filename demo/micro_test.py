@@ -13,6 +13,7 @@ from tvm.tir.stmt_functor import ir_transform
 from common.pkt_util import TestUtil, TorchRef
 from common.micro_base import HparamSelectMode
 from common.micro_linear import MicroLinearStrategy, MicroLinear
+from common.micro_rms_norm import MicroRmsNorm
 
 @tilelang.jit(out_idx=[-1])
 def silu_mul(M, N, BLOCK_M, BLOCK_N, dtype="bfloat16"):
@@ -64,15 +65,39 @@ def test_silu_mul():
     latency = profiler.do_bench(backend="cupti")
     print(f"tilelang Latency: {latency}ms")
     
-def test_gemm():
-    M = 64
-    # N = 19456
-    # K = 2560
+def test_rms_norm():
+    M = 1
     N = 2560
-    K = 9728
+    linear = MicroRmsNorm(M,N, dtype=T.bfloat16, accum_dtype=T.float32)
+    kernel = linear.get_kernel(HparamSelectMode.HEURISTIC) # HEURISTIC, TUNING, TUNED
+
+    a = torch.randn(M, N, dtype=torch.bfloat16, device="cuda")
+    b = torch.randn(1, N, dtype=torch.bfloat16, device="cuda")
+    c = kernel(a, b)
+    print("c:")
+    print(c)
+    ref_c = TorchRef.rms_norm(a, b)
+    print("ref_c:")
+    print(ref_c)
+    torch.testing.assert_close(c, ref_c, rtol=1e-1, atol=1e-1)
+    
+    # benchmark
+    latency = do_bench(lambda: TorchRef.rms_norm(a, b), warmup=500, backend="cupti")
+    print(f"torch Latency: {latency}ms")
+    
+    latency = do_bench(lambda: kernel(a, b), warmup=500, backend="cupti")
+    print(f"tilelang Latency: {latency}ms")
+
+    
+def test_gemm():
+    M = 1
+    N = 19456
+    K = 2560
+    # N = 2560
+    # K = 9728
     # config = [64,64,64,2,128,0,true]
     linear = MicroLinear(MicroLinearStrategy.GEMM, M,N,K, dtype=T.bfloat16, accum_dtype=T.float32)
-    kernel = linear.get_kernel(HparamSelectMode.HEURISTIC) # HEURISTIC, TUNING, TUNED
+    kernel = linear.get_kernel(HparamSelectMode.TUNING) # HEURISTIC, TUNING, TUNED
 
     a = torch.randn((M, K), dtype=torch.bfloat16, device="cuda")
     b = torch.randn((N, K), dtype=torch.bfloat16, device="cuda")
@@ -127,5 +152,6 @@ def test_silu_mul_gemm():
     
 if __name__ == "__main__":
     # test_silu_mul()
+    test_rms_norm()
     # test_gemm()
-    test_silu_mul_gemm()
+    # test_silu_mul_gemm()

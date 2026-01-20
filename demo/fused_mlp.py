@@ -6,6 +6,7 @@ import megakernel as mi
 from common.pkt_util import TorchRef, MpkReporter
 from common.mpk_layers import MpkLayers
 
+WITH_RMS_NORM = 1
 if __name__ == "__main__":
     max_batch_size = 1
     batch_size = 1
@@ -39,15 +40,28 @@ if __name__ == "__main__":
     # hidden_size = 1024
     # intermediate_size = 3072
     x_torch = torch.randn((max_batch_size, hidden_size), dtype=torch.bfloat16, device="cuda")
+    w_rms_norm_torch = torch.randn((1, hidden_size), dtype=torch.bfloat16, device="cuda")
     w_gatedup_torch = torch.randn((intermediate_size*2, hidden_size), dtype=torch.bfloat16, device="cuda")
     w_down_proj_torch = torch.randn((hidden_size, intermediate_size), dtype=torch.bfloat16, device="cuda")
     out_torch = torch.zeros((max_batch_size, hidden_size), dtype=torch.bfloat16, device="cuda")
     
     x = mpk.attach_input(torch_tensor=x_torch, name="in")
+    w_rms_norm = mpk.attach_input(torch_tensor=w_rms_norm_torch, name="w_norm")
     w_gatedup = mpk.attach_input(torch_tensor=w_gatedup_torch, name="w_gatedup")
     w_down_proj = mpk.attach_input(torch_tensor=w_down_proj_torch, name="w_down_proj")
     mlp_out = mpk.attach_input(torch_tensor=out_torch, name="mlp_out")
     
+    if WITH_RMS_NORM:
+        rms_out = mpk.new_tensor(dims=(max_batch_size, hidden_size), dtype=mi.bfloat16, name="rms_out", io_category="cuda_tensor")
+        mpk.rmsnorm_layer(
+            input=x,
+            weight=w_rms_norm,
+            output=rms_out,
+            grid_dim=(1, 1, 1), tile_dim=(1, 1, 1),
+            sync_mode=(0, 0, 0),
+        )
+        x = rms_out
+        
     # mlp_mid_torch = torch.zeros((max_batch_size, intermediate_size*2), dtype=torch.bfloat16, device="cuda")
     # mlp_mid = mpk.attach_input(torch_tensor=mlp_mid_torch, name="mlp_mid")
     mlp_mid = mpk.new_tensor(dims=(max_batch_size, intermediate_size*2), dtype=mi.bfloat16, name="mlp_mid", io_category="cuda_tensor")
@@ -96,7 +110,10 @@ if __name__ == "__main__":
     
     ###
     def ref_run():
-        return TorchRef.mlp(x_torch[:batch_size], w_gatedup_torch, w_down_proj_torch)
+        if WITH_RMS_NORM:
+            return TorchRef.norm_mlp(x_torch[:batch_size], w_rms_norm_torch, w_gatedup_torch, w_down_proj_torch)
+        else:
+            return TorchRef.mlp(x_torch[:batch_size], w_gatedup_torch, w_down_proj_torch)
     graph, ref_output = TorchRef.compile_capture(ref_run, is_compile=False)
     
     def mpk_run():

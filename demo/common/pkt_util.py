@@ -51,10 +51,17 @@ class TorchRef:
             torch.matmul(x, w.t(), out=out)
         return out
     
+    # hidden_states[seq_len, hidden], weight[hidden]
+    # hidden_states.pow(2): 逐元素开方
+    # mean(-1, keepdim=True): 在最后一维上取均值,即同一个seq下对所有hidden取均值，
+    #                         并保持维度，维度变为 variance[seq_len, 1].
+    # variance，逐元素开根号后广播，得到[seq_len, hidden], 同一seq下，所有hidden的值相同。
+    # 一句话：一个样本特征 hidden，先开方，取均值，后开根号，乘以原来的值，再乘以权重。
+    #        即每个样本都乘以自己的rms值，即均方根(一个标量值)：开方/求平均/开根号
     @staticmethod
-    def rms_norm(hidden_states, weight):
+    def rms_norm(hidden_states, weight, eps=1e-12):
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance)
+        hidden_states = hidden_states * torch.rsqrt(variance + eps)
         return weight * hidden_states
     
     @staticmethod
