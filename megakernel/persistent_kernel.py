@@ -1491,7 +1491,6 @@ class PersistentKernel:
         self.init_func = getattr(mod, "init_func")
         self.launch_func = getattr(mod, "launch_func")
         self.finalize_func = getattr(mod, "finalize_func")
-        print("Finished megakernel Loading...")
 
         meta_tensors = list()
         meta_tensors_ptr = [tensor.data_ptr() for tensor in meta_tensors]
@@ -1511,7 +1510,7 @@ class PersistentKernel:
             )
 
         self._is_compiled = True
-
+        print("Finished megakernel Loading...")
         # self.call_func = getattr(mod, "call_func")
         
     def __call__(self, batch_size, kernel_id=0):

@@ -922,7 +922,7 @@ private:
                                     pre_task_map, /*pre_task_map*/
                                     cur_task_map /*cur_task_map)*/);
       }
-      print_register_info("a", task_type, all_events, all_tasks, pre_task_map, cur_task_map);
+      // print_register_info("a", task_type, all_events, all_tasks, pre_task_map, cur_task_map);
       pre_output_ops = output_ops;
       pre_op = cur_op;
       pre_task_map = cur_task_map;
@@ -955,7 +955,7 @@ private:
         }
       }
     }
-    print_final_register_info("final", all_events, all_tasks);
+    // print_final_register_info("final", all_events, all_tasks);
   }
 
   TaskGraphResult print_task_graph(

@@ -8,9 +8,11 @@ from common.mpk_layers import MpkLayers
 
 WITH_RMS_NORM = 1
 WITH_RESIDUAL = 1
+
+
 if __name__ == "__main__":
-    max_batch_size = 1
-    batch_size = 1
+    max_batch_size = 32
+    batch_size = 32
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", default=os.getenv("MEGAKERNEL_HOME", default=None)+"/demo/gen", help="Output files directory")
     parser.add_argument("--trace-name", default="qwen3", help="Perfetto trace output name")
@@ -51,6 +53,17 @@ if __name__ == "__main__":
     w_gatedup = mpk.attach_input(torch_tensor=w_gatedup_torch, name="w_gatedup")
     w_down_proj = mpk.attach_input(torch_tensor=w_down_proj_torch, name="w_down_proj")
     mlp_out = mpk.attach_input(torch_tensor=out_torch, name="mlp_out")
+
+    # m1    
+    # rmsnorm_gird, rmsnorm_tile = (1, 1, 1), (1, 1, 1)
+    # linear1_gird, linear1_tile = (152, 1, 1), (128, 64, 128)
+    # silu_mul_gird, silu_mul_tile = (76, 1, 1), (128, 128, 1)
+    # linear2_gird, linear2_tile = (40, 1, 1), (64, 64, 64)
+    # m32
+    rmsnorm_gird, rmsnorm_tile = (32, 1, 1), (1, 1, 1)
+    linear1_gird, linear1_tile = (304, 1, 1), (64, 64, 64)
+    silu_mul_gird, silu_mul_tile = (152, 1, 1), (64, 32, 1)
+    linear2_gird, linear2_tile = (40, 1, 1), (64, 64, 64)
     
     x_residual = x
     if WITH_RMS_NORM:
@@ -59,7 +72,7 @@ if __name__ == "__main__":
             input=x,
             weight=w_rms_norm,
             output=rms_out,
-            grid_dim=(1, 1, 1), tile_dim=(1, 1, 1),
+            grid_dim=rmsnorm_gird, tile_dim=rmsnorm_tile,
             sync_mode=(0, 0, 0),
         )
         x = rms_out
@@ -71,10 +84,8 @@ if __name__ == "__main__":
         input=x,
         weight=w_gatedup,
         output=mlp_mid,
-        grid_dim=(152, 1, 1), tile_dim=(128, 64, 128),
+        grid_dim=linear1_gird, tile_dim=linear1_tile,
         sync_mode=(0, 0, 0),
-        # grid_dim=(8, 8, 1), tile_dim=(128, 64, 128),
-        # sync_mode=(0, 0, 0),
     )
     
     if 1:
@@ -85,7 +96,7 @@ if __name__ == "__main__":
         mpk.silu_mul_layer(
             input=mlp_mid,
             output=silu_mul_out,
-            grid_dim=(76, 1, 1), tile_dim=(128, 128, 1),
+            grid_dim=silu_mul_gird, tile_dim=silu_mul_tile,
             sync_mode=(2, 0, 0),
             # grid_dim=(2, 4, 1), tile_dim=(128, 1, 1),
             # sync_mode=(2, 0, 0),
@@ -96,7 +107,7 @@ if __name__ == "__main__":
                 weight=w_down_proj,
                 residual=x_residual,
                 output=mlp_out,
-                grid_dim=(40, 1, 1), tile_dim=(64, 64, 64),
+                grid_dim=linear2_gird, tile_dim=linear2_tile,
                 sync_mode=(0, 0, 0),
             )
         else:

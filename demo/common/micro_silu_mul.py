@@ -18,8 +18,8 @@ class _SiluMulStrategy:
         print(len(self.hparam_space))
         
     def _get_hparam_space(self):
-        BLOCK_M=[128] #, 256
-        BLOCK_N=[128] # 
+        BLOCK_M=[32] #, 256
+        BLOCK_N=[64, 128] # 
         thread_nums=[128]#
         
         res = []
@@ -30,7 +30,7 @@ class _SiluMulStrategy:
     
     def get_heuristic_hparams(self):
         # [BLOCK_M, BLOCK_N, threads]
-        return [128,128,128]
+        return [32,64,128]
         
     def get_kernel(self, selected_hparams):
         print("selected_hparams: ", selected_hparams)

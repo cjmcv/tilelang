@@ -29,7 +29,7 @@ def profile(target_func, torch_ref_func):
     print(f"tilelang Latency: {latency}ms vs {torch_latency}(torch) ms")
     
 def test_silu_mul():
-    M, N = 1, 9728
+    M, N = 32, 9728
     micro = MicroSiluMul(M,N, dtype=T.bfloat16, accum_dtype=T.float32)
     kernel = micro.get_kernel(HparamSelectMode.HEURISTIC) # HEURISTIC, TUNING, TUNED
     a = torch.randn(M, N*2, dtype=torch.bfloat16, device="cuda")
@@ -41,7 +41,7 @@ def test_silu_mul():
     profile(target_func, torch_ref)
     
 def test_rms_norm():
-    M = 1
+    M = 32
     N = 2560
     micro = MicroRmsNorm(M,N, dtype=T.bfloat16, accum_dtype=T.float32)
     kernel = micro.get_kernel(HparamSelectMode.TUNING) # HEURISTIC, TUNING, TUNED
@@ -57,10 +57,10 @@ def test_rms_norm():
     
 def test_gemm():
     M = 32
-    # N = 19456
-    # K = 2560
-    N = 2560
-    K = 9728
+    N = 19456
+    K = 2560
+    # N = 2560
+    # K = 9728
     # config = [64,64,64,2,128,0,true]
     micro = MicroLinear(MicroLinearStrategy.GEMM, M,N,K, dtype=T.bfloat16, accum_dtype=T.float32)
     kernel = micro.get_kernel(HparamSelectMode.HEURISTIC) # HEURISTIC, TUNING, TUNED
@@ -95,7 +95,7 @@ def test_silu_mul_gemm():
     profile(target_func, torch_ref)
     
 def test_gemm_add():
-    M = 1
+    M = 32
     # N = 19456
     # K = 2560
     N = 2560
@@ -115,9 +115,9 @@ def test_gemm_add():
     profile(target_func, torch_ref)
     
 if __name__ == "__main__":
-    # test_silu_mul()
+    test_silu_mul()
     # test_rms_norm()
     # test_gemm()
     # test_silu_mul_gemm() # 逻辑有误，silu_mul被重复计算
-    test_gemm_add()
+    # test_gemm_add()
     

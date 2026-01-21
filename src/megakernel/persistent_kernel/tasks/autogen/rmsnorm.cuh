@@ -1,7 +1,8 @@
 
 #pragma once
 
-#include "rms_norm_tl_1_2560.cuh"
+#include "m1/rms_norm_tl_1_2560.cuh"
+#include "m32/rms_norm_tl_32_2560.cuh"
 
 namespace kernel {
 
@@ -17,8 +18,11 @@ __device__ __forceinline__ void rms_norm_kernel(const int bx, const int by, cons
                                               void const *weight_ptr,
                                               void *output_ptr,
                                               float eps) {
-  if constexpr (M == 1 && N == 2560) {                                              
+  if constexpr (M == 1 && N == 2560) { 
     rms_norm_kernel_1_2560<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M,N>(bx, by, bz, input_ptr, weight_ptr, output_ptr, eps);
+  }
+  else if constexpr (M == 32 && N == 2560) { 
+    rms_norm_kernel_32_2560<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M,N>(bx, by, bz, input_ptr, weight_ptr, output_ptr, eps);
   }
   else {
     printf("Error: [rms_norm_kernel_%d_%d] There is no suitable microkernel!\n", M,N);

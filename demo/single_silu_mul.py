@@ -7,8 +7,8 @@ from common.pkt_util import TorchRef, MpkReporter, TestUtil
 from common.mpk_layers import MpkLayers
 
 if __name__ == "__main__":
-    max_batch_size = 128
-    batch_size = 128
+    max_batch_size = 32
+    batch_size = 32
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", default=os.getenv("MEGAKERNEL_HOME", default=None)+"/demo/gen", help="Output files directory")
     parser.add_argument("--trace-name", default="qwen3", help="Perfetto trace output name")
@@ -48,11 +48,10 @@ if __name__ == "__main__":
     mpk.silu_mul_layer(
         input=x,
         output=silu_mul_out,
-        grid_dim=(76, 1, 1),
-        block_dim=(128, 1, 1),
+        grid_dim=(152, 1, 1), tile_dim=(64, 32, 1),
+        sync_mode=(0, 0, 0),
     )
     layers.compile_load(args.nc, args.output_dir)
-    
     ##
     def ref_run():
         return TorchRef.silu_and_mul(x_torch)

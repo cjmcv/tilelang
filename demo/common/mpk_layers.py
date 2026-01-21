@@ -4,12 +4,9 @@ import megakernel as mi
 
 class MpkLayers:
     def __init__(self, instance_id, kernel_num, world_size, rank, max_batch_size, trace_name, profiling):
+        self.profiler_tensor = None
         if profiling:
-            self.profiler_tensor = torch.zeros(
-                3000 * 128, dtype=torch.uint64, device="cuda"
-            ).contiguous()
-        else:
-            self.profiler_tensor = None
+            self.profiler_tensor = torch.zeros(3000 * 128, dtype=torch.uint64, device="cuda").contiguous()
             
         num_workers, num_schedulers = mi.get_configurations_from_gpu(rank)
         print("num_workers: ", num_workers)
