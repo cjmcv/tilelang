@@ -7,7 +7,10 @@ mkdir build && cmake -B build -G Ninja && cmake --build build --parallel 4
 export PYTHONPATH=/home/cjmcv/project/tilelang:$PYTHONPATH
 
 ################################
-# 1. 先编译tvm
+# 1. 先编译tvm: https://tvm.apache.org/docs/install/from_source.html#step-2-get-source-from-github
+conda install -c conda-forge "llvmdev>=15" "cmake>=3.24" 
+apt install -y libzstd-dev libxml2-dev
+
 cd 3rdparty/tvm && rm -rf build && mkdir build && cd build
 cp ../cmake/config.cmake .
 
@@ -20,7 +23,10 @@ echo "set(USE_CUDA   ON)" >> config.cmake
 
 cmake .. && make -j6
 
-# 2. 添加软连接并编译tilelang
+cd 3rdparty/tvm-ffi &&  pip install .
+
+# 2. 回到主目录，添加软连接并编译tilelang
+
 rm -rf build && mkdir -p build/tvm
 
 ln -s $PWD/3rdparty/tvm/build/libtvm_runtime.so  build/tvm/
@@ -29,12 +35,14 @@ ln -s $PWD/3rdparty/tvm/build/lib/libtvm_ffi.so  build/tvm/
 
 cmake -B build -G Ninja && cmake --build build --parallel 8
 
-# 3. 使用tilelang
-export MEGAKERNEL_HOME=/home/cjmcv/project/megakernel && export PYTHONPATH=$MEGAKERNEL_HOME:$PYTHONPATH
-pushd demo && python micro_test.py && popd
-
-# 4. megakernel 编译
+# 3. megakernel 编译
 python megakernel_setup.py build_ext --inplace
+
+# 4. 使用tilelang
+export MEGAKERNEL_HOME=/home/cjmcv/project/megakernel && export PYTHONPATH=$MEGAKERNEL_HOME:$PYTHONPATH
+export MEGAKERNEL_HOME=/data/team/cjm/mg && export PYTHONPATH=$MEGAKERNEL_HOME:$PYTHONPATH
+
+pushd demo && python micro_test.py && popd
 pushd demo && python fused_mlp.py && popd
 
 # 清submodule
