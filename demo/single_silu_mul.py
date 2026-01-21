@@ -52,6 +52,7 @@ if __name__ == "__main__":
         sync_mode=(0, 0, 0),
     )
     layers.compile_load(args.nc, args.output_dir)
+    print("finish layers.compile_load")
     ##
     def ref_run():
         return TorchRef.silu_and_mul(x_torch)

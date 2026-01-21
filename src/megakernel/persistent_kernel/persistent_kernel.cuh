@@ -340,7 +340,7 @@ __device__ __forceinline__ void execute_worker(RuntimeConfig config) {
   // worker_queue_ids: 2 * 4 = 8 B
   // worker_queues: 2 * 8 = 16 B
   // remaining: 3016 B
-
+  // printf("execute_worker 0.\n");
   constexpr int TASK_DESCS_BUFFER_LENGTH = std::min(
       (megakernel::runtime::WORKER_RESERVED_STATIC_SHARED_MEMORY_SIZE - 56) /
           (int)(sizeof(TaskDesc) + sizeof(TaskId)),
@@ -391,14 +391,13 @@ __device__ __forceinline__ void execute_worker(RuntimeConfig config) {
       int queue_idx = 0;
       if (threadIdx.x == 0) {
         while (next_task_pos[queue_idx] == last_task_pos[queue_idx]) {
-          last_task_pos[queue_idx] =
-              ld_acquire_gpu_u64(&config.worker_queue_last_ready_task_id
-                                      [worker_queue_ids[queue_idx]]);
+          last_task_pos[queue_idx] = ld_acquire_gpu_u64(&config.worker_queue_last_ready_task_id[worker_queue_ids[queue_idx]]);
+          // printf("last_task_pos[%d]: %d", queue_idx, last_task_pos[queue_idx]);
           if (next_task_pos[queue_idx] < last_task_pos[queue_idx]) {
             break;
           } else {
-            queue_idx =
-                (queue_idx == num_worker_queues - 1) ? 0 : queue_idx + 1;
+            // printf("execute_worker 2: %d, %d.\n", queue_idx, num_worker_queues - 1);
+            queue_idx = (queue_idx == num_worker_queues - 1) ? 0 : queue_idx + 1;
           }
           // nanosleep to avoid overwhelming I/O
           __nanosleep(10);
@@ -654,7 +653,6 @@ __device__ __forceinline__ void execute_scheduler(RuntimeConfig config,
       my_first_worker += config.num_workers;
       my_last_worker += config.num_workers;
     }
-
     // ONLY can run when comment this chunk
 #ifdef MPK_ENABLE_VERBOSE
     printf("[SCHD] sched_id(%d) first_worker(%llu) last_worker(%llu)\n",
@@ -860,9 +858,12 @@ __device__ __forceinline__ void execute_scheduler(RuntimeConfig config,
 __global__ __launch_bounds__(WORKER_NUM_THREADS,
                              1) void persistent_kernel(RuntimeConfig config) {
   persistent_checker(config);
+  // printf("<%d,%d>", gridDim.x, blockIdx.x);
   if (blockIdx.x < config.num_workers) {
+    // printf("execute_worker: (%d.%d)", blockIdx.x, config.num_workers);
     execute_worker(config);
   } else {
+    // printf("execute_scheduler: (%d.%d).", blockIdx.x, config.num_workers);
     execute_scheduler(config, -(4 * config.num_workers));
   }
 }
@@ -1093,6 +1094,24 @@ extern "C" void init_persistent_kernel(int kernel_id,
   cudaStreamCreate(&global_runtime_config[kernel_id].scheduler_stream);
 }
 
+void print_smem_size() {
+  int device_id = 0;
+  cudaSetDevice(device_id);
+
+  cudaDeviceProp prop;
+  cudaGetDeviceProperties(&prop, device_id);
+
+  // Print GPU shared memory hardware limits (all in English)
+  printf("=== GPU Shared Memory Hardware Limits ===\n");
+  printf("GPU Model: %s\n", prop.name);
+  // printf("Max Dynamic Shared Memory per Block: %lu KB\n", prop.sharedMemPerBlockDynamic / 1024);
+  if (prop.sharedMemPerBlock < MAX_DYNAMIC_SHARED_MEMORY_SIZE) {
+    printf("Warning: Dynamic shared memory may be insufficient!\n");
+  }
+  printf("Max Total Shared Memory per Block (Static + Dynamic): %lu KB, prepare to allocate %d KB (Dynamic).\n", prop.sharedMemPerBlock / 1024, MAX_DYNAMIC_SHARED_MEMORY_SIZE / 1024);
+  printf("Total Shared Memory per SM: %lu KB\n", prop.sharedMemPerMultiprocessor / 1024);
+}
+
 // Entry point for C/C++
 // TODO: change launch config
 extern "C" void launch_persistent_kernel(int kernel_id, int batch_size) {
@@ -1142,6 +1161,7 @@ extern "C" void launch_persistent_kernel(int kernel_id, int batch_size) {
                                MAX_DYNAMIC_SHARED_MEMORY_SIZE /*sharedmem*/,
                                0 /*stream*/);
 #else
+    // print_smem_size();
     persistent_kernel<<<dim3(num_sms_to_use, 1, 1),
                         dim3(SINGLE_KERNEL_NUM_THREADS, 1, 1),
                         MAX_DYNAMIC_SHARED_MEMORY_SIZE /*smem*/>>>(
