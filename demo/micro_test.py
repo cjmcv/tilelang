@@ -15,6 +15,7 @@ from common.micro_base import HparamSelectMode
 from common.micro_linear import MicroLinearStrategy, MicroLinear
 from common.micro_rms_norm import MicroRmsNorm
 from common.micro_silu_mul import MicroSiluMul
+from common.micro_autogen import MicroAutoGen
 
 def profile(target_func, torch_ref_func):
     c = target_func()
@@ -44,7 +45,7 @@ def test_rms_norm():
     M = 32
     N = 2560
     micro = MicroRmsNorm(M,N, dtype=T.bfloat16, accum_dtype=T.float32)
-    kernel = micro.get_kernel(HparamSelectMode.TUNING) # HEURISTIC, TUNING, TUNED
+    kernel, fn, info = micro.get_kernel(HparamSelectMode.HEURISTIC) # HEURISTIC, TUNING, TUNED
 
     a = torch.randn(M, N, dtype=torch.bfloat16, device="cuda")
     b = torch.randn(1, N, dtype=torch.bfloat16, device="cuda")
@@ -74,25 +75,25 @@ def test_gemm():
         return TorchRef.linear(a, b) 
     profile(target_func, torch_ref)
 
-def test_silu_mul_gemm():
-    M = 32
-    # N = 19456
-    # K = 2560
-    N = 2560
-    K = 9728
-    # config = [64,64,64,2,128,0,true]
-    micro = MicroLinear(MicroLinearStrategy.SILU_MUL_GEMM, M,N,K, dtype=T.bfloat16, accum_dtype=T.float32)
-    kernel = micro.get_kernel(HparamSelectMode.HEURISTIC) # HEURISTIC, TUNING, TUNED
+# def test_silu_mul_gemm():
+#     M = 32
+#     # N = 19456
+#     # K = 2560
+#     N = 2560
+#     K = 9728
+#     # config = [64,64,64,2,128,0,true]
+#     micro = MicroLinear(MicroLinearStrategy.SILU_MUL_GEMM, M,N,K, dtype=T.bfloat16, accum_dtype=T.float32)
+#     kernel = micro.get_kernel(HparamSelectMode.HEURISTIC) # HEURISTIC, TUNING, TUNED
 
-    a = torch.randn((M, K*2), dtype=torch.bfloat16, device="cuda")
-    b = torch.randn((N, K), dtype=torch.bfloat16, device="cuda")
+#     a = torch.randn((M, K*2), dtype=torch.bfloat16, device="cuda")
+#     b = torch.randn((N, K), dtype=torch.bfloat16, device="cuda")
 
-    def target_func():
-        return kernel(a, b)
-    def torch_ref():
-        a2 = TorchRef.silu_and_mul(a)
-        return TorchRef.linear(a2, b)
-    profile(target_func, torch_ref)
+#     def target_func():
+#         return kernel(a, b)
+#     def torch_ref():
+#         a2 = TorchRef.silu_and_mul(a)
+#         return TorchRef.linear(a2, b)
+#     profile(target_func, torch_ref)
     
 def test_gemm_add():
     M = 32
@@ -113,13 +114,16 @@ def test_gemm_add():
     def torch_ref():
         return TorchRef.linear(a, b) + r
     profile(target_func, torch_ref)
-    
+
 if __name__ == "__main__":
-    test_silu_mul()
+    # test_silu_mul()
     # test_rms_norm()
     # test_gemm()
-    # test_silu_mul_gemm() # 逻辑有误，silu_mul被重复计算
+    ## test_silu_mul_gemm() # 逻辑有误，silu_mul被重复计算
     # test_gemm_add()
+    
+    gen = MicroAutoGen(128, 2560, 9728)
+    gen.gen_qwen_mlp(HparamSelectMode.TUNING, 2)
     
     # 整合该文件，形成一个class，通过统一参数，和选定算子，自动生成代码并拷贝到对应路径，打印出grid信息以一键验证。
     # 分析：gemm1的4block -> silu_mul的2block，02->0, 13->1

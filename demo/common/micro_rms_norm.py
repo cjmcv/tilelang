@@ -20,7 +20,7 @@ class _RmsNormStrategy:
     def _get_hparam_space(self):
         BLOCK_M=[1] #, 256
         BLOCK_N=[1] # 
-        thread_nums=[128, 256]#
+        thread_nums=[128]#
         
         res = []
         for m, n, thread_num in itertools.product(
@@ -125,16 +125,18 @@ __device__ __forceinline__ void rms_norm_kernel_<name_suffix>(const int bx, cons
         source += "\n} // kernel"
         
         grid_dim, block_dim, dynamic_smem_buf, use_cooperative_groups = kernel.get_launch_info()
+        self.grid_tile_info = f"grid_dim=({grid_dim['blockIdx.x']}, {grid_dim['blockIdx.y']}, {grid_dim['blockIdx.z']}), tile_dim=({BLOCK_N}, {BLOCK_M}, {BLOCK_K})"
         extra_attr = f"\n// Strategy: {self.strategy.name}"
         extra_attr += f"\n// selected_hparams: {selected_hparams}."
         extra_attr += f"\n// smem: {dynamic_smem_buf} bytes."
         extra_attr += f"\n// use_cooperative_groups: {use_cooperative_groups}."
-        extra_attr += f"\n// grid_dim=({grid_dim['blockIdx.x']}, {grid_dim['blockIdx.y']}, {grid_dim['blockIdx.z']}), "
-        extra_attr += f"tile_dim=({BLOCK_N}, {BLOCK_M}, {BLOCK_K}),"
+        extra_attr += f"\n// " + self.grid_tile_info
         extra_attr += f"\n// block_dim=({block_dim['threadIdx.x']}, {block_dim['threadIdx.y']}, {block_dim['threadIdx.z']})."
         source += extra_attr
         
         return source
     
     def get_kernel(self, mode: HparamSelectMode):
-        return self.auto_get_kernel(self.get_source, self.strategy, self.save_path, mode)
+        kernel = self.auto_get_kernel(self.get_source, self.strategy, self.save_path+self.strategy.name, mode)
+        file_name = self.save_path+self.strategy.name+".cuh"
+        return kernel, file_name, self.grid_tile_info

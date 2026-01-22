@@ -4,7 +4,7 @@
 #include <cuda_fp8.h>
 #include <cute/numeric/numeric_types.hpp>
 
-#define ENABLE_FP8_E8 1
+// #define ENABLE_FP8_E8
 
 using fp8_e4_t = tl::float_e4m3_t;
 using fp8_e5_t = tl::float_e5m2_t;

@@ -237,16 +237,14 @@ class BaseMicroKernel:
         
         return latency_hparams_list
     
-    def auto_get_kernel(self, get_source_func, strategy, save_path, mode: HparamSelectMode):
-        file_path = save_path+strategy.name
-        
+    def auto_get_kernel(self, get_source_func, strategy, save_path, mode: HparamSelectMode):    
         if (mode == HparamSelectMode.TUNING):
             latency_hparams_list = self.run_tuning(strategy.name, strategy.hparam_space, strategy.get_kernel)
             # Save all tuned kernels.
             for i in range(len(latency_hparams_list)):
                 latency, selected_hparams, idx = latency_hparams_list[i]
                 kernel = strategy.get_kernel(selected_hparams)
-                file_name = save_path+f"{strategy.name}/"+f"{strategy.name}_top{i}.cuh"
+                file_name = save_path+f"/{strategy.name}_top{i}.cuh"
                 dir_path = os.path.dirname(file_name)
                 os.makedirs(dir_path, exist_ok=True)
                 with open(file_name, "w", encoding="utf-8") as f:
@@ -263,8 +261,8 @@ class BaseMicroKernel:
             print("[Heuristic] selected_hparams: ", selected_hparams)
         
         kernel = strategy.get_kernel(selected_hparams)
-        kernel.export_sources(kernel_path=file_path+"_src.cuh", host_path=file_path+"_src.cpp")
-        with open(file_path+".cuh", "w", encoding="utf-8") as f:
+        kernel.export_sources(kernel_path=save_path+"_src.cuh", host_path=save_path+"_src.cpp")
+        with open(save_path+".cuh", "w", encoding="utf-8") as f:
             f.write(get_source_func(kernel, selected_hparams))
             
         # print("0:", kernel.prim_func.attrs)
