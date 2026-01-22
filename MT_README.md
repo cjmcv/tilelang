@@ -8,7 +8,7 @@ export PYTHONPATH=/home/cjmcv/project/tilelang:$PYTHONPATH
 
 ################################
 # 1. 先编译tvm: https://tvm.apache.org/docs/install/from_source.html#step-2-get-source-from-github
-conda install -c conda-forge "llvmdev>=15" "cmake>=3.24" 
+conda install -c conda-forge llvmdev=15.0.7
 apt install -y libzstd-dev libxml2-dev
 
 cd 3rdparty/tvm && rm -rf build && mkdir build && cd build
@@ -18,15 +18,17 @@ echo "set(CMAKE_BUILD_TYPE Release)" >> config.cmake
 echo "set(USE_LLVM \"llvm-config --ignore-libllvm --link-static\")" >> config.cmake
 echo "set(BUILD_SHARED_LIBS ON)" >> config.cmake
 echo "set(HIDE_PRIVATE_SYMBOLS ON)" >> config.cmake
-echo "set(CMAKE_CUDA_ARCHITECTURES 89)" >> config.cmake
+echo "set(CMAKE_CUDA_ARCHITECTURES 90)" >> config.cmake  # 89
 echo "set(USE_CUDA   ON)" >> config.cmake
 
 cmake .. && make -j6
 
-cd 3rdparty/tvm-ffi &&  pip install .
+cd ../3rdparty/tvm-ffi &&  pip install .
 
 # 2. 回到主目录，添加软连接并编译tilelang
+搜CMakelist: cjm !! hardcode
 
+cd ../../../../
 rm -rf build && mkdir -p build/tvm
 
 ln -s $PWD/3rdparty/tvm/build/libtvm_runtime.so  build/tvm/

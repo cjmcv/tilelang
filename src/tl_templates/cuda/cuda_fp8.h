@@ -4,9 +4,14 @@
 #include <cuda_fp8.h>
 #include <cute/numeric/numeric_types.hpp>
 
+#define ENABLE_FP8_E8 1
+
 using fp8_e4_t = tl::float_e4m3_t;
 using fp8_e5_t = tl::float_e5m2_t;
+
+#ifdef ENABLE_FP8_E8
 using fp8_e8_t = __nv_fp8_e8m0;
+#endif // #ifdef ENABLE_FP8_E8
 
 struct __CUDA_ALIGN__(2) fp8_e4_2_t {
   fp8_e4_t x;
@@ -78,6 +83,7 @@ struct __CUDA_ALIGN__(32) fp8_e5_32_t {
   }
 };
 
+#ifdef ENABLE_FP8_E8
 struct __CUDA_ALIGN__(2) fp8_e8_2_t {
   fp8_e8_t x;
   fp8_e8_t y;
@@ -112,6 +118,7 @@ struct __CUDA_ALIGN__(32) fp8_e8_32_t {
     return *this;
   }
 };
+#endif  // #ifdef ENABLE_FP8_E8
 
 // Pack two fp8_e4_t values.
 TL_DEVICE fp8_e4_2_t make_fp8_e4_2_t(fp8_e4_t x, fp8_e4_t y) {
@@ -231,6 +238,7 @@ TL_DEVICE fp8_e5_32_t make_fp8_e5_32_t(
   return result;
 }
 
+#ifdef ENABLE_FP8_E8
 // Pack two fp8_e8_t values.
 TL_DEVICE fp8_e8_2_t make_fp8_e8_2_t(fp8_e8_t x, fp8_e8_t y) {
   fp8_e8_2_t result;
@@ -289,6 +297,7 @@ TL_DEVICE fp8_e8_32_t make_fp8_e8_32_t(
                               y12, y13, y14, y15);
   return result;
 }
+#endif // #ifdef ENABLE_FP8_E8
 
 // e4m3x2 -> float2
 TL_DEVICE float2

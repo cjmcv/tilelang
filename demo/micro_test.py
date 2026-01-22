@@ -121,3 +121,6 @@ if __name__ == "__main__":
     # test_silu_mul_gemm() # 逻辑有误，silu_mul被重复计算
     # test_gemm_add()
     
+    # 整合该文件，形成一个class，通过统一参数，和选定算子，自动生成代码并拷贝到对应路径，打印出grid信息以一键验证。
+    # 分析：gemm1的4block -> silu_mul的2block，02->0, 13->1
+    #      能否只写回gemm1的后两个block 23，前两个block 01保留在smem，延递silu_mul上。
