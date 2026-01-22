@@ -11,8 +11,8 @@ WITH_RESIDUAL = 1
 
 
 if __name__ == "__main__":
-    max_batch_size = 128
-    batch_size = 128
+    max_batch_size = 1
+    batch_size = 1
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", default=os.getenv("MEGAKERNEL_HOME", default=None)+"/demo/gen", help="Output files directory")
     parser.add_argument("--trace-name", default="qwen3", help="Perfetto trace output name")
@@ -54,21 +54,21 @@ if __name__ == "__main__":
     w_down_proj = mpk.attach_input(torch_tensor=w_down_proj_torch, name="w_down_proj")
     mlp_out = mpk.attach_input(torch_tensor=out_torch, name="mlp_out")
 
-    # # m1    
-    # rmsnorm_gird, rmsnorm_tile = (1, 1, 1), (1, 1, 1)
-    # linear1_gird, linear1_tile = (152, 1, 1), (128, 64, 128)
-    # silu_mul_gird, silu_mul_tile = (76, 1, 1), (128, 128, 1)
-    # linear2_gird, linear2_tile = (40, 1, 1), (64, 64, 64)
+    # m1    
+    rmsnorm_gird, rmsnorm_tile = (1, 1, 1), (1, 1, 1)
+    linear1_gird, linear1_tile = (152, 1, 1), (128, 64, 128)
+    silu_mul_gird, silu_mul_tile = (76, 1, 1), (128, 128, 1)
+    linear2_gird, linear2_tile = (40, 1, 1), (64, 64, 64)
     # # m32
     # rmsnorm_gird, rmsnorm_tile = (32, 1, 1), (1, 1, 1)
     # linear1_gird, linear1_tile = (304, 1, 1), (64, 64, 64)
     # silu_mul_gird, silu_mul_tile = (152, 1, 1), (64, 32, 1)
     # linear2_gird, linear2_tile = (40, 1, 1), (64, 64, 64)
-    # m128
-    rmsnorm_gird, rmsnorm_tile = (32, 1, 1), (1, 1, 1)
-    linear1_gird, linear1_tile = (304, 2, 1), (64, 64, 64)
-    silu_mul_gird, silu_mul_tile = (76, 4, 1), (128, 32, 1)
-    linear2_gird, linear2_tile = (40, 2, 1), (64, 64, 64)
+    # # m128
+    # rmsnorm_gird, rmsnorm_tile = (128, 1, 1), (1, 1, 1)
+    # linear1_gird, linear1_tile = (304, 2, 1), (64, 64, 64)
+    # silu_mul_gird, silu_mul_tile = (152, 4, 1), (64, 32, 1)
+    # linear2_gird, linear2_tile = (40, 2, 1), (64, 64, 64)
     
     x_residual = x
     if WITH_RMS_NORM:

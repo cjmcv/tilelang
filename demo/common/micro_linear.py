@@ -127,9 +127,9 @@ class _GemmStrategy:
         print(len(self.hparam_space))
         
     def _get_hparam_space(self):
-        BLOCK_M=[64, 128] #, 256
+        BLOCK_M=[16, 32] #, 64, 256
         BLOCK_N=[64, 128, 256] # 
-        BLOCK_K=[64, 128] # 32, 
+        BLOCK_K=[32, 64, 128] # 
         splitks=[1] #, 2, 4
         num_stages=[0, 1, 2, 3]#
         thread_nums=[128]#, 256
@@ -148,7 +148,7 @@ class _GemmStrategy:
         if self.strategy == MicroLinearStrategy.SILU_MUL_GEMM:
             return [64, 128, 64, 1, 2, 128, 0, False]
         else:
-            return [64, 64, 64, 1, 3, 128, 0, False]
+            return [16, 64, 64, 1, 3, 128, 0, False]
         
     def get_kernel(self, selected_hparams):
         splitk = selected_hparams[3]
@@ -387,6 +387,5 @@ template <typename T,
         return source
     
     def get_kernel(self, mode: HparamSelectMode):
-        kernel = self.auto_get_kernel(self.get_source, self.strategy, self.save_path+self.strategy.name, mode)
-        file_name = self.save_path+self.strategy.name+".cuh"
-        return kernel, file_name, self.grid_tile_info
+        kernel, path = self.auto_get_kernel(self.get_source, self.strategy, mode)
+        return kernel, path, self.grid_tile_info

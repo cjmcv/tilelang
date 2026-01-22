@@ -127,14 +127,15 @@ class LaunchInfoAnalyzer:
                     
         stmt_functor.post_order_visit(self.prim_func.body, collect)
         return smem_bytes*num_stages
+    
 class BaseMicroKernel:
     def __init__(self):
         self.megakernel_home = os.getenv("MEGAKERNEL_HOME", default=None)
         if self.megakernel_home is None:
             raise EnvironmentError("The environment variable MEGAKERNEL_HOME is not set.")
         prop = torch.cuda.get_device_properties(0)
-        self.save_path = self.megakernel_home + "/demo/gen/sm" + str(prop.major) + str(prop.minor) + "/"
-        target_dir = Path(self.save_path)
+        self.base_path = self.megakernel_home + "/demo/gen/sm" + str(prop.major) + str(prop.minor) + "/"
+        target_dir = Path(self.base_path)
         target_dir.mkdir(parents=True, exist_ok=True)
 
     def replace_line(self, text: str, src_target: str, skip_count: int, dst_target: str) -> str:
@@ -165,9 +166,9 @@ class BaseMicroKernel:
         
         print(f"Save: {file_path}")
 
-    def read_tuned_hparams_from_json(self, kernel_name):
+    def read_tuned_hparams_from_json(self, save_path):
         latency_hparams_list = []
-        read_file_path = self.save_path+kernel_name+"_tuned.json"
+        read_file_path = save_path+f"_atuned.json"
             
         try:
             with open(read_file_path, "r", encoding="utf-8") as f:
@@ -186,8 +187,8 @@ class BaseMicroKernel:
             
         return latency_hparams_list
 
-    def run_tuning(self, kernel_name, hparam_space, get_kernel_func):
-        tuned_file_path = self.save_path + kernel_name + "_tuned.json"
+    def run_tuning(self, kernel_name, hparam_space, get_kernel_func, save_path):
+        tuned_file_path = save_path+f"_tuned.json"
         print(f"Start tuning with a total of {len(hparam_space)} schemes.")
 
         latency_hparams_list = []
@@ -237,37 +238,39 @@ class BaseMicroKernel:
         
         return latency_hparams_list
     
-    def auto_get_kernel(self, get_source_func, strategy, save_path, mode: HparamSelectMode):    
+    def auto_get_kernel(self, get_source_func, strategy, mode: HparamSelectMode):
+        save_path = self.base_path+f"/{strategy.name}/{strategy.name}"
+        dir_path = os.path.dirname(save_path)
+        os.makedirs(dir_path, exist_ok=True)
+        
         if (mode == HparamSelectMode.TUNING):
-            latency_hparams_list = self.run_tuning(strategy.name, strategy.hparam_space, strategy.get_kernel)
+            latency_hparams_list = self.run_tuning(strategy.name, strategy.hparam_space, strategy.get_kernel, save_path)
             # Save all tuned kernels.
             for i in range(len(latency_hparams_list)):
                 latency, selected_hparams, idx = latency_hparams_list[i]
                 kernel = strategy.get_kernel(selected_hparams)
-                file_name = save_path+f"/{strategy.name}_top{i}.cuh"
-                dir_path = os.path.dirname(file_name)
-                os.makedirs(dir_path, exist_ok=True)
+                file_name = save_path+f"_top{i}.cuh"
                 with open(file_name, "w", encoding="utf-8") as f:
-                    f.write(self.get_source(kernel, selected_hparams) + f"\n// latency: {latency}, idx: {idx}")
-                    
+                    f.write(get_source_func(kernel, selected_hparams) + f"\n// latency: {latency}, idx: {idx}")
             best_latency, selected_hparams, idx = latency_hparams_list[0]
-            
         elif (mode == HparamSelectMode.TUNED):
-            latency_hparams_list = self.read_tuned_hparams_from_json(strategy.name)
+            latency_hparams_list = self.read_tuned_hparams_from_json(save_path)
             best_latency, selected_hparams = latency_hparams_list[0]["latency"], latency_hparams_list[0]["hparams"]
             print("[Tuned] selected_hparams: ", selected_hparams)
         else:
             selected_hparams = strategy.get_heuristic_hparams()
             print("[Heuristic] selected_hparams: ", selected_hparams)
-        
-        kernel = strategy.get_kernel(selected_hparams)
-        kernel.export_sources(kernel_path=save_path+"_src.cuh", host_path=save_path+"_src.cpp")
-        with open(save_path+".cuh", "w", encoding="utf-8") as f:
-            f.write(get_source_func(kernel, selected_hparams))
             
+        kernel = strategy.get_kernel(selected_hparams)
+        profiler = kernel.get_profiler()
+        latency = round(profiler.do_bench(backend="cupti"), 5)
+        # kernel.export_sources(kernel_path=save_path+f"_src.cuh")
+        with open(save_path+f".cuh", "w", encoding="utf-8") as f:
+            f.write(get_source_func(kernel, selected_hparams) + f"\n// latency: {latency}")
+        print(f"selected: {selected_hparams}; latency: {latency}ms")    
         # print("0:", kernel.prim_func.attrs)
         # print("1:", kernel.adapter.params)
         # print("2:", kernel.adapter.func)
         # print("3:", kernel.config)
         # print("4:", kernel.prim_func)
-        return kernel
+        return kernel, save_path+f".cuh"

@@ -140,6 +140,5 @@ __device__ __forceinline__ void silu_mul_kernel_<name_suffix>(const int bx, cons
         return source
     
     def get_kernel(self, mode: HparamSelectMode):
-        kernel = self.auto_get_kernel(self.get_source, self.strategy, self.save_path+self.strategy.name, mode)
-        file_name = self.save_path+self.strategy.name+".cuh"
-        return kernel, file_name, self.grid_tile_info
+        kernel, path = self.auto_get_kernel(self.get_source, self.strategy, mode)
+        return kernel, path, self.grid_tile_info

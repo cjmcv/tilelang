@@ -122,9 +122,10 @@ if __name__ == "__main__":
     ## test_silu_mul_gemm() # 逻辑有误，silu_mul被重复计算
     # test_gemm_add()
     
-    gen = MicroAutoGen(128, 2560, 9728)
-    gen.gen_qwen_mlp(HparamSelectMode.TUNING, 2)
+    gen = MicroAutoGen(1, 2560, 9728)
+    gen.gen_qwen_mlp(HparamSelectMode.HEURISTIC, 3) # HEURISTIC, TUNING, TUNED
     
-    # 整合该文件，形成一个class，通过统一参数，和选定算子，自动生成代码并拷贝到对应路径，打印出grid信息以一键验证。
+    # 1. 自动生成与组合到megakernel中
+    # 2. gemv对比性能
     # 分析：gemm1的4block -> silu_mul的2block，02->0, 13->1
     #      能否只写回gemm1的后两个block 23，前两个block 01保留在smem，延递silu_mul上。
