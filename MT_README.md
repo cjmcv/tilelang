@@ -18,7 +18,7 @@ echo "set(CMAKE_BUILD_TYPE Release)" >> config.cmake
 echo "set(USE_LLVM \"llvm-config --ignore-libllvm --link-static\")" >> config.cmake
 echo "set(BUILD_SHARED_LIBS ON)" >> config.cmake
 echo "set(HIDE_PRIVATE_SYMBOLS ON)" >> config.cmake
-echo "set(CMAKE_CUDA_ARCHITECTURES 90)" >> config.cmake  # 89
+echo "set(CMAKE_CUDA_ARCHITECTURES 89)" >> config.cmake  # 90
 echo "set(USE_CUDA   ON)" >> config.cmake
 
 cmake .. && make -j6
@@ -52,8 +52,15 @@ rm -rf .git/modules/3rdparty/tvm/
 git submodule add https://github.com/apache/tvm.git 3rdparty/tvm
 
 # TODO
-
-
+1. 基于single_linear尝试检索所有micro kernel配置，尝试找到超越torch的方案，并分析tilelang的自己launch和集成后的耗时是否有一定规律？
+2. 考虑tilelang端只生成代码而不编译，看能否减少耗时；
+3. 考虑新增megakernel的并行编译；
+4. L40并行编译崩溃问题；
+5. gemv对比性能
+6. 分析：block派发逻辑是否固定，还是属于抢占式派发，每次都不同。
+7. 分析：gemm1的4block -> silu_mul的2block，02->0, 13->1，能否只写回gemm1的后两个block 23，前两个block 01保留在smem，延递silu_mul上。
+   尝试: 依托block的固定smem，通过多传入偏移量，实现跨task共享。
+8. 排查block数量不能超过sm数量的本质原因。
 
 # 备注
 @tilelang.testing.requires_cuda

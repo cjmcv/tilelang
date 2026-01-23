@@ -7,6 +7,7 @@ import os
 import time
 import megakernel as mi
 import torch.nn.functional as F
+from tilelang.utils.profiler import do_bench
 
 class TestUtil:
     @staticmethod
@@ -200,13 +201,17 @@ class MpkReporter:
         print(name, "run time (ms): ", run_time / test_iter)
         
     def generate_report(self, mpk_run, mpk_out, splitk, torch_run, torch_out, warnup_iter, test_iter, allclose_iter, print_all):
-        for _ in range(warnup_iter):
-            torch_run()
+        # for _ in range(warnup_iter):
+        #     torch_run()
         
         self.check_allclose(mpk_run, mpk_out, splitk, torch_out, allclose_iter, print_all)      
 
-        self.time_cuda_event_record("torch_ref", torch_run, test_iter)   
-        self.time_cuda_event_record("mpk", mpk_run, test_iter)
+        latency = do_bench(lambda: mpk_run(), warmup=warnup_iter, rep=test_iter, backend="cupti")
+        torch_latency = do_bench(lambda: torch_run(), warmup=warnup_iter, rep=test_iter, backend="cupti")
+        print(f"mpk Latency: {latency:.3f}ms vs {torch_latency:.3f}(torch) ms")
+        
+        # self.time_cuda_event_record("torch_ref", torch_run, test_iter)   
+        # self.time_cuda_event_record("mpk", mpk_run, test_iter)
 
         # self.time_cpu_record("torch_ref", torch_run, test_iter)   
         # self.time_cpu_record("mpk", mpk_run, test_iter)

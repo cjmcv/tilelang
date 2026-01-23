@@ -32,7 +32,7 @@ def profile(target_func, torch_ref_func):
 def test_silu_mul():
     M, N = 32, 9728
     micro = MicroSiluMul(M,N, dtype=T.bfloat16, accum_dtype=T.float32)
-    kernel = micro.get_kernel(HparamSelectMode.HEURISTIC) # HEURISTIC, TUNING, TUNED
+    kernel, name, info  = micro.get_kernel(HparamSelectMode.HEURISTIC) # HEURISTIC, TUNING, TUNED
     a = torch.randn(M, N*2, dtype=torch.bfloat16, device="cuda")
     
     def target_func():
@@ -57,14 +57,14 @@ def test_rms_norm():
     profile(target_func, torch_ref)
     
 def test_gemm():
-    M = 32
-    N = 19456
-    K = 2560
+    M = 1
+    N = 6144
+    K = 1024
     # N = 2560
     # K = 9728
     # config = [64,64,64,2,128,0,true]
     micro = MicroLinear(MicroLinearStrategy.GEMM, M,N,K, dtype=T.bfloat16, accum_dtype=T.float32)
-    kernel = micro.get_kernel(HparamSelectMode.HEURISTIC) # HEURISTIC, TUNING, TUNED
+    kernel, name, info = micro.get_kernel(HparamSelectMode.TUNED) # HEURISTIC, TUNING, TUNED
 
     a = torch.randn((M, K), dtype=torch.bfloat16, device="cuda")
     b = torch.randn((N, K), dtype=torch.bfloat16, device="cuda")
@@ -96,14 +96,14 @@ def test_gemm():
 #     profile(target_func, torch_ref)
     
 def test_gemm_add():
-    M = 32
-    # N = 19456
-    # K = 2560
-    N = 2560
-    K = 9728
+    M = 1
+    N = 1024
+    K = 3072
+    # N = 2560
+    # K = 9728
     # config = [64,64,64,2,128,0,true]
     micro = MicroLinear(MicroLinearStrategy.GEMM_ADD, M,N,K, dtype=T.bfloat16, accum_dtype=T.float32)
-    kernel = micro.get_kernel(HparamSelectMode.HEURISTIC) # HEURISTIC, TUNING, TUNED
+    kernel, name, info  = micro.get_kernel(HparamSelectMode.TUNED) # HEURISTIC, TUNING, TUNED
 
     a = torch.randn((M, K), dtype=torch.bfloat16, device="cuda")
     b = torch.randn((N, K), dtype=torch.bfloat16, device="cuda")
@@ -113,20 +113,16 @@ def test_gemm_add():
         return kernel(a, b, r)
     def torch_ref():
         return TorchRef.linear(a, b) + r
+    
     profile(target_func, torch_ref)
 
 if __name__ == "__main__":
     # test_silu_mul()
     # test_rms_norm()
-    # test_gemm()
+    test_gemm()
     ## test_silu_mul_gemm() # 逻辑有误，silu_mul被重复计算
     # test_gemm_add()
     
-    # gen = MicroAutoGen(1, 2560, 9728)
-    gen = MicroAutoGen(1, 1024, 3072)
-    gen.gen_qwen3_mlp(HparamSelectMode.TUNED, 99) # HEURISTIC, TUNING, TUNED
-    
-    # 1. 自动生成与组合到megakernel中
-    # 2. gemv对比性能
-    # 分析：gemm1的4block -> silu_mul的2block，02->0, 13->1
-    #      能否只写回gemm1的后两个block 23，前两个block 01保留在smem，延递silu_mul上。
+    # # gen = MicroAutoGen(1, 2560, 9728)
+    # gen = MicroAutoGen(1, 1024, 3072)
+    # gen.gen_qwen3_mlp(HparamSelectMode.TUNED, 99) # HEURISTIC, TUNING, TUNED

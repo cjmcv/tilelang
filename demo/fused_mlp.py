@@ -10,7 +10,6 @@ from common.autogen.qwen3_mlp_config import Qwen3MlpConfig
 WITH_RMS_NORM = 1
 WITH_RESIDUAL = 1
 
-
 if __name__ == "__main__":
     max_batch_size = 1
     batch_size = 1
@@ -126,6 +125,9 @@ if __name__ == "__main__":
             return TorchRef.norm_mlp(x_torch[:batch_size], w_rms_norm_torch, w_gatedup_torch, w_down_proj_torch) + x_torch[:batch_size]
         else:
             return TorchRef.mlp(x_torch[:batch_size], w_gatedup_torch, w_down_proj_torch)
+        return TorchRef.linear(x_torch[:batch_size], w_gatedup_torch)
+        # O1 = TorchRef.rms_norm(x_torch[:batch_size], w_rms_norm_torch)
+        # return TorchRef.linear(O1, w_gatedup_torch)
     graph, ref_output = TorchRef.compile_capture(ref_run, is_compile=False)
     
     def mpk_run():
@@ -136,6 +138,7 @@ if __name__ == "__main__":
 
     for _ in range(100):
         graph.replay()
+        # ref_run()
     mpk_run()
     ##
     

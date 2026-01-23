@@ -38,12 +38,19 @@ class MicroAutoGen:
         config_dir = Path(config_path)
         config_dir.mkdir(parents=True, exist_ok=True)
         
+        ## L40
+        # rmsnorm_layout = (1, 1, 1), (1, 1, 1)
+        # linear1_layout = (192, 1, 1), (32, 16, 256)
+        # silu_mul_layout = (96, 1, 1), (32, 16, 1)
+        # linear2_layout = (32, 1, 1), (32, 16, 256)        
+        ## rtx4050
+        # rmsnorm_layout = (1, 1, 1), (1, 1, 1)
+        # linear1_layout = (96, 1, 1), (64, 16, 64)
+        # silu_mul_layout = (48, 1, 1), (64, 16, 1)
+        # linear2_layout = (32, 1, 1), (32, 16, 128)
+    
         with open(config_path+"qwen3_mlp_config.py", "w", encoding="utf-8") as config_file:
             config_file.write(f"class Qwen3MlpConfig:\n")
-            # rmsnorm_layout = (1, 1, 1), (1, 1, 1)
-            # linear1_layout = (304, 1, 1), (64, 16, 128)
-            # silu_mul_layout = (152, 1, 1), (64, 16, 1)
-            # linear2_layout = (40, 1, 1), (64, 16, 64)
             if (idx == 0 or idx == 99):
                 kernel = MicroRmsNorm(self.batch_size, self.hidden_size, dtype=self.dtype, accum_dtype=self.accum_dtype)
                 self._save_target(kernel, mode, code_dir, config_file, "rmsnorm_layout")

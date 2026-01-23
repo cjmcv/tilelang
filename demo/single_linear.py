@@ -6,6 +6,7 @@ import megakernel as mi
 
 from common.pkt_util import TorchRef, MpkReporter, TestUtil
 from common.mpk_layers import MpkLayers
+from common.autogen.qwen3_mlp_config import Qwen3MlpConfig
 
 if __name__ == "__main__":
     max_batch_size = 1
@@ -37,10 +38,10 @@ if __name__ == "__main__":
     mpk = layers.get_mpk()
     
     splitk = 1 # 8
-    hidden_size = 2560        # K
-    intermediate_size = 9728 # torch.randn / ones / TestUtil.create_matrix_arange_col /
-    # hidden_size = 1024
-    # intermediate_size = 3072
+    # hidden_size = 2560        # K
+    # intermediate_size = 9728 # torch.randn / ones / TestUtil.create_matrix_arange_col /
+    hidden_size = 1024
+    intermediate_size = 3072
     
     # w_torch = w_gatedup_torch 
     w_torch = torch.randn((intermediate_size*2, hidden_size), dtype=torch.bfloat16, device="cuda")
@@ -58,9 +59,8 @@ if __name__ == "__main__":
         input=x,
         weight=w,
         output=linear_out,
-        # grid_dim=(152, 1, 1),  # 19456/128
-        # block_dim=(128, 1, 1),
-        grid_dim=(152, 1, 1), tile_dim=(128, 64, 128)
+        sync_mode=(0, 0, 0),
+        layout=Qwen3MlpConfig.linear1_layout,
     )
     layers.compile_load(args.nc, args.output_dir)
     

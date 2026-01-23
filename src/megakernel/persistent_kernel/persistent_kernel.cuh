@@ -237,14 +237,14 @@ __device__ __forceinline__ void terminate_schedulers(RuntimeConfig config) {
 }
 
 __device__ __forceinline__ void init_launch(RuntimeConfig config) {
-  // Ö»ĞèÒª1¸öblock¸ºÔğ
+  // åªéœ€è¦1ä¸ªblockè´Ÿè´£
   if (threadIdx.x == 0) {
     *config.infer_cnt = 0;
   }
 }
 
 __device__ __forceinline__ void prepare_queue(RuntimeConfig config) {
-  // µÚ config.num_workers ¸ö block ¸ºÔğ
+  // ç¬¬ config.num_workers ä¸ª block è´Ÿè´£
   int end_of_task_graph_event_pos = config.num_events - 1;
   // Initialize worker queue last task id
   // Each worker now maintains a local and a remote worker queue
