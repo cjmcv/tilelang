@@ -188,7 +188,7 @@ class BaseMicroKernel:
         return latency_hparams_list
 
     def run_tuning(self, kernel_name, hparam_space, get_kernel_func, save_path):
-        tuned_file_path = save_path+f"_tuned.json"
+        tuned_file_path = save_path+f"_atuned.json"
         print(f"Start tuning with a total of {len(hparam_space)} schemes.")
 
         latency_hparams_list = []

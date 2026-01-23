@@ -94,35 +94,35 @@ class TorchRef:
         D  = TorchRef.linear(O3, w_down_proj) + O0
         return D
 
-class MpkReporter:
-    def memory_footprint_simulation(self, rank):
+    def load_model(rank):
         torch.cuda.set_device(rank)
         with torch.device("cuda"):
             model_name = "/home/cjmcv/project/llm_models/Qwen/Qwen3-0.6B"
-            self.model = Qwen3ForCausalLM.from_pretrained(model_name, world_size=1, max_num_pages=16, page_size=4096).to("cuda")
-            self.tokenizer = AutoTokenizer.from_pretrained(model_name) 
-        return self.model, self.tokenizer
+            model = Qwen3ForCausalLM.from_pretrained(model_name, world_size=1, max_num_pages=16, page_size=4096).to("cuda")
+            tokenizer = AutoTokenizer.from_pretrained(model_name) 
+        return model, tokenizer
     
-    def get_weight_qwen3_mlp(self, layer_id):
-        layer = self.model.model.layers[layer_id]
+class MpkReporter:
+    def get_weight_qwen3_mlp(self, model, layer_id):
+        layer = model.model.layers[layer_id]
         w_rms = layer.post_attention_layernorm.weight
         w_gatedup = torch.cat((layer.mlp.gate_proj.weight, layer.mlp.up_proj.weight), 0).contiguous()
         w_down_proj = layer.mlp.down_proj.weight
         return w_rms, w_gatedup, w_down_proj
 
-    def get_weight_qwen3_attention(self, layer_id):
-        num_q_heads = self.model.config.num_attention_heads
-        num_kv_heads = self.model.config.num_key_value_heads
+    def get_weight_qwen3_attention(self, model, layer_id):
+        num_q_heads = model.config.num_attention_heads
+        num_kv_heads = model.config.num_key_value_heads
     
-        layer = self.model.model.layers[layer_id]
+        layer = model.model.layers[layer_id]
         w_q_norm = layer.self_attn.q_norm.weight
         w_k_norm = layer.self_attn.k_norm.weight
         w_q = layer.self_attn.q_proj.weight
         w_k = layer.self_attn.k_proj.weight
         w_v = layer.self_attn.v_proj.weight
         
-        k_cache = self.model.model.kv_cache[0][layer_id]
-        v_cache = self.model.model.kv_cache[1][layer_id]
+        k_cache = model.model.kv_cache[0][layer_id]
+        v_cache = model.model.kv_cache[1][layer_id]
         return num_q_heads, num_kv_heads, w_q_norm, w_k_norm, w_q, w_k, w_v, k_cache, v_cache
     
     def torch_profile(self, func):

@@ -2,15 +2,14 @@
 
 
 
-#include "m1/linear_gemm_tl_1_19456_2560_top0.cuh"
-#include "m1/linear_gemm_tl_1_2560_9728_top9.cuh"
+#include "m1/linear_gemm_tl_1_19456_2560.cuh"
 #include "m1/linear_gemm_add_tl_1_2560_9728.cuh"
 
-#include "m32/linear_gemm_add_tl_32_2560_9728.cuh"
 #include "m32/linear_gemm_tl_32_19456_2560.cuh"
+#include "m32/linear_gemm_add_tl_32_2560_9728.cuh"
 
-#include "m128/linear_gemm_add_tl_128_2560_9728.cuh"
 #include "m128/linear_gemm_tl_128_19456_2560.cuh"
+#include "m128/linear_gemm_add_tl_128_2560_9728.cuh"
 
 namespace kernel {
 
@@ -50,13 +49,9 @@ template <typename T,
   }
   else {
     if constexpr (M == 1 && N == 19456 && K == 2560) {
-      linear_kernel_1_19456_2560<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
+      linear_gemm_tl_1_19456_2560<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
         bx, by, bz, input_ptr, weight_ptr, residual_ptr, output_ptr, num_active_tokens, residual);
     }
-    else if constexpr (M == 1 && N == 2560 && K == 9728) {
-      linear_kernel_1_2560_9728<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
-        bx, by, bz, input_ptr, weight_ptr, residual_ptr, output_ptr, num_active_tokens, residual);
-    } 
     else if constexpr (M == 32 && N == 19456 && K == 2560) {
       linear_gemm_tl_32_19456_2560<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
         bx, by, bz, input_ptr, weight_ptr, residual_ptr, output_ptr, num_active_tokens, residual);

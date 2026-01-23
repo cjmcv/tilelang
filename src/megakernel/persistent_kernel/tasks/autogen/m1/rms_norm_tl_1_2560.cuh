@@ -93,6 +93,6 @@ __device__ __forceinline__ void rms_norm_kernel_1_2560(const int bx, const int b
 // selected_hparams: [1, 1, 128].
 // smem: 10240 bytes.
 // use_cooperative_groups: 0.
-// grid_dim=(1, 1, 1), tile_dim=(1, 1, 1)
+// layout: (1, 1, 1), (1, 1, 1)
 // block_dim=(128, 1, 1).
-// latency: 0.00208
+// latency: 0.00215

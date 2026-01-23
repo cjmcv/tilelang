@@ -127,8 +127,8 @@ class _GemmStrategy:
         print(len(self.hparam_space))
         
     def _get_hparam_space(self):
-        BLOCK_M=[16, 32] #, 64, 256
-        BLOCK_N=[64, 128, 256] # 
+        BLOCK_M=[16] # , 32, 64, 256
+        BLOCK_N=[64] # , 128, 256
         BLOCK_K=[32, 64, 128] # 
         splitks=[1] #, 2, 4
         num_stages=[0, 1, 2, 3]#
@@ -375,12 +375,13 @@ template <typename T,
         source += "\n} // kernel"
         
         grid_dim, block_dim, dynamic_smem_buf, use_cooperative_groups = kernel.get_launch_info()
-        self.grid_tile_info = f"grid_dim=({grid_dim['blockIdx.x']}, {grid_dim['blockIdx.y']}, {grid_dim['blockIdx.z']}), tile_dim=({BLOCK_N}, {BLOCK_M}, {BLOCK_K})"
+        
+        self.layout = f"({grid_dim['blockIdx.x']}, {grid_dim['blockIdx.y']}, {grid_dim['blockIdx.z']}), ({BLOCK_N}, {BLOCK_M}, {BLOCK_K})"
         extra_attr = f"\n// Strategy: {self.strategy.name}"
         extra_attr += f"\n// selected_hparams: {selected_hparams}."
         extra_attr += f"\n// smem: {dynamic_smem_buf} bytes."
         extra_attr += f"\n// use_cooperative_groups: {use_cooperative_groups}."
-        extra_attr += f"\n// " + self.grid_tile_info
+        extra_attr += f"\n// layout: {self.layout}"
         extra_attr += f"\n// block_dim=({block_dim['threadIdx.x']}, {block_dim['threadIdx.y']}, {block_dim['threadIdx.z']})."
         source += extra_attr
         
@@ -388,4 +389,4 @@ template <typename T,
     
     def get_kernel(self, mode: HparamSelectMode):
         kernel, path = self.auto_get_kernel(self.get_source, self.strategy, mode)
-        return kernel, path, self.grid_tile_info
+        return kernel, path, self.layout

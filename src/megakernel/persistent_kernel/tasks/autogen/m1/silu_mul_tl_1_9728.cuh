@@ -25,38 +25,32 @@ __device__ __forceinline__ void silu_mul_kernel_1_9728(const int bx, const int b
                                                    void *output_ptr,
                                                    int num_active_tokens) {
   static_assert(THREAD_NUM==128);
-  static_assert(TILE_DIM_X==128); static_assert(TILE_DIM_Y==128); static_assert(TILE_DIM_Z==1);
+  static_assert(TILE_DIM_X==64); static_assert(TILE_DIM_Y==16); static_assert(TILE_DIM_Z==1);
   static_assert(M==1); static_assert(N==9728);
   
   const bfloat16_t* __restrict__ A = static_cast<const bfloat16_t*>(input_ptr);
   bfloat16_t* __restrict__ C = static_cast<bfloat16_t*>(output_ptr);
   
   extern __shared__ __align__(1024) uchar buf_dyn_shmem[];
-  #pragma unroll
-  for (int i = 0; i < 16; ++i) {
-    uint4 condval;
-    if (((((i * 8) + (((int)threadIdx.x) >> 4)) < 1) && (((i * 8) + (((int)threadIdx.x) >> 4)) < 1))) {
-      condval = *(uint4*)(A + ((((i * 155648) + ((((int)threadIdx.x) >> 4) * 19456)) + (((int)bx) * 128)) + ((((int)threadIdx.x) & 15) * 8)));
-    } else {
-      condval = make_uint4(__pack_nv_bfloat162(bfloat16_t(0x0p+0f/*0.000000e+00*/), bfloat16_t(0x0p+0f/*0.000000e+00*/)), __pack_nv_bfloat162(bfloat16_t(0x0p+0f/*0.000000e+00*/), bfloat16_t(0x0p+0f/*0.000000e+00*/)), __pack_nv_bfloat162(bfloat16_t(0x0p+0f/*0.000000e+00*/), bfloat16_t(0x0p+0f/*0.000000e+00*/)), __pack_nv_bfloat162(bfloat16_t(0x0p+0f/*0.000000e+00*/), bfloat16_t(0x0p+0f/*0.000000e+00*/)));
-    }
-    *(uint4*)(((bfloat16_t*)buf_dyn_shmem) + ((i * 1024) + (((int)threadIdx.x) * 8))) = condval;
+  uint4 condval;
+  if (((((int)threadIdx.x) < 8) && (((int)threadIdx.x) < 8))) {
+    condval = *(uint4*)(A + ((((int)bx) * 64) + (((int)threadIdx.x) * 8)));
+  } else {
+    condval = make_uint4(__pack_nv_bfloat162(bfloat16_t(0x0p+0f/*0.000000e+00*/), bfloat16_t(0x0p+0f/*0.000000e+00*/)), __pack_nv_bfloat162(bfloat16_t(0x0p+0f/*0.000000e+00*/), bfloat16_t(0x0p+0f/*0.000000e+00*/)), __pack_nv_bfloat162(bfloat16_t(0x0p+0f/*0.000000e+00*/), bfloat16_t(0x0p+0f/*0.000000e+00*/)), __pack_nv_bfloat162(bfloat16_t(0x0p+0f/*0.000000e+00*/), bfloat16_t(0x0p+0f/*0.000000e+00*/)));
   }
-  #pragma unroll
-  for (int i_1 = 0; i_1 < 16; ++i_1) {
-    uint4 condval_1;
-    if (((((i_1 * 8) + (((int)threadIdx.x) >> 4)) < 1) && (((i_1 * 8) + (((int)threadIdx.x) >> 4)) < 1))) {
-      condval_1 = *(uint4*)(A + (((((i_1 * 155648) + ((((int)threadIdx.x) >> 4) * 19456)) + (((int)bx) * 128)) + ((((int)threadIdx.x) & 15) * 8)) + 9728));
-    } else {
-      condval_1 = make_uint4(__pack_nv_bfloat162(bfloat16_t(0x0p+0f/*0.000000e+00*/), bfloat16_t(0x0p+0f/*0.000000e+00*/)), __pack_nv_bfloat162(bfloat16_t(0x0p+0f/*0.000000e+00*/), bfloat16_t(0x0p+0f/*0.000000e+00*/)), __pack_nv_bfloat162(bfloat16_t(0x0p+0f/*0.000000e+00*/), bfloat16_t(0x0p+0f/*0.000000e+00*/)), __pack_nv_bfloat162(bfloat16_t(0x0p+0f/*0.000000e+00*/), bfloat16_t(0x0p+0f/*0.000000e+00*/)));
-    }
-    *(uint4*)(((bfloat16_t*)buf_dyn_shmem) + (((i_1 * 1024) + (((int)threadIdx.x) * 8)) + 16384)) = condval_1;
+  *(uint4*)(((bfloat16_t*)buf_dyn_shmem) + (((int)threadIdx.x) * 8)) = condval;
+  uint4 condval_1;
+  if (((((int)threadIdx.x) < 8) && (((int)threadIdx.x) < 8))) {
+    condval_1 = *(uint4*)(A + (((((int)bx) * 64) + (((int)threadIdx.x) * 8)) + 9728));
+  } else {
+    condval_1 = make_uint4(__pack_nv_bfloat162(bfloat16_t(0x0p+0f/*0.000000e+00*/), bfloat16_t(0x0p+0f/*0.000000e+00*/)), __pack_nv_bfloat162(bfloat16_t(0x0p+0f/*0.000000e+00*/), bfloat16_t(0x0p+0f/*0.000000e+00*/)), __pack_nv_bfloat162(bfloat16_t(0x0p+0f/*0.000000e+00*/), bfloat16_t(0x0p+0f/*0.000000e+00*/)), __pack_nv_bfloat162(bfloat16_t(0x0p+0f/*0.000000e+00*/), bfloat16_t(0x0p+0f/*0.000000e+00*/)));
   }
+  *(uint4*)(((bfloat16_t*)buf_dyn_shmem) + ((((int)threadIdx.x) * 8) + 1024)) = condval_1;
   __syncthreads();
   #pragma unroll
-  for (int i_2 = 0; i_2 < 32; ++i_2) {
+  for (int i = 0; i < 2; ++i) {
     float4 __1;
-    uint2 v_ = *(uint2*)(((bfloat16_t*)buf_dyn_shmem) + ((i_2 * 512) + (((int)threadIdx.x) * 4)));
+    uint2 v_ = *(uint2*)(((bfloat16_t*)buf_dyn_shmem) + ((i * 512) + (((int)threadIdx.x) * 4)));
     ((float2*)(&__1))[0] = __bfloat1622float2(*reinterpret_cast<__nv_bfloat162*>(&(v_)));
     ((float2*)(&__1))[1] = __bfloat1622float2(*(reinterpret_cast<__nv_bfloat162*>(&(v_))+1));
     float4 xi = __1;
@@ -91,7 +85,7 @@ __device__ __forceinline__ void silu_mul_kernel_1_9728(const int bx, const int b
         __8.z = (xi.z*sig.z);
         __8.w = (xi.w*sig.w);
       float4 __9;
-      uint2 v__3 = *(uint2*)(((bfloat16_t*)buf_dyn_shmem) + (((i_2 * 512) + (((int)threadIdx.x) * 4)) + 16384));
+      uint2 v__3 = *(uint2*)(((bfloat16_t*)buf_dyn_shmem) + (((i * 512) + (((int)threadIdx.x) * 4)) + 1024));
       ((float2*)(&__9))[0] = __bfloat1622float2(*reinterpret_cast<__nv_bfloat162*>(&(v__3)));
       ((float2*)(&__9))[1] = __bfloat1622float2(*(reinterpret_cast<__nv_bfloat162*>(&(v__3))+1));
       __7.x = (__8.x*__9.x);
@@ -100,22 +94,20 @@ __device__ __forceinline__ void silu_mul_kernel_1_9728(const int bx, const int b
       __7.w = (__8.w*__9.w);
     (reinterpret_cast<__nv_bfloat162*>(&__6))[0] = __float22bfloat162_rn(*(float2*)(&(__7)));
     (reinterpret_cast<__nv_bfloat162*>(&__6))[1] = __float22bfloat162_rn(*((float2*)(&(__7))+1));
-    *(uint2*)(((bfloat16_t*)buf_dyn_shmem) + (((i_2 * 512) + (((int)threadIdx.x) * 4)) + 32768)) = __6;
+    *(uint2*)(((bfloat16_t*)buf_dyn_shmem) + (((i * 512) + (((int)threadIdx.x) * 4)) + 2048)) = __6;
   }
   __syncthreads();
-  #pragma unroll
-  for (int i_3 = 0; i_3 < 16; ++i_3) {
-    if (((i_3 * 8) + (((int)threadIdx.x) >> 4)) < 1) {
-      *(uint4*)(C + ((((i_3 * 77824) + ((((int)threadIdx.x) >> 4) * 9728)) + (((int)bx) * 128)) + ((((int)threadIdx.x) & 15) * 8))) = *(uint4*)(((bfloat16_t*)buf_dyn_shmem) + (((i_3 * 1024) + (((int)threadIdx.x) * 8)) + 32768));
-    }
+  if (((int)threadIdx.x) < 8) {
+    *(uint4*)(C + ((((int)bx) * 64) + (((int)threadIdx.x) * 8))) = *(uint4*)(((bfloat16_t*)buf_dyn_shmem) + ((((int)threadIdx.x) * 8) + 2048));
   }
 }
 
 
 } // kernel
 // Strategy: silu_mul_tl_1_9728
-// selected_hparams: [128, 128, 128].
-// smem: 98304 bytes.
+// selected_hparams: [16, 64, 128].
+// smem: 6144 bytes.
 // use_cooperative_groups: 0.
-// grid_dim=(76, 1, 1), tile_dim=(128, 128, 1),
+// layout: (152, 1, 1), (64, 16, 1)
 // block_dim=(128, 1, 1).
+// latency: 0.00471

@@ -345,11 +345,11 @@ class PersistentKernel:
         input: DTensor,
         weight: DTensor,
         output: DTensor,
-        grid_dim: tuple,
-        tile_dim: tuple,
         sync_mode: tuple,
+        layout: tuple,
     ):
         # Currently assume that the input/output are 2D tensors
+        grid_dim, tile_dim = layout
         assert input.num_dims == 2
         assert output.num_dims == 2
         tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128, 64))
@@ -928,10 +928,10 @@ class PersistentKernel:
         input: DTensor,
         weight: DTensor,
         output: DTensor,
-        grid_dim: tuple,
-        tile_dim: tuple,
         sync_mode: tuple,
+        layout: tuple,
     ):
+        grid_dim, tile_dim = layout
         # Currently assume that input/output
         assert input.num_dims == 2  # (batch_size, hidden_size / world_size)
         assert weight.num_dims == 2  # (hidden_size, hidden_size / world_size)
@@ -961,10 +961,10 @@ class PersistentKernel:
         weight: DTensor,
         residual: DTensor,
         output: DTensor,
-        grid_dim: tuple,
-        tile_dim: tuple,
         sync_mode: tuple,
+        layout: tuple,
     ):
+        grid_dim, tile_dim = layout
         # Currently assume that input/output
         assert input.num_dims == 2  # (batch_size, hidden_size / world_size)
         assert weight.num_dims == 2  # (hidden_size, hidden_size / world_size)
@@ -995,9 +995,9 @@ class PersistentKernel:
         input: DTensor,
         weight: DTensor,
         output: DTensor,
+        sync_mode: tuple,
         grid_dim: tuple,
         tile_dim: tuple,
-        sync_mode: tuple,
     ):
         # Currently assume that input/output
         assert input.num_dims == 2  # (batch_size, hidden_size / world_size)
@@ -1039,10 +1039,10 @@ class PersistentKernel:
         self,
         input: DTensor,
         output: DTensor,
-        grid_dim: tuple,
-        tile_dim: tuple,
         sync_mode: tuple, 
+        layout: tuple,
     ):
+        grid_dim, tile_dim = layout
         # Currently assume that input/output
         assert input.num_dims == 2 # (batch_size, 2 * intermediate_size)
         assert output.num_dims == 2 # (batch_size, intermediate_size)

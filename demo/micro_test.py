@@ -13,7 +13,7 @@ from tvm.tir.stmt_functor import ir_transform
 from common.pkt_util import TestUtil, TorchRef
 from common.micro_base import HparamSelectMode
 from common.micro_linear import MicroLinearStrategy, MicroLinear
-from common.micro_rms_norm import MicroRmsNorm
+from common.micro_rmsnorm import MicroRmsNorm
 from common.micro_silu_mul import MicroSiluMul
 from common.micro_autogen import MicroAutoGen
 
@@ -123,7 +123,7 @@ if __name__ == "__main__":
     # test_gemm_add()
     
     gen = MicroAutoGen(1, 2560, 9728)
-    gen.gen_qwen_mlp(HparamSelectMode.HEURISTIC, 3) # HEURISTIC, TUNING, TUNED
+    gen.gen_qwen3_mlp(HparamSelectMode.TUNED, 99) # HEURISTIC, TUNING, TUNED
     
     # 1. 自动生成与组合到megakernel中
     # 2. gemv对比性能

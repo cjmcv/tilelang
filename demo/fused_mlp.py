@@ -5,6 +5,7 @@ import megakernel as mi
 
 from common.pkt_util import TorchRef, MpkReporter
 from common.mpk_layers import MpkLayers
+from common.autogen.qwen3_mlp_config import Qwen3MlpConfig
 
 WITH_RMS_NORM = 1
 WITH_RESIDUAL = 1
@@ -55,10 +56,10 @@ if __name__ == "__main__":
     mlp_out = mpk.attach_input(torch_tensor=out_torch, name="mlp_out")
 
     # m1    
-    rmsnorm_gird, rmsnorm_tile = (1, 1, 1), (1, 1, 1)
-    linear1_gird, linear1_tile = (152, 1, 1), (128, 64, 128)
-    silu_mul_gird, silu_mul_tile = (76, 1, 1), (128, 128, 1)
-    linear2_gird, linear2_tile = (40, 1, 1), (64, 64, 64)
+    # rmsnorm_layout = (1, 1, 1), (1, 1, 1)
+    linear1_layout = (304, 1, 1), (64, 16, 128)
+    silu_mul_layout = (152, 1, 1), (64, 16, 1)
+    linear2_layout = (40, 1, 1), (64, 16, 64)
     # # m32
     # rmsnorm_gird, rmsnorm_tile = (32, 1, 1), (1, 1, 1)
     # linear1_gird, linear1_tile = (304, 1, 1), (64, 64, 64)
@@ -77,8 +78,8 @@ if __name__ == "__main__":
             input=x,
             weight=w_rms_norm,
             output=rms_out,
-            grid_dim=rmsnorm_gird, tile_dim=rmsnorm_tile,
             sync_mode=(0, 0, 0),
+            layout=Qwen3MlpConfig.rmsnorm_layout,
         )
         x = rms_out
         
@@ -89,8 +90,8 @@ if __name__ == "__main__":
         input=x,
         weight=w_gatedup,
         output=mlp_mid,
-        grid_dim=linear1_gird, tile_dim=linear1_tile,
         sync_mode=(0, 0, 0),
+        layout=Qwen3MlpConfig.linear1_layout,
     )
     
     if 1:
@@ -101,8 +102,8 @@ if __name__ == "__main__":
         mpk.silu_mul_layer(
             input=mlp_mid,
             output=silu_mul_out,
-            grid_dim=silu_mul_gird, tile_dim=silu_mul_tile,
             sync_mode=(2, 0, 0),
+            layout=Qwen3MlpConfig.silu_mul_layout,
             # grid_dim=(2, 4, 1), tile_dim=(128, 1, 1),
             # sync_mode=(2, 0, 0),
         )
@@ -112,16 +113,16 @@ if __name__ == "__main__":
                 weight=w_down_proj,
                 residual=x_residual,
                 output=mlp_out,
-                grid_dim=linear2_gird, tile_dim=linear2_tile,
                 sync_mode=(0, 0, 0),
+                layout=Qwen3MlpConfig.linear2_layout,
             )
         else:
             mpk.linear_layer(
                 input=silu_mul_out,
                 weight=w_down_proj,
                 output=mlp_out,
-                grid_dim=(40, 1, 4), tile_dim=(64, 64, 64),
                 sync_mode=(0, 0, 0),
+                layout=Qwen3MlpConfig.inear2_layout,
             )
     else:
         mpk.silu_mul_linear_layer(

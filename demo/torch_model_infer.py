@@ -1,10 +1,10 @@
-from models.modeling_qwen3 import Qwen3ForCausalLM
-from transformers import AutoTokenizer, AutoConfig
+
 from safetensors.torch import load_model
 import torch
 import torch.distributed as dist
 import argparse
 import os, json
+from common.pkt_util import TorchRef
 
 DEFAULT_SAVE_DIR = os.path.join("outputs", "qwen3")
 MAX_SAVE_TOKENS = 100
@@ -152,12 +152,7 @@ if __name__ == "__main__":
     model_name = args.model
     torch.set_default_dtype(torch.bfloat16)
 
-    torch.cuda.set_device(rank)
-    with torch.device("cuda"):
-        model_name = "/home/cjmcv/project/llm_models/Qwen/Qwen3-0.6B"
-        model = Qwen3ForCausalLM.from_pretrained(model_name, world_size, max_num_pages=args.max_num_pages, page_size=args.page_size).to("cuda")
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-
+    model, tokenizer = TorchRef.load_model(rank)
     total_num_requests = 1 if not args.use_mirage else args.max_num_batched_requests
     # get all model weight tensors
     tokens = torch.full((total_num_requests, args.max_seq_length), 0, dtype=torch.long, device="cuda")
