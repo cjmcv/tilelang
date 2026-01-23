@@ -122,7 +122,8 @@ if __name__ == "__main__":
     ## test_silu_mul_gemm() # 逻辑有误，silu_mul被重复计算
     # test_gemm_add()
     
-    gen = MicroAutoGen(1, 2560, 9728)
+    # gen = MicroAutoGen(1, 2560, 9728)
+    gen = MicroAutoGen(1, 1024, 3072)
     gen.gen_qwen3_mlp(HparamSelectMode.TUNED, 99) # HEURISTIC, TUNING, TUNED
     
     # 1. 自动生成与组合到megakernel中

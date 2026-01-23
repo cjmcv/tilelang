@@ -39,10 +39,10 @@ if __name__ == "__main__":
     # reporter.memory_footprint_simulation(rank)
     
     splitk = 1 # 8
-    hidden_size = 2560
-    intermediate_size = 9728
-    # hidden_size = 1024
-    # intermediate_size = 3072
+    # hidden_size = 2560
+    # intermediate_size = 9728
+    hidden_size = 1024
+    intermediate_size = 3072
     x_torch = torch.randn((max_batch_size, hidden_size), dtype=torch.bfloat16, device="cuda")
     w_rms_norm_torch = torch.randn((1, hidden_size), dtype=torch.bfloat16, device="cuda")
     w_gatedup_torch = torch.randn((intermediate_size*2, hidden_size), dtype=torch.bfloat16, device="cuda")
@@ -54,22 +54,6 @@ if __name__ == "__main__":
     w_gatedup = mpk.attach_input(torch_tensor=w_gatedup_torch, name="w_gatedup")
     w_down_proj = mpk.attach_input(torch_tensor=w_down_proj_torch, name="w_down_proj")
     mlp_out = mpk.attach_input(torch_tensor=out_torch, name="mlp_out")
-
-    # m1    
-    # rmsnorm_layout = (1, 1, 1), (1, 1, 1)
-    linear1_layout = (304, 1, 1), (64, 16, 128)
-    silu_mul_layout = (152, 1, 1), (64, 16, 1)
-    linear2_layout = (40, 1, 1), (64, 16, 64)
-    # # m32
-    # rmsnorm_gird, rmsnorm_tile = (32, 1, 1), (1, 1, 1)
-    # linear1_gird, linear1_tile = (304, 1, 1), (64, 64, 64)
-    # silu_mul_gird, silu_mul_tile = (152, 1, 1), (64, 32, 1)
-    # linear2_gird, linear2_tile = (40, 1, 1), (64, 64, 64)
-    # # m128
-    # rmsnorm_gird, rmsnorm_tile = (128, 1, 1), (1, 1, 1)
-    # linear1_gird, linear1_tile = (304, 2, 1), (64, 64, 64)
-    # silu_mul_gird, silu_mul_tile = (152, 4, 1), (64, 32, 1)
-    # linear2_gird, linear2_tile = (40, 2, 1), (64, 64, 64)
     
     x_residual = x
     if WITH_RMS_NORM:

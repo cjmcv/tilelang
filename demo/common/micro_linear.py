@@ -128,7 +128,7 @@ class _GemmStrategy:
         
     def _get_hparam_space(self):
         BLOCK_M=[16] # , 32, 64, 256
-        BLOCK_N=[64] # , 128, 256
+        BLOCK_N=[64] # 64, 128, 256
         BLOCK_K=[32, 64, 128] # 
         splitks=[1] #, 2, 4
         num_stages=[0, 1, 2, 3]#
