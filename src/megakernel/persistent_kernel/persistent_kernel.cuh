@@ -40,6 +40,9 @@
 #include "tasks/autogen/task_header.cuh"
 #endif
 
+#define LIKELY(x)       __builtin_expect(!!(x), 1)
+#define UNLIKELY(x)     __builtin_expect(!!(x), 0)
+
 using bfloat16 = type::bfloat16_t;
 using namespace megakernel::runtime;
 using namespace kernel;
@@ -236,16 +239,14 @@ __device__ __forceinline__ void terminate_schedulers(RuntimeConfig config) {
   }
 }
 
-__device__ __forceinline__ void init_launch(RuntimeConfig config) {
-  // 只需要1个block负责
-  if (threadIdx.x == 0) {
-    *config.infer_cnt = 0;
-  }
-}
+// __device__ __forceinline__ void init_launch(RuntimeConfig config) {
+//   // 只需要1个block负责
+//   if (threadIdx.x == 0) {
+//     *config.infer_cnt = 0;
+//   }
+// }
 
 __device__ __forceinline__ void prepare_queue(RuntimeConfig config) {
-  // 第 config.num_workers 个 block 负责
-  int end_of_task_graph_event_pos = config.num_events - 1;
   // Initialize worker queue last task id
   // Each worker now maintains a local and a remote worker queue
   for (int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -267,7 +268,11 @@ __device__ __forceinline__ void prepare_queue(RuntimeConfig config) {
     config.all_event_counters[i] = 0;
   }
   // Send event to scheduler[0]
+  // 第 config.num_workers 个 block 负责
+  int end_of_task_graph_event_pos = config.num_events - 1;
   if (blockIdx.x == 0 && threadIdx.x == 0) {
+    *config.infer_cnt = 0;
+
     assert(config.all_events[end_of_task_graph_event_pos].event_type == EVENT_END_OF_TASK_GRAPH);
     config.sched_queue_next_free_event_id[0] = 1;
     config.sched_queues[0][0] = end_of_task_graph_event_pos;
@@ -321,9 +326,9 @@ __device__ __forceinline__ void persistent_checker(RuntimeConfig config) {
   // prepare_kernel<<<dim3(global_runtime_config[kernel_id].num_workers, 1, 1),
   //                  dim3(128, 1, 1)>>>(global_runtime_config,
   //                                     end_of_task_graph_event_pos);
-  if (blockIdx.x == config.num_workers) {
-    init_launch(config);
-  }
+  // if (blockIdx.x == config.num_workers) {
+  //   init_launch(config);
+  // }
   if (blockIdx.x < config.num_workers) {
     prepare_queue(config);
   }
@@ -396,8 +401,7 @@ __device__ __forceinline__ void execute_worker(RuntimeConfig config) {
         assert(next_task_pos[queue_idx] + config.per_worker_queue_len > last_task_pos[queue_idx]);
       }
       __syncthreads();
-      int num_loaded_tasks = min((int)(last_task_pos[queue_idx] - next_task_pos[queue_idx]),
-                                       TASK_DESCS_BUFFER_LENGTH);
+      int num_loaded_tasks = min((int)(last_task_pos[queue_idx] - next_task_pos[queue_idx]), TASK_DESCS_BUFFER_LENGTH);
       // Load task ids
       if (threadIdx.x < num_loaded_tasks) {
         task_ids[threadIdx.x] = ld_relaxed_gpu_u64(&worker_queues[queue_idx][(next_task_pos[queue_idx] + threadIdx.x) % config.per_worker_queue_len]);
@@ -477,10 +481,10 @@ __device__ __forceinline__ void execute_worker(RuntimeConfig config) {
 #endif
 
     // Successfully fetched a new task
-    if (task_desc->task_type == TASK_TERMINATE) {
+    if (UNLIKELY(task_desc->task_type == TASK_TERMINATE)) {
       // Terminate
       return;
-    } else if (task_desc->task_type == TASK_BEGIN_TASK_GRAPH) {
+    } else if (UNLIKELY(task_desc->task_type == TASK_BEGIN_TASK_GRAPH)) {
       // Do nothing
     } else {
 #ifdef MPK_ENABLE_VERBOSE
@@ -489,7 +493,7 @@ __device__ __forceinline__ void execute_worker(RuntimeConfig config) {
                task_desc->task_type);
       }
 #endif
-      _execute_task(task_desc, config);
+      _execute_task(task_desc, config); // CJM
     }
     __syncthreads();
 
@@ -508,8 +512,7 @@ __device__ __forceinline__ void execute_worker(RuntimeConfig config) {
         assert(gpu_id == config.my_gpu_id);
         // Case 1: Trigger a local non-nvshmem event
         // int count = atomicSub(&config.all_event_counters[event_index], 1);
-        EventCounter count = atom_add_release_gpu_u64(
-            &config.all_event_counters[event_index], 1);
+        EventCounter count = atom_add_release_gpu_u64(&config.all_event_counters[event_index], 1);
         int num_triggers = config.all_event_num_triggers[event_index];
 #ifdef MPK_ENABLE_VERBOSE
         printf("[%d][DONE] worker_id(%d) iter_num(%llu) task_idx(%llu) "
