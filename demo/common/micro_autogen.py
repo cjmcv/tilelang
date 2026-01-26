@@ -25,7 +25,7 @@ class MicroAutoGen:
         shutil.copy2(file_name, code_dir)
         config_file.write(f"    {name} = {info}\n")
         
-    def gen_qwen3_mlp(self, mode: HparamSelectMode, idx: int):
+    def gen_qwen3_mlp(self, layer_id: int, mode: HparamSelectMode):
         
         megakernel_home = os.getenv("MEGAKERNEL_HOME", default=None)
         if megakernel_home is None:
@@ -51,16 +51,16 @@ class MicroAutoGen:
     
         with open(config_path+"qwen3_mlp_config.py", "w", encoding="utf-8") as config_file:
             config_file.write(f"class Qwen3MlpConfig:\n")
-            if (idx == 0 or idx == 99):
+            if (layer_id == 0 or layer_id == 99):
                 kernel = MicroRmsNorm(self.batch_size, self.hidden_size, dtype=self.dtype, accum_dtype=self.accum_dtype)
                 self._save_target(kernel, mode, code_dir, config_file, "rmsnorm_layout")
-            if (idx == 1 or idx == 99):
+            if (layer_id == 1 or layer_id == 99):
                 kernel = MicroLinear(MicroLinearStrategy.GEMM, self.batch_size, self.intermediate_size*2, self.hidden_size, dtype=self.dtype, accum_dtype=self.accum_dtype)
                 self._save_target(kernel, mode, code_dir, config_file, "linear1_layout")
-            if (idx == 2 or idx == 99):   
+            if (layer_id == 2 or layer_id == 99):   
                 kernel = MicroSiluMul(self.batch_size, self.intermediate_size, dtype=T.bfloat16, accum_dtype=T.float32)
                 self._save_target(kernel, mode, code_dir, config_file, "silu_mul_layout")
-            if (idx == 3 or idx == 99):
+            if (layer_id == 3 or layer_id == 99):
                 kernel = MicroLinear(MicroLinearStrategy.GEMM_ADD, self.batch_size, self.hidden_size, self.intermediate_size, dtype=self.dtype, accum_dtype=self.accum_dtype)
                 self._save_target(kernel, mode, code_dir, config_file, "linear2_layout")
             

@@ -53,6 +53,7 @@ git submodule add https://github.com/apache/tvm.git 3rdparty/tvm
 
 # TODO
 1. 基于single_linear尝试检索所有micro kernel配置，尝试找到超越torch的方案，并分析tilelang的自己launch和集成后的耗时是否有一定规律？
+   从 single_linear.py 修改，调用 MicroAutoGen(1, 1024, 3072)，MicroAutoGen扩展通过id号选定配置
 2. 考虑tilelang端只生成代码而不编译，看能否减少耗时；
 3. 考虑新增megakernel的并行编译；
 4. L40并行编译崩溃问题；

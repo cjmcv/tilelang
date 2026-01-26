@@ -780,9 +780,9 @@ private:
 
       event_desc.event_type =
           event_desc.last_task_id >= event_desc.first_task_id + 8
-              ? EVENT_LAUNCH_MASSIVE_TASKS
-              : EVENT_LAUNCH_TASKS;
+              ? EVENT_LAUNCH_MASSIVE_TASKS : EVENT_LAUNCH_TASKS;
       all_events.push_back(event_desc);
+      printf("create_events_add_tasks event_desc.event_type: %d.\n", event_desc.event_type);
     }
   }
 
@@ -947,11 +947,8 @@ private:
         if (nvshmem_events_idx.count(e) > 0) {
           is_nvshmem_event = true;
         }
-        for (size_t t = all_events[e].first_task_id;
-            t < all_events[e].last_task_id;
-            t++) {
-          all_tasks[t].dependent_event =
-              get_event_id(my_gpu_id, e, is_nvshmem_event /*nvshmem_event*/);
+        for (size_t t = all_events[e].first_task_id; t < all_events[e].last_task_id; t++) {
+          all_tasks[t].dependent_event = get_event_id(my_gpu_id, e, is_nvshmem_event /*nvshmem_event*/);
         }
       }
     }

@@ -6,7 +6,9 @@ import megakernel as mi
 
 from common.pkt_util import TorchRef, MpkReporter, TestUtil
 from common.mpk_layers import MpkLayers
-from common.autogen.qwen3_mlp_config import Qwen3MlpConfig
+
+from common.micro_base import HparamSelectMode
+from common.micro_autogen import MicroAutoGen
 
 if __name__ == "__main__":
     max_batch_size = 1
@@ -29,7 +31,11 @@ if __name__ == "__main__":
     print(f"world_size({world_size}) rank({rank})")
     # model_name = args.model
     torch.set_default_dtype(torch.bfloat16)
-    
+
+    # # 13/16/20/21/22/30/45: 0.118, 24-29
+    micro = MicroAutoGen(1, 1024, 3072)
+    micro.gen_qwen3_mlp(1, HparamSelectMode.SPECIFY+0) # HEURISTIC, TUNING, TUNED
+       
     reporter = MpkReporter() 
     # model, tokenizer = reporter.memory_footprint_simulation(rank)
     # w_rms_torch, w_gatedup_torch, w_down_proj_torch = reporter.get_weight_qwen3_mlp(layer_id=0)
@@ -45,7 +51,6 @@ if __name__ == "__main__":
     
     # w_torch = w_gatedup_torch 
     w_torch = torch.randn((intermediate_size*2, hidden_size), dtype=torch.bfloat16, device="cuda")
-    # a = torch.ones((100000, 30000), dtype=torch.bfloat16, device="cuda")
     x_torch = torch.randn((max_batch_size, hidden_size), dtype=torch.bfloat16, device="cuda")
     out_torch = torch.zeros((max_batch_size, intermediate_size*2), dtype=torch.bfloat16, device="cuda")
     print("x: ", x_torch.data_ptr(), "w: ", w_torch.data_ptr(), "o: ", out_torch.data_ptr())
@@ -55,6 +60,7 @@ if __name__ == "__main__":
     linear_out = mpk.attach_input(torch_tensor=out_torch, name="linear_out")
 
     # grid_dim, block_dim(实际是tile_dim), thread_num(实际是block_dim, 固定为threadIdx.x==128或256, 其他维度为1)
+    from common.autogen.qwen3_mlp_config import Qwen3MlpConfig
     mpk.linear_layer(
         input=x,
         weight=w,

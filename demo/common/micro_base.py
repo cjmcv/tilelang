@@ -1,6 +1,6 @@
 import os
 import math
-from enum import Enum
+from enum import IntEnum
 import itertools
 from collections.abc import Iterable
 from typing import ParamSpec, TypeVar, Literal, Any
@@ -26,10 +26,11 @@ import tilelang.language as T
 
 from common.pkt_util import TestUtil, TorchRef
   
-class HparamSelectMode(Enum):
+class HparamSelectMode(IntEnum):
     HEURISTIC = 0
     TUNING = 1
     TUNED = 2
+    SPECIFY = 3
 
 # print("artifact: ", artifact)
 # T.func_attr({"calling_conv": 2, "dyn_shared_memory_buf": 49152, "target": T.target({"arch": "sm_89", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 304, "blockIdx.y": 1, "threadIdx.x": 128, "threadIdx.y": 1, "threadIdx.z": 1}, "tir.is_global_func": T.bool(True), "tir.kernel_launch_params": ["blockIdx.x", "blockIdx.y", "threadIdx.x", "threadIdx.y", "threadIdx.z", "tir.use_dyn_shared_memory"], "tir.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [0, 1]})
@@ -257,9 +258,15 @@ class BaseMicroKernel:
             latency_hparams_list = self.read_tuned_hparams_from_json(save_path)
             best_latency, selected_hparams = latency_hparams_list[0]["latency"], latency_hparams_list[0]["hparams"]
             print("[Tuned] selected_hparams: ", selected_hparams)
-        else:
+        elif (mode == HparamSelectMode.HEURISTIC):
             selected_hparams = strategy.get_heuristic_hparams()
             print("[Heuristic] selected_hparams: ", selected_hparams)
+        elif (mode >= HparamSelectMode.SPECIFY):
+            id = mode - HparamSelectMode.SPECIFY
+            latency_hparams_list = self.read_tuned_hparams_from_json(save_path)
+            latency, selected_hparams = latency_hparams_list[id]["latency"], latency_hparams_list[id]["hparams"]
+            # selected_hparams = strategy.hparam_space[id]
+            print(f"[SPECIFY] selected_hparams[{id}]({latency}ms): {selected_hparams}")
             
         kernel = strategy.get_kernel(selected_hparams)
         profiler = kernel.get_profiler()
