@@ -33,8 +33,8 @@ if __name__ == "__main__":
     torch.set_default_dtype(torch.bfloat16)
 
     # # 13/16/20/21/22/30/45: 0.118, 24-29
-    micro = MicroAutoGen(1, 1024, 3072)
-    micro.gen_qwen3_mlp(1, HparamSelectMode.SPECIFY+0) # HEURISTIC, TUNING, TUNED
+    # micro = MicroAutoGen(1, 1024, 3072)
+    # micro.gen_qwen3_mlp(1, HparamSelectMode.SPECIFY+0) # HEURISTIC, TUNING, TUNED
        
     reporter = MpkReporter() 
     # model, tokenizer = reporter.memory_footprint_simulation(rank)
@@ -87,5 +87,8 @@ if __name__ == "__main__":
     
     reporter.generate_report(mpk_run, mpk_output, splitk, 
                             ref_run, ref_output, 
-                            warnup_iter=100, test_iter=200, 
+                            warnup_iter=10, test_iter=10, 
                             allclose_iter=5, print_all=False)
+    
+    # ncu --set full --section "SpeedOfLight_RooflineChart" -k "kernel" -o my_profile python demo/single_linear.py --nc
+    # ncu --set full --section "SpeedOfLight_RooflineChart" -k "persistent_kernel" -o my_profile python demo/single_linear.py

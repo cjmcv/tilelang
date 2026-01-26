@@ -782,7 +782,7 @@ private:
           event_desc.last_task_id >= event_desc.first_task_id + 8
               ? EVENT_LAUNCH_MASSIVE_TASKS : EVENT_LAUNCH_TASKS;
       all_events.push_back(event_desc);
-      printf("create_events_add_tasks event_desc.event_type: %d.\n", event_desc.event_type);
+      // printf("create_events_add_tasks event_desc.event_type: %d.\n", event_desc.event_type);
     }
   }
 
