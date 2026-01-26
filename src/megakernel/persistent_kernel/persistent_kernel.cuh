@@ -342,39 +342,28 @@ __device__ __forceinline__ void execute_worker(RuntimeConfig config) {
   // worker_queues: 2 * 8 = 16 B
   // remaining: 3016 B
   // printf("execute_worker 0.\n");
-  constexpr int TASK_DESCS_BUFFER_LENGTH = std::min(
-      (megakernel::runtime::WORKER_RESERVED_STATIC_SHARED_MEMORY_SIZE - 56) / (int)(sizeof(TaskDesc) + sizeof(TaskId)),
-      16);
+  constexpr int TASK_DESCS_BUFFER_LENGTH = std::min(16,
+      (megakernel::runtime::WORKER_RESERVED_STATIC_SHARED_MEMORY_SIZE - 56) / (int)(sizeof(TaskDesc) + sizeof(TaskId)));
   __shared__ TaskDesc task_descs[TASK_DESCS_BUFFER_LENGTH];
   __shared__ TaskId task_ids[TASK_DESCS_BUFFER_LENGTH];
-  __shared__ TaskId *worker_queues[2];
-  __shared__ int worker_queue_ids[2];
-  __shared__ size_t next_task_pos[2];
-  __shared__ size_t last_task_pos[2];
+  __shared__ TaskId *worker_queues;
+  __shared__ int worker_queue_ids;
+  __shared__ size_t next_task_pos;
+  __shared__ size_t last_task_pos;
 
 #ifdef MPK_ENABLE_PROFILING
   PROFILER_CLOSURE_PARAMS_DECL;
   PROFILER_INIT(static_cast<uint64_t *>(config.profiler_buffer),
-                0,
-                1,
-                (threadIdx.x % WORKER_NUM_THREADS == 0));
+                0, 1, (threadIdx.x % WORKER_NUM_THREADS == 0));
 
 #endif
   int const worker_id = blockIdx.x;
-  worker_queues[0] = config.worker_queues[worker_id];
-  worker_queue_ids[0] = worker_id;
-  int num_worker_queues = 1;
-  if (config.num_gpus > 1) {
-    worker_queues[num_worker_queues] = config.worker_queues[worker_id + config.num_workers];
-    worker_queue_ids[num_worker_queues] = worker_id + config.num_workers;
-    num_worker_queues++;
-  }
+  worker_queues = config.worker_queues[worker_id];
+  worker_queue_ids = worker_id;
 
   if (threadIdx.x == 0) {
-    for (int i = 0; i < 2; i++) {
-      next_task_pos[i] = 0;
-      last_task_pos[i] = 0;
-    }
+    next_task_pos = 0;
+    last_task_pos = 0;
   }
 
   int queue_pos = 0, queue_len = 0;
@@ -384,49 +373,43 @@ __device__ __forceinline__ void execute_worker(RuntimeConfig config) {
   while (true) {
     // fetch next task from a task queue if task_descs is empty
     if (queue_pos == queue_len) {
-      int queue_idx = 0;
       if (threadIdx.x == 0) {
-        while (next_task_pos[queue_idx] == last_task_pos[queue_idx]) {
-          last_task_pos[queue_idx] = ld_acquire_gpu_u64(&config.worker_queue_last_ready_task_id[worker_queue_ids[queue_idx]]);
+        while (next_task_pos == last_task_pos) {
+          last_task_pos = ld_acquire_gpu_u64(&config.worker_queue_last_ready_task_id[worker_queue_ids]);
           // printf("last_task_pos[%d]: %d", queue_idx, last_task_pos[queue_idx]);
-          if (next_task_pos[queue_idx] < last_task_pos[queue_idx]) {
+          if (next_task_pos < last_task_pos) {
             break;
-          } else {
-            // printf("execute_worker 2: %d, %d.\n", queue_idx, num_worker_queues - 1);
-            queue_idx = (queue_idx == num_worker_queues - 1) ? 0 : queue_idx + 1;
           }
           // nanosleep to avoid overwhelming I/O
           __nanosleep(10);
         }
-        assert(next_task_pos[queue_idx] + config.per_worker_queue_len > last_task_pos[queue_idx]);
+        assert(next_task_pos + config.per_worker_queue_len > last_task_pos);
       }
       __syncthreads();
-      int num_loaded_tasks = min((int)(last_task_pos[queue_idx] - next_task_pos[queue_idx]), TASK_DESCS_BUFFER_LENGTH);
+      int num_loaded_tasks = min((int)(last_task_pos - next_task_pos), TASK_DESCS_BUFFER_LENGTH);
       // Load task ids
       if (threadIdx.x < num_loaded_tasks) {
-        task_ids[threadIdx.x] = ld_relaxed_gpu_u64(&worker_queues[queue_idx][(next_task_pos[queue_idx] + threadIdx.x) % config.per_worker_queue_len]);
+        task_ids[threadIdx.x] = ld_relaxed_gpu_u64(&worker_queues[(next_task_pos + threadIdx.x) % config.per_worker_queue_len]);
       }
       __syncthreads();
       if (threadIdx.x == 0) {
 #ifdef MPK_ENABLE_VERBOSE
         for (int i = 0; i < num_loaded_tasks; i++) {
           printf(
-              "[%d][FTCH] worker_id(%d) queue_idx(%d) next_task_pos(%llu, "
-              "%llu) last_task_pos(%llu, %llu) "
+              "[%d][FTCH] worker_id(%d) queue_idx(%d) next_task_pos(%llu"
+              ") last_task_pos(%llu) "
               "task_id(%llu) task_type(%d) event_id(%llx) \n",
               config.my_gpu_id,
               worker_id,
               queue_idx,
-              next_task_pos[0],
-              next_task_pos[1],
-              last_task_pos[0],
-              last_task_pos[1],
+              next_task_pos,
+              last_task_pos,
               get_task_position_index(task_ids[i]),
               config.all_tasks[get_task_position_index(task_ids[i])].task_type,
               config.all_tasks[get_task_position_index(task_ids[i])].trigger_event);
         }
 #endif
-        next_task_pos[queue_idx] += num_loaded_tasks;
+        next_task_pos += num_loaded_tasks;
       }
       // Load task descs
       static_assert(sizeof(TaskDesc) % 16 == 0);
@@ -453,23 +436,10 @@ __device__ __forceinline__ void execute_worker(RuntimeConfig config) {
         size_t event_index = get_event_position_index(event_id);
         EventCounter needed_counts = static_cast<EventCounter>(config.all_event_num_triggers[event_index]) * get_task_iteration_num(task_ids[queue_pos]);
         EventCounter actual_counts = 0;
-
-#ifdef USE_NVSHMEM        
-        if (is_nvshmem_event(event_id)) {
-          nvshmem_signal_wait_until(
-              reinterpret_cast<uint64_t *>(
-                  &config.all_event_counters[event_index]),
-              NVSHMEM_CMP_EQ,
-              needed_counts);
-        } else {
-#endif
-          while (actual_counts < needed_counts) {
-            actual_counts = ld_acquire_sys_u64(&config.all_event_counters[event_index]);
-            __nanosleep(10);
-          }
-#ifdef USE_NVSHMEM          
+        while (actual_counts < needed_counts) {
+          actual_counts = ld_acquire_sys_u64(&config.all_event_counters[event_index]);
+          __nanosleep(10);
         }
-#endif
       }
     }
     __syncthreads();
@@ -507,71 +477,48 @@ __device__ __forceinline__ void execute_worker(RuntimeConfig config) {
     if (threadIdx.x == 0) {
       EventId event_id = task_desc->trigger_event;
       size_t event_index = get_event_position_index(event_id);
-      if (!is_nvshmem_event(event_id)) {
-        size_t gpu_id = get_event_gpu_id(event_id);
-        assert(gpu_id == config.my_gpu_id);
-        // Case 1: Trigger a local non-nvshmem event
-        // int count = atomicSub(&config.all_event_counters[event_index], 1);
-        EventCounter count = atom_add_release_gpu_u64(&config.all_event_counters[event_index], 1);
-        int num_triggers = config.all_event_num_triggers[event_index];
+
+      size_t gpu_id = get_event_gpu_id(event_id);
+      assert(gpu_id == config.my_gpu_id);
+      // Case 1: Trigger a local non-nvshmem event
+      EventCounter count = atom_add_release_gpu_u64(&config.all_event_counters[event_index], 1);
+      int num_triggers = config.all_event_num_triggers[event_index];
 #ifdef MPK_ENABLE_VERBOSE
-        printf("[%d][DONE] worker_id(%d) iter_num(%llu) task_idx(%llu) "
-               "event_id(%llu) "
-               "event_type(local) count(%llu)\n",
-               config.my_gpu_id,
-               worker_id,
-               get_task_iteration_num(task_ids[queue_pos]),
-               get_task_position_index(task_ids[queue_pos]),
-               event_id,
-               count);
+      printf("[%d][DONE] worker_id(%d) iter_num(%llu) task_idx(%llu) "
+              "event_id(%llu) "
+              "event_type(local) count(%llu)\n",
+              config.my_gpu_id,
+              worker_id,
+              get_task_iteration_num(task_ids[queue_pos]),
+              get_task_position_index(task_ids[queue_pos]),
+              event_id,
+              count);
 #endif
 
-        if ((count + 1) == static_cast<EventCounter>(num_triggers) * get_task_iteration_num(task_ids[queue_pos])) {
+      if ((count + 1) == static_cast<EventCounter>(num_triggers) * get_task_iteration_num(task_ids[queue_pos])) {
 #ifdef MPK_ENABLE_PROFILING
-          PROFILER_EVENT_START(TASK_SCHD_EVENTS, task_counter);
+        PROFILER_EVENT_START(TASK_SCHD_EVENTS, task_counter);
 #endif
-          EventDesc event_desc = config.all_events[event_index];
-          // The event has been triggered enough times
-          // Refresh the event counter
-          // atom_add_release_gpu_u64(&config.all_event_counters[event_index],
-          //                       event_desc.num_triggers);
-          // Add the event to the schedule_queue
-          // Note that events launching massive tasks are scheduled
-          // to the global sched_queue
-          if (event_desc.event_type != EVENT_EMPTY) { // Do nothing for empty event
-            int sched_id;
-            if (event_desc.event_type == EVENT_LAUNCH_DEPENDENT_TASKS) {
-              sched_id = config.num_local_schedulers + config.num_remote_schedulers;
-            }
-            else {
-              sched_id = get_rand_sched_id(event_index, worker_id, config.num_workers, config.num_local_schedulers);
-            }
-            size_t last_event_pos = atom_add_release_gpu_u64(&config.sched_queue_next_free_event_id[sched_id], 1);
-            st_relaxed_gpu_u64(&config.sched_queues[sched_id][last_event_pos % config.per_sched_queue_len], event_index);
-            // Use st.relaxed to make sure that the updated event_index is
-            // visible to the scheduler CTA before updating its
-            // last_ready_event_id
-            size_t old;
-            do {
-              old = atom_cas_release_gpu_u64(&config.sched_queue_last_ready_event_id[sched_id], last_event_pos, last_event_pos + 1);
-            } while (old != last_event_pos);
+        EventDesc event_desc = config.all_events[event_index];
+        // Add the event to the schedule_queue
+        // Note that events launching massive tasks are scheduled
+        // to the global sched_queue
+        if (event_desc.event_type != EVENT_EMPTY) { // Do nothing for empty event
+          int sched_id = config.num_local_schedulers;
+          if (event_desc.event_type != EVENT_LAUNCH_DEPENDENT_TASKS) {
+            sched_id = get_rand_sched_id(event_index, worker_id, config.num_workers, config.num_local_schedulers);
           }
-#ifdef MPK_ENABLE_PROFILING
-          PROFILER_EVENT_END(TASK_SCHD_EVENTS, task_counter++);
-#endif
+          size_t last_event_pos = atom_add_release_gpu_u64(&config.sched_queue_next_free_event_id[sched_id], 1);
+          st_relaxed_gpu_u64(&config.sched_queues[sched_id][last_event_pos % config.per_sched_queue_len], event_index);
+          // Use st.relaxed to make sure that the updated event_index is
+          // visible to the scheduler CTA before updating its last_ready_event_id
+          size_t old;
+          do {
+            old = atom_cas_release_gpu_u64(&config.sched_queue_last_ready_event_id[sched_id], last_event_pos, last_event_pos + 1);
+          } while (old != last_event_pos);
         }
-      } else {
-        // Case 2: trigger a nvshmem event
-        assert(task_desc->task_type == TASK_NVSHMEM_COPY);
-        // Note that nvshmem copy task signal counter during data copy
-        // we don't need to do anything here is the task type is NVSHMEM_COPY
-#ifdef MPK_ENABLE_VERBOSE
-        printf("[%d][DONE] worker_id(%d) task_id(%llu) event_id(%llx) "
-               "event_type(remote)\n",
-               config.my_gpu_id,
-               worker_id,
-               get_task_position_index(task_ids[queue_pos]),
-               event_id);
+#ifdef MPK_ENABLE_PROFILING
+        PROFILER_EVENT_END(TASK_SCHD_EVENTS, task_counter++);
 #endif
       }
     }
@@ -581,7 +528,7 @@ __device__ __forceinline__ void execute_worker(RuntimeConfig config) {
 
 // need to alter as there is only one warp per block
 __device__ __forceinline__ void execute_scheduler(RuntimeConfig config, int offset) {
-  int const num_schedulers = config.num_local_schedulers + config.num_remote_schedulers;
+  int const num_schedulers = config.num_local_schedulers;
   // if we have more than 4 warps per thread block
   // only the first 4 warps will run schedulers
   int const num_schedulers_per_sm = std::min((int)blockDim.x / 32, 4);
@@ -598,23 +545,16 @@ __device__ __forceinline__ void execute_scheduler(RuntimeConfig config, int offs
     sched_queues[0] = config.sched_queues[sched_id];
     sched_queue_ids[0] = sched_id;
     unsigned long long int my_first_worker, my_last_worker;
-
-    if (sched_id < config.num_local_schedulers) {
-      // local schedulers also (collectively) process events from
-      // the global queue
-      sched_queues[num_sched_queues] = config.sched_queues[num_schedulers];
-      sched_queue_ids[num_sched_queues] = num_schedulers;
-      num_sched_queues++;
-      get_first_last_ids(config.num_workers, config.num_local_schedulers, sched_id,
-                         &my_first_worker, &my_last_worker);
-    } else {
-      get_first_last_ids(config.num_workers, config.num_remote_schedulers, sched_id - config.num_local_schedulers,
-                         &my_first_worker, &my_last_worker);
-      // Remote schedulers send tasks to remove worker queue
-      // whose ids start from config.num_workers
-      my_first_worker += config.num_workers;
-      my_last_worker += config.num_workers;
-    }
+    // printf("sched_id: %d, %d.\n", sched_id, config.num_local_schedulers);
+    
+    // local schedulers also (collectively) process events from the global queue
+    sched_queues[num_sched_queues] = config.sched_queues[num_schedulers];
+    sched_queue_ids[num_sched_queues] = num_schedulers;
+    num_sched_queues++;
+    get_first_last_ids(config.num_workers, config.num_local_schedulers, sched_id,
+                        &my_first_worker, &my_last_worker);
+    // printf("num_sched_queues: %d.\n", num_sched_queues);
+    
     // ONLY can run when comment this chunk
 #ifdef MPK_ENABLE_VERBOSE
     printf("[SCHD] sched_id(%d) first_worker(%llu) last_worker(%llu)\n",
@@ -622,12 +562,7 @@ __device__ __forceinline__ void execute_scheduler(RuntimeConfig config, int offs
            my_first_worker,
            my_last_worker);
 #endif
-    size_t cur_event_pos[2], last_event_pos[2];
-    for (int i = 0; i < 2; i++) {
-      cur_event_pos[i] = 0;
-      last_event_pos[i] = 0;
-    }
-
+    size_t cur_event_pos[2] = {0, 0}, last_event_pos[2] = {0, 0};
     size_t worker_queue_next_free_task_pos[MAX_WORKER_PER_SCHEDULER];
     for (int i = 0; i < MAX_WORKER_PER_SCHEDULER; i++) {
       worker_queue_next_free_task_pos[i] = 0;
