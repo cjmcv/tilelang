@@ -4,7 +4,7 @@ import argparse
 from torch import nn
 import megakernel as mi
 
-from common.pkt_util import TorchRef, MpkReporter, TestUtil
+from common.pkt_util import TorchRef, PerfReporter, TestUtil
 from common.mpk_layers import MpkLayers
 
 from common.micro_base import HparamSelectMode
@@ -36,7 +36,7 @@ if __name__ == "__main__":
     # micro = MicroAutoGen(1, 1024, 3072)
     # micro.gen_qwen3_mlp(1, HparamSelectMode.SPECIFY+0) # HEURISTIC, TUNING, TUNED
        
-    reporter = MpkReporter() 
+    reporter = PerfReporter() 
     # model, tokenizer = reporter.memory_footprint_simulation(rank)
     # w_rms_torch, w_gatedup_torch, w_down_proj_torch = reporter.get_weight_qwen3_mlp(layer_id=0)
     

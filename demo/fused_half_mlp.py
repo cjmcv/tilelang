@@ -4,7 +4,7 @@ import argparse
 from torch import nn
 import megakernel as mi
 
-from common.pkt_util import TorchRef, MpkReporter, TestUtil
+from common.pkt_util import TorchRef, PerfReporter, TestUtil
 from common.mpk_layers import MpkLayers
 
 if __name__ == "__main__":
@@ -28,7 +28,7 @@ if __name__ == "__main__":
     print(f"world_size({world_size}) rank({rank})")
     torch.set_default_dtype(torch.bfloat16)
     
-    reporter = MpkReporter() 
+    reporter = PerfReporter() 
     # model, tokenizer = reporter.memory_footprint_simulation(rank)
     # w_rms_torch, w_gatedup_torch, w_down_proj_torch = reporter.get_weight_qwen3_mlp(layer_id=0)
     

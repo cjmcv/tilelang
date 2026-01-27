@@ -3,7 +3,7 @@ import torch
 import argparse
 import megakernel as mi
 
-from common.pkt_util import TorchRef, MpkReporter
+from common.pkt_util import TorchRef, PerfReporter
 from common.mpk_layers import MpkLayers
 from common.autogen.qwen3_mlp_config import Qwen3MlpConfig
 
@@ -11,8 +11,8 @@ WITH_RMS_NORM = 1
 WITH_RESIDUAL = 1
 
 if __name__ == "__main__":
-    max_batch_size = 1
-    batch_size = 1
+    max_batch_size = 32
+    batch_size = 32
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", default=os.getenv("MEGAKERNEL_HOME", default=None)+"/demo/gen", help="Output files directory")
     parser.add_argument("--trace-name", default="qwen3", help="Perfetto trace output name")
@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
     layers = MpkLayers(0, 1, world_size, rank, max_batch_size, args.trace_name, args.profiling)
     mpk = layers.get_mpk()
-    reporter = MpkReporter() 
+    reporter = PerfReporter() 
     # reporter.memory_footprint_simulation(rank)
     
     splitk = 1 # 8
@@ -139,7 +139,8 @@ if __name__ == "__main__":
     for _ in range(100):
         graph.replay()
         # ref_run()
-    mpk_run()
+        mpk_run()
+    
     ##
     
     reporter.generate_report(mpk_run, mpk_output, splitk, 

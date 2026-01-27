@@ -103,7 +103,7 @@ class TorchRef:
             tokenizer = AutoTokenizer.from_pretrained(model_name) 
         return model, tokenizer
     
-class MpkReporter:
+class PerfReporter:
     def get_weight_qwen3_mlp(self, model, layer_id):
         layer = model.model.layers[layer_id]
         w_rms = layer.post_attention_layernorm.weight
@@ -133,7 +133,7 @@ class MpkReporter:
         print(prof.key_averages().table(sort_by="cuda_time_total"))
         prof.export_chrome_trace("trace.json") # chrome://tracing/        
     
-    def check_allclose(self, mpk_run, mpk_out, splitk, torch_out, iter, print_all):
+    def check_allclose_inplace(self, mpk_run, mpk_out, splitk, torch_out, iter, print_all):
         if (print_all):
             torch.set_printoptions(threshold=float('inf'))
         torch.cuda.synchronize()
@@ -173,7 +173,35 @@ class MpkReporter:
                 count0 = (radio > threshold[0]).sum().item()
                 count1 = (radio > threshold[1]).sum().item()
                 print("radio > ", threshold[0], ": ", count0, "-", count0/total_num, " / ", threshold[1], ": ", count1, "-", count1/total_num)
-                 
+    
+    def check_allclose_ret(self, mpk_run, torch_run, iter, print_all):
+        if (print_all):
+            torch.set_printoptions(threshold=float('inf'))
+        torch.cuda.synchronize()
+        
+        # print("inner: ", torch_out, torch_out.data_ptr())
+        for _ in range(iter):
+            target_result = mpk_run()
+            torch_result = torch_run()
+            torch.cuda.synchronize()
+            
+            total_num = torch_result.shape[0] * torch_result.shape[1]
+                
+            if (torch.allclose(target_result, torch_result, rtol=1e-2, atol=0)):
+                print("allclose: True")
+            else:
+                print("mpk_out:", target_result.shape, "\n", target_result)
+                print("torch_out:", torch_result.shape, "\n", torch_result)
+                print("diff: ", target_result - torch_result)
+                
+                radio = abs((target_result - torch_result)/torch_result)
+                
+                threshold = [0.05, 0.10]
+                count0 = (radio > threshold[0]).sum().item()
+                count1 = (radio > threshold[1]).sum().item()
+                print("radio > ", threshold[0], ": ", count0, "-", count0/total_num, " / ", threshold[1], ": ", count1, "-", count1/total_num)
+
+             
     def time_cuda_event_record(self, name, func, test_iter):
         starter = torch.cuda.Event(enable_timing=True)
         ender = torch.cuda.Event(enable_timing=True)
@@ -200,15 +228,15 @@ class MpkReporter:
         run_time = (end_time - start_time) * 1000
         print(name, "run time (ms): ", run_time / test_iter)
         
-    def generate_report(self, mpk_run, mpk_out, splitk, torch_run, torch_out, warnup_iter, test_iter, allclose_iter, print_all):
-        # for _ in range(warnup_iter):
-        #     torch_run()
-        
-        self.check_allclose(mpk_run, mpk_out, splitk, torch_out, allclose_iter, print_all)      
+    def generate_report(self, mpk_run, mpk_out, splitk, torch_run, torch_out, warnup_iter, test_iter, allclose_iter, print_all):  
+        if mpk_out != None:
+            self.check_allclose_inplace(mpk_run, mpk_out, splitk, torch_out, allclose_iter, print_all)
+        else:
+            self.check_allclose_ret(mpk_run, torch_run, allclose_iter, print_all)
 
         latency = do_bench(lambda: mpk_run(), warmup=warnup_iter, rep=test_iter, backend="cupti")
         torch_latency = do_bench(lambda: torch_run(), warmup=warnup_iter, rep=test_iter, backend="cupti")
-        print(f"mpk Latency: {latency:.3f}ms vs {torch_latency:.3f}(torch) ms")
+        print(f"Latency: {latency:.3f}ms vs {torch_latency:.3f}(torch) ms")
         
         # self.time_cuda_event_record("torch_ref", torch_run, test_iter)   
         # self.time_cuda_event_record("mpk", mpk_run, test_iter)

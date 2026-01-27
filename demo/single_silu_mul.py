@@ -3,7 +3,7 @@ import torch
 import argparse
 import megakernel as mi
 
-from common.pkt_util import TorchRef, MpkReporter, TestUtil
+from common.pkt_util import TorchRef, PerfReporter, TestUtil
 from common.mpk_layers import MpkLayers
 
 if __name__ == "__main__":
@@ -30,7 +30,7 @@ if __name__ == "__main__":
 
     layers = MpkLayers(0,1, world_size, rank, max_batch_size, args.trace_name, args.profiling)
     mpk = layers.get_mpk()
-    reporter = MpkReporter() 
+    reporter = PerfReporter() 
     # reporter.memory_footprint_simulation(rank)
     
     # 1) 单kernel tuning后会指定bx, by, bz和thread_num.

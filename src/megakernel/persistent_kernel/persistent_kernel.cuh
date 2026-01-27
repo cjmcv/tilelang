@@ -131,11 +131,6 @@ __device__ __forceinline__ TaskId compute_task_id(size_t iteration_num,
 
 __global__ void prepare_kernel(RuntimeConfig config,
                                int end_of_task_graph_event_pos) {
-  if (blockIdx.x == 0 && threadIdx.x == 0) {
-    *config.infer_cnt = 0;
-  }
-  ///////////////////////////////////////////////////////////////////
-
   // Initialize worker queue last task id
   // Each worker now maintains a local and a remote worker queue
   for (int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -159,27 +154,12 @@ __global__ void prepare_kernel(RuntimeConfig config,
   }
   // Send event to scheduler[0]
   if (blockIdx.x == 0 && threadIdx.x == 0) {
-    assert(config.all_events[end_of_task_graph_event_pos].event_type ==
-           EVENT_END_OF_TASK_GRAPH);
+    *config.infer_cnt = 0;
+
+    assert(config.all_events[end_of_task_graph_event_pos].event_type == EVENT_END_OF_TASK_GRAPH);
     config.sched_queue_next_free_event_id[0] = 1;
     config.sched_queues[0][0] = end_of_task_graph_event_pos;
     config.sched_queue_last_ready_event_id[0] = 1;
-  }
-}
-
-// TODO: parallelize this processing
-__device__ __forceinline__ bool
-    prepare_next_batch(RuntimeConfig const &config) {
-
-  int infer_cnt = *config.infer_cnt;
-  if (infer_cnt == 0) {
-    // printf("prepare_next_batch true (%d, %d).\n", blockIdx.x, threadIdx.x);
-    *config.infer_cnt = infer_cnt + 1;
-    return true;
-  }
-  else {
-    // printf("prepare_next_batch false (%d, %d).\n", blockIdx.x, threadIdx.x);
-    return false;
   }
 }
 
@@ -336,18 +316,16 @@ __device__ __forceinline__ void persistent_checker(RuntimeConfig config) {
 
 __device__ __forceinline__ void execute_worker(RuntimeConfig config) {
   // Make sure overall smem usage here do not exceed 3KB
-  // last_task_pos: 2 * 8 = 16 B
-  // next_task_pos: 2 * 8 = 16 B
-  // worker_queue_ids: 2 * 4 = 8 B
-  // worker_queues: 2 * 8 = 16 B
-  // remaining: 3016 B
-  // printf("execute_worker 0.\n");
-  constexpr int TASK_DESCS_BUFFER_LENGTH = std::min(16,
-      (megakernel::runtime::WORKER_RESERVED_STATIC_SHARED_MEMORY_SIZE - 56) / (int)(sizeof(TaskDesc) + sizeof(TaskId)));
+  // last_task_pos: 8 B
+  // next_task_pos: 8 B 
+  //             = 16 B
+  // remaining: 3056 B = 3*1024-16
+  // printf("worker: %d.\n", blockIdx.x);
+  constexpr int TASK_DESCS_BUFFER_LENGTH = std::min(32,
+      (megakernel::runtime::WORKER_RESERVED_STATIC_SHARED_MEMORY_SIZE - 16) / (int)(sizeof(TaskDesc) + sizeof(TaskId)));
+  // printf("TASK_DESCS_BUFFER_LENGTH: %d.\n", TASK_DESCS_BUFFER_LENGTH);
   __shared__ TaskDesc task_descs[TASK_DESCS_BUFFER_LENGTH];
   __shared__ TaskId task_ids[TASK_DESCS_BUFFER_LENGTH];
-  __shared__ TaskId *worker_queues;
-  __shared__ int worker_queue_ids;
   __shared__ size_t next_task_pos;
   __shared__ size_t last_task_pos;
 
@@ -355,33 +333,29 @@ __device__ __forceinline__ void execute_worker(RuntimeConfig config) {
   PROFILER_CLOSURE_PARAMS_DECL;
   PROFILER_INIT(static_cast<uint64_t *>(config.profiler_buffer),
                 0, 1, (threadIdx.x % WORKER_NUM_THREADS == 0));
-
+  size_t task_counter = 0;
 #endif
-  int const worker_id = blockIdx.x;
-  worker_queues = config.worker_queues[worker_id];
-  worker_queue_ids = worker_id;
 
+  const int worker_id = blockIdx.x;
   if (threadIdx.x == 0) {
     next_task_pos = 0;
     last_task_pos = 0;
   }
 
   int queue_pos = 0, queue_len = 0;
-#ifdef MPK_ENABLE_PROFILING
-  size_t task_counter = 0;
-#endif
   while (true) {
     // fetch next task from a task queue if task_descs is empty
     if (queue_pos == queue_len) {
       if (threadIdx.x == 0) {
+        // Leader 线程检查全局队列是否有新任务
         while (next_task_pos == last_task_pos) {
-          last_task_pos = ld_acquire_gpu_u64(&config.worker_queue_last_ready_task_id[worker_queue_ids]);
-          // printf("last_task_pos[%d]: %d", queue_idx, last_task_pos[queue_idx]);
+          last_task_pos = ld_acquire_gpu_u64(&config.worker_queue_last_ready_task_id[worker_id]);
           if (next_task_pos < last_task_pos) {
+            // printf("task_pos: %d, %d\n", next_task_pos,last_task_pos);
             break;
           }
-          // nanosleep to avoid overwhelming I/O
-          __nanosleep(10);
+          // printf("*");
+          __nanosleep(10); // nanosleep to avoid overwhelming I/O
         }
         assert(next_task_pos + config.per_worker_queue_len > last_task_pos);
       }
@@ -389,7 +363,7 @@ __device__ __forceinline__ void execute_worker(RuntimeConfig config) {
       int num_loaded_tasks = min((int)(last_task_pos - next_task_pos), TASK_DESCS_BUFFER_LENGTH);
       // Load task ids
       if (threadIdx.x < num_loaded_tasks) {
-        task_ids[threadIdx.x] = ld_relaxed_gpu_u64(&worker_queues[(next_task_pos + threadIdx.x) % config.per_worker_queue_len]);
+        task_ids[threadIdx.x] = ld_relaxed_gpu_u64(&config.worker_queues[worker_id][(next_task_pos + threadIdx.x) % config.per_worker_queue_len]);
       }
       __syncthreads();
       if (threadIdx.x == 0) {
@@ -436,6 +410,7 @@ __device__ __forceinline__ void execute_worker(RuntimeConfig config) {
         size_t event_index = get_event_position_index(event_id);
         EventCounter needed_counts = static_cast<EventCounter>(config.all_event_num_triggers[event_index]) * get_task_iteration_num(task_ids[queue_pos]);
         EventCounter actual_counts = 0;
+        // 等待前置任务的 Event 计数达到预期值
         while (actual_counts < needed_counts) {
           actual_counts = ld_acquire_sys_u64(&config.all_event_counters[event_index]);
           __nanosleep(10);
@@ -451,20 +426,9 @@ __device__ __forceinline__ void execute_worker(RuntimeConfig config) {
 #endif
 
     // Successfully fetched a new task
-    if (UNLIKELY(task_desc->task_type == TASK_TERMINATE)) {
-      // Terminate
-      return;
-    } else if (UNLIKELY(task_desc->task_type == TASK_BEGIN_TASK_GRAPH)) {
-      // Do nothing
-    } else {
-#ifdef MPK_ENABLE_VERBOSE
-      if (threadIdx.x == 0) {
-        printf("[worker] _execute_task EXECUTE_TASK %d\n",
-               task_desc->task_type);
-      }
-#endif
-      _execute_task(task_desc, config); // CJM
-    }
+    if (UNLIKELY(task_desc->task_type == TASK_TERMINATE)) { return; }    // Terminate
+    else if (UNLIKELY(task_desc->task_type == TASK_BEGIN_TASK_GRAPH)) {} // Do nothing
+    else { _execute_task(task_desc, config); } // CJM
     __syncthreads();
 
 #ifdef MPK_ENABLE_PROFILING
@@ -478,8 +442,6 @@ __device__ __forceinline__ void execute_worker(RuntimeConfig config) {
       EventId event_id = task_desc->trigger_event;
       size_t event_index = get_event_position_index(event_id);
 
-      size_t gpu_id = get_event_gpu_id(event_id);
-      assert(gpu_id == config.my_gpu_id);
       // Case 1: Trigger a local non-nvshmem event
       EventCounter count = atom_add_release_gpu_u64(&config.all_event_counters[event_index], 1);
       int num_triggers = config.all_event_num_triggers[event_index];
@@ -495,19 +457,21 @@ __device__ __forceinline__ void execute_worker(RuntimeConfig config) {
               count);
 #endif
 
+      // 如果是最后一个触发者，将 Event 加入 Scheduler 队列
       if ((count + 1) == static_cast<EventCounter>(num_triggers) * get_task_iteration_num(task_ids[queue_pos])) {
 #ifdef MPK_ENABLE_PROFILING
         PROFILER_EVENT_START(TASK_SCHD_EVENTS, task_counter);
 #endif
         EventDesc event_desc = config.all_events[event_index];
         // Add the event to the schedule_queue
-        // Note that events launching massive tasks are scheduled
-        // to the global sched_queue
+        // Note that events launching massive tasks are scheduled to the global sched_queue
         if (event_desc.event_type != EVENT_EMPTY) { // Do nothing for empty event
+          // 选择目标 scheduler（随机或全局）
           int sched_id = config.num_local_schedulers;
           if (event_desc.event_type != EVENT_LAUNCH_DEPENDENT_TASKS) {
-            sched_id = get_rand_sched_id(event_index, worker_id, config.num_workers, config.num_local_schedulers);
+            sched_id = worker_id / ((config.num_workers + config.num_local_schedulers - 1) / config.num_local_schedulers);
           }
+          // 入队并通知
           size_t last_event_pos = atom_add_release_gpu_u64(&config.sched_queue_next_free_event_id[sched_id], 1);
           st_relaxed_gpu_u64(&config.sched_queues[sched_id][last_event_pos % config.per_sched_queue_len], event_index);
           // Use st.relaxed to make sure that the updated event_index is
@@ -531,30 +495,27 @@ __device__ __forceinline__ void execute_scheduler(RuntimeConfig config, int offs
   int const num_schedulers = config.num_local_schedulers;
   // if we have more than 4 warps per thread block
   // only the first 4 warps will run schedulers
+  // 应使用 warp 级同步，不能用 __syncthreads()
   int const num_schedulers_per_sm = std::min((int)blockDim.x / 32, 4);
+  // printf("num_schedulers_per_sm: %d.\n", num_schedulers_per_sm);
   int const warp_id = threadIdx.x / 32;
   // CANNOT use syncthreads below
   if (threadIdx.x % 32 == 0 && warp_id < num_schedulers_per_sm) {
     int const sched_id = blockIdx.x * num_schedulers_per_sm + warp_id + offset;
     // if (threadIdx.x == 0) {
     //   int sched_id = (blockIdx.x - config.num_workers);
-    int num_sched_queues = 1;
     size_t iteration_num = 0;
     EventId *sched_queues[2];
     int sched_queue_ids[2];
-    sched_queues[0] = config.sched_queues[sched_id];
+    sched_queues[0] = config.sched_queues[sched_id];       // 本地队列 分配给该 scheduler 的 events
+    sched_queues[1] = config.sched_queues[num_schedulers]; // 所有 scheduler 共同处理的大批量任务 events，EVENT_LAUNCH_DEPENDENT_TASKS，local schedulers also (collectively) process events from the global queue
     sched_queue_ids[0] = sched_id;
+    sched_queue_ids[1] = num_schedulers;
+   
     unsigned long long int my_first_worker, my_last_worker;
-    // printf("sched_id: %d, %d.\n", sched_id, config.num_local_schedulers);
-    
-    // local schedulers also (collectively) process events from the global queue
-    sched_queues[num_sched_queues] = config.sched_queues[num_schedulers];
-    sched_queue_ids[num_sched_queues] = num_schedulers;
-    num_sched_queues++;
     get_first_last_ids(config.num_workers, config.num_local_schedulers, sched_id,
                         &my_first_worker, &my_last_worker);
-    // printf("num_sched_queues: %d.\n", num_sched_queues);
-    
+
     // ONLY can run when comment this chunk
 #ifdef MPK_ENABLE_VERBOSE
     printf("[SCHD] sched_id(%d) first_worker(%llu) last_worker(%llu)\n",
@@ -574,10 +535,12 @@ __device__ __forceinline__ void execute_scheduler(RuntimeConfig config, int offs
       while (cur_event_pos[queue_idx] == last_event_pos[queue_idx]) {
         last_event_pos[queue_idx] = ld_acquire_gpu_u64(&config.sched_queue_last_ready_event_id[sched_queue_ids[queue_idx]]);
         if (cur_event_pos[queue_idx] < last_event_pos[queue_idx]) {
+          // printf("event_pos: %d, %d", cur_event_pos[queue_idx], last_event_pos[queue_idx]);
           break;
         } else {
-          queue_idx = (queue_idx == num_sched_queues - 1) ? 0 : queue_idx + 1;
+          queue_idx = (queue_idx == 1) ? 0 : 1;
         }
+        // printf("-");
         // nanosleep to avoid overwhelming I/O
         __nanosleep(10);
       }
@@ -604,12 +567,14 @@ __device__ __forceinline__ void execute_scheduler(RuntimeConfig config, int offs
         printf("[SCHD] END_OF_TASK_GRAPH\n");
 #endif
         // Check if we want to continue
-        if (!prepare_next_batch(config)) {
+        if (*config.infer_cnt != 0) {
+          // printf("terminate_schedulers EVENT_END_OF_TASK_GRAPH.\n");
           terminate_schedulers(config);
         } else {
+          // printf("hello EVENT_END_OF_TASK_GRAPH.\n");
+          *config.infer_cnt = 1;
           // Launch task 1 (begin_task_graph) for the next iteration
-          size_t last_task_id =
-              worker_queue_next_free_task_pos[next_worker - my_first_worker]++;
+          size_t last_task_id = worker_queue_next_free_task_pos[next_worker - my_first_worker]++;
           st_relaxed_gpu_u64(&config.worker_queues[next_worker][last_task_id % config.per_worker_queue_len],
                              compute_task_id(iteration_num + 1, 1 /*begin_task_graph*/));
           // Use st.relaxed to make sure writes to worker_queues is visible to
@@ -629,6 +594,7 @@ __device__ __forceinline__ void execute_scheduler(RuntimeConfig config, int offs
           next_worker = (next_worker == my_last_worker - 1) ? my_first_worker : next_worker + 1;
         }
       } else if (e.event_type == EVENT_LAUNCH_DEPENDENT_TASKS) {
+        // printf("hello EVENT_LAUNCH_DEPENDENT_TASKS.\n");
         iteration_num = iteration_num + 1;
         // assign event in a round-robin fashion
         // Split event across local schedulers
@@ -643,7 +609,6 @@ __device__ __forceinline__ void execute_scheduler(RuntimeConfig config, int offs
               // Use st.relaxed to make sure writes to worker_queues is visible
               // to worker CTAs before we increase its last_ready_task_id
               atom_add_release_gpu_u64(&config.worker_queue_last_ready_task_id[next_worker], 1);
-
 #ifdef MPK_ENABLE_VERBOSE
               if (sched_id == 0) {
                 printf("[%d][SCHD] EVENT_LAUNCH_DEPENDENT_TASKS schd_id(%d) "
@@ -668,13 +633,16 @@ __device__ __forceinline__ void execute_scheduler(RuntimeConfig config, int offs
           }
         }
       } else {
-        TaskId my_first_task = e.first_task_id, my_last_task = e.last_task_id;
-        for (size_t i = my_first_task; i < my_last_task; i++) {
+        // printf("hello main: %d.\n", e.event_type);
+        for (size_t i = e.first_task_id; i < e.last_task_id; i++) {
+          // 选择下一个 worker（Round-Robin）
           size_t last_task_id = worker_queue_next_free_task_pos[next_worker - my_first_worker]++;
+          // 写入 worker 的任务队列
           st_relaxed_gpu_u64(&config.worker_queues[next_worker][last_task_id % config.per_worker_queue_len],
                              compute_task_id(iteration_num, i));
           // Use st.relaxed to make sure writes to worker_queues is visible to
           // worker CTAs before we increase its last_ready_task_id
+          // 通知 worker 有新任务（release 语义）
           atom_add_release_gpu_u64(&config.worker_queue_last_ready_task_id[next_worker], 1);
 
 #ifdef MPK_ENABLE_VERBOSE
@@ -895,7 +863,7 @@ extern "C" void init_persistent_kernel(int kernel_id,
                        MAX_DYNAMIC_SHARED_MEMORY_SIZE);
   cudaFuncSetAttribute(scheduler_kernel,
                        cudaFuncAttributeMaxDynamicSharedMemorySize,
-                       MAX_DYNAMIC_SHARED_MEMORY_SIZE);
+                       0);
   cudaFuncSetAttribute(persistent_kernel,
                        cudaFuncAttributeMaxDynamicSharedMemorySize,
                        MAX_DYNAMIC_SHARED_MEMORY_SIZE);
@@ -939,11 +907,7 @@ extern "C" void launch_persistent_kernel(int kernel_id, int batch_size) {
     prepare_kernel<<<dim3(global_runtime_config[kernel_id].num_workers, 1, 1),
                      dim3(128, 1, 1)>>>(global_runtime_config[kernel_id],
                                         end_of_task_graph_event_pos);
-    #ifdef USE_NVSHMEM
-      nvshmem_barrier_all();
-    #endif
-    // printf("worker kernel & scheduler kernel\n");
-    // printf("smem size: %d\n", MAX_DYNAMIC_SHARED_MEMORY_SIZE);
+    cudaDeviceSynchronize();
 
     // The split kernel does not support NVSHMEM because
     // nvshmemx_collective_launch launches kernels sequentially, which blocks

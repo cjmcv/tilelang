@@ -6,11 +6,10 @@ import torch
 # 
 import tilelang
 import tilelang.language as T
-from tilelang.utils.profiler import do_bench
 import tvm
 from tvm.tir.stmt_functor import ir_transform
 
-from common.pkt_util import TestUtil, TorchRef
+from common.pkt_util import TorchRef, PerfReporter
 from common.micro_base import HparamSelectMode
 from common.micro_linear import MicroLinearStrategy, MicroLinear
 from common.micro_rmsnorm import MicroRmsNorm
@@ -18,16 +17,11 @@ from common.micro_silu_mul import MicroSiluMul
 from common.micro_autogen import MicroAutoGen
 
 def profile(target_func, torch_ref_func):
-    c = target_func()
-    ref_c = torch_ref_func()
-    
-    print("c:\n", c, "\nref_c:\n", ref_c)
-    torch.testing.assert_close(c, ref_c, rtol=1e-1, atol=1e-1)
-    
-    # benchmark
-    latency = do_bench(lambda: target_func(), warmup=500, backend="cupti")
-    torch_latency = do_bench(lambda: torch_ref_func(), warmup=500, backend="cupti")
-    print(f"tilelang Latency: {latency}ms vs {torch_latency}(torch) ms")
+    reporter = PerfReporter() 
+    reporter.generate_report(target_func, None, 1, 
+                            torch_ref_func, None, 
+                            warnup_iter=100, test_iter=200, 
+                            allclose_iter=5, print_all=False)
     
 def test_silu_mul():
     M, N = 32, 9728
@@ -124,5 +118,5 @@ if __name__ == "__main__":
     # test_gemm_add()
     
     # # gen = MicroAutoGen(1, 2560, 9728)
-    gen = MicroAutoGen(1, 1024, 3072)
+    gen = MicroAutoGen(32, 1024, 3072)
     gen.gen_qwen3_mlp(99, HparamSelectMode.TUNED) # HEURISTIC, TUNING, TUNED

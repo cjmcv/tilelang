@@ -614,7 +614,7 @@ private:
     for (size_t i=0; i<all_tasks.size(); i++)
       printf("task %d: depend: %d, trigger: %d\n", i, all_tasks[i].dependent_event, all_tasks[i].trigger_event);
     for (size_t i=0; i<all_events.size(); i++)
-      printf("event %d: num: %d, first: %d, last: %d\n", i, all_events[i].num_triggers, all_events[i].first_task_id, all_events[i].last_task_id);
+      printf("event %d: type: %d, num: %d, first: %d, last: %d\n", i, all_events[i].num_triggers, all_events[i].event_type, all_events[i].first_task_id, all_events[i].last_task_id);
   }
   void create_events_add_tasks(
     TaskType task_type,
@@ -935,6 +935,12 @@ private:
     }
     all_events.push_back(
         EventDesc(EVENT_END_OF_TASK_GRAPH, pre_task_map.size(), 0, 0));
+
+    // printf("all_events: ");
+    // for (int i=0; i<all_events.size(); i++) {
+    //   printf("%d, ", all_events[i].event_type);
+    // }
+    // printf("\n");
 
     // Prelaunch all tasks at the begining of an iteration
     all_events[1].first_task_id = 2;
