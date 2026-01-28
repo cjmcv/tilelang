@@ -163,6 +163,14 @@ __global__ void prepare_kernel(RuntimeConfig config,
   }
 }
 
+__global__ void static_prepare_kernel(RuntimeConfig config) {
+  // Initialize all event counters
+  for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < config.num_events;
+       i += blockDim.x * gridDim.x) {
+    config.all_event_counters[i] = 0;
+  }
+}
+
 __device__ __forceinline__ int get_rand_sched_id(size_t event_index,
                                                  int worker_id,
                                                  int num_workers,
@@ -311,6 +319,78 @@ __device__ __forceinline__ void persistent_checker(RuntimeConfig config) {
   // }
   if (blockIdx.x < config.num_workers) {
     prepare_queue(config);
+  }
+}
+
+__global__ __launch_bounds__(WORKER_NUM_THREADS, 1) 
+void static_persistent_kernel(RuntimeConfig config) {
+  // persistent_checker(config);
+  #ifdef MPK_ENABLE_PROFILING
+  PROFILER_CLOSURE_PARAMS_DECL;
+  PROFILER_INIT(static_cast<uint64_t *>(config.profiler_buffer),
+                0, 1, (threadIdx.x % WORKER_NUM_THREADS == 0));
+  
+  #endif
+  const int worker_id = blockIdx.x;
+
+  int task_num = config.static_worker_tasks_index[worker_id][0];
+  int *task_ids = &config.static_worker_tasks_index[worker_id][1];
+  for (int i = 0; i < task_num ; i++) {
+    // if (threadIdx.x == 0) {
+    //   // printf("task_ids1[%d]: %d\n", worker_id, i);// 
+    //   printf("task_ids2[%d]: %d\n", worker_id, task_ids[i]);// 
+    // }
+      
+    int task_idx = task_ids[i]; // worker_id * 9 + i;
+    if (task_idx > config.num_tasks)
+      return;
+
+    TaskDesc *task_desc = &config.all_tasks[task_idx];
+    // Successfully fetched a new task
+    if (task_desc->task_type != TASK_TERMINATE && task_desc->task_type != TASK_BEGIN_TASK_GRAPH) {
+      size_t event_index = get_event_position_index(task_desc->dependent_event);
+      EventDesc *dep_event_desc = &config.all_events[event_index];
+  
+      if (threadIdx.x == 0) {
+        if (task_desc->dependent_event != EVENT_INVALID_ID) {
+          // Wait until the event has been triggered enough times
+          EventId event_id = task_desc->dependent_event;
+          assert(get_event_gpu_id(event_id) == config.my_gpu_id);
+          size_t event_index = get_event_position_index(event_id);
+          
+          EventCounter needed_counts = static_cast<EventCounter>(config.all_event_num_triggers[event_index]);
+          EventCounter actual_counts = 0;
+          // 等待前置任务的 Event 计数达到预期值
+          while (actual_counts < needed_counts) {
+            actual_counts = ld_acquire_sys_u64(&config.all_event_counters[event_index]);
+            // printf("dep(%d):(%d vs %d), ", event_index, actual_counts, needed_counts);
+            __nanosleep(10);
+          }
+        }
+      }
+      __syncthreads();
+
+    #ifdef MPK_ENABLE_PROFILING
+      if (task_desc->task_type != TASK_TERMINATE) {
+        PROFILER_EVENT_START(task_desc->task_type, task_idx);
+      }
+    #endif
+      _execute_task(task_desc, config); 
+    #ifdef MPK_ENABLE_PROFILING
+      if (task_desc->task_type != TASK_TERMINATE) {
+        PROFILER_EVENT_END(task_desc->task_type, task_idx);
+      }
+    #endif
+
+      // Trigger event
+      if (threadIdx.x == 0) {
+        EventId event_id = task_desc->trigger_event;
+        size_t event_index = get_event_position_index(event_id);
+        EventCounter count = atom_add_release_gpu_u64(&config.all_event_counters[event_index], 1);
+        // printf("tri(%d):(%d), ", event_index, count);
+      }       
+    } // CJM
+    __syncthreads();
   }
 }
 
@@ -758,6 +838,7 @@ extern "C" void init_persistent_kernel(int kernel_id,
   global_runtime_config[kernel_id].my_gpu_id = mype;
   global_runtime_config[kernel_id].num_graphs = 1;
   global_runtime_config[kernel_id].split_worker_scheduler = false;
+  global_runtime_config[kernel_id].is_static_schedule = true;
 
   std::vector<FullTaskDesc> all_fulltasks;
   std::vector<EventDesc> all_events;
@@ -781,6 +862,53 @@ extern "C" void init_persistent_kernel(int kernel_id,
       task_desc.task_metadata.xfer_size_in_bytes = size_in_bytes;
     }
     all_tasks.push_back(task_desc);
+  }
+
+  if (global_runtime_config[kernel_id].is_static_schedule == true) {
+    global_runtime_config[kernel_id].num_tasks = all_tasks.size();
+    int num_workers = global_runtime_config[kernel_id].num_workers;
+    int tasks_each_worker = (all_tasks.size() + num_workers - 1) / num_workers;
+    int capacity_each_worker = tasks_each_worker * 1.5;
+    // printf("tasks_each_worker: %d.\n", tasks_each_worker);
+
+    ///////////////////////////////////////////////
+    // Static Scheduling Scheme
+    std::vector<std::vector<int>> host_tasks_index;
+    host_tasks_index.resize(num_workers);
+    for (int i=0; i<num_workers; i++) {
+      host_tasks_index[i].resize(capacity_each_worker);
+      int cnt = 0;
+      for (int j=0; j<tasks_each_worker; j++) {
+        int task_idx = i*tasks_each_worker+j;
+        if (task_idx < all_tasks.size()) {
+          cnt++;
+          host_tasks_index[i][j+1] = task_idx;          
+        }
+      }
+      host_tasks_index[i][0] = cnt;
+    }
+
+    // for (int i=0; i<all_tasks.size(); i++) {
+    //   TaskDesc task_desc = all_tasks[i];
+    //   printf("task_desc[%d]: type %d, block(%d,%d,%d), dep %d, tri %d, varid %d.\n", i, task_desc.task_type, task_desc.bx, task_desc.by, task_desc.bz, task_desc.dependent_event, task_desc.trigger_event, task_desc.variant_id);
+    // }
+    // for (int i=0; i<all_events.size(); i++) {
+    //   EventDesc event_desc = all_events[i];
+    //   printf("event_desc[%d]: type %d, tri %d, task (%d, %d).\n", i, event_desc.event_type, event_desc.num_triggers, event_desc.first_task_id, event_desc.last_task_id);
+    // }
+    ////////////////////////////////////////////////
+
+    std::vector<int*> host_tasks_index_arr;
+    for (int i = 0; i < num_workers; i++) {
+      int *device_tasks_index = gpu_malloc<int>(capacity_each_worker * sizeof(int));
+      cudaMemcpy(device_tasks_index, host_tasks_index[i].data(), capacity_each_worker * sizeof(int), cudaMemcpyHostToDevice);
+      host_tasks_index_arr.push_back(device_tasks_index);
+    }
+
+    global_runtime_config[kernel_id].static_worker_tasks_index = gpu_malloc<int*>(num_workers * sizeof(int*));
+    cudaMemcpy(global_runtime_config[kernel_id].static_worker_tasks_index,
+               host_tasks_index_arr.data(),
+               num_workers * sizeof(int*), cudaMemcpyHostToDevice);
   }
 
   // Initialize worker queue last task id
@@ -863,8 +991,11 @@ extern "C" void init_persistent_kernel(int kernel_id,
                        MAX_DYNAMIC_SHARED_MEMORY_SIZE);
   cudaFuncSetAttribute(scheduler_kernel,
                        cudaFuncAttributeMaxDynamicSharedMemorySize,
-                       0);
+                       MAX_DYNAMIC_SHARED_MEMORY_SIZE);
   cudaFuncSetAttribute(persistent_kernel,
+                       cudaFuncAttributeMaxDynamicSharedMemorySize,
+                       MAX_DYNAMIC_SHARED_MEMORY_SIZE);
+  cudaFuncSetAttribute(static_persistent_kernel,
                        cudaFuncAttributeMaxDynamicSharedMemorySize,
                        MAX_DYNAMIC_SHARED_MEMORY_SIZE);
   // Create worker and scheduler streams
@@ -925,21 +1056,34 @@ extern "C" void launch_persistent_kernel(int kernel_id, int batch_size) {
         global_runtime_config[kernel_id]);
   } else {
     // printf("a single persistent kernel\n");
-    int num_sms_to_use = global_runtime_config[kernel_id].num_workers + num_schedulers / 4;
-#ifdef USE_NVSHMEM
-    void *args[] = {&global_runtime_config[kernel_id]};
-    nvshmemx_collective_launch((void const *)persistent_kernel,
-                               dim3(num_sms_to_use, 1, 1),
-                               dim3(SINGLE_KERNEL_NUM_THREADS, 1, 1),
-                               args,
-                               MAX_DYNAMIC_SHARED_MEMORY_SIZE /*sharedmem*/,
-                               0 /*stream*/);
-#else
-    // print_smem_size();
-    persistent_kernel<<<dim3(num_sms_to_use, 1, 1),
-                        dim3(SINGLE_KERNEL_NUM_THREADS, 1, 1),
-                        MAX_DYNAMIC_SHARED_MEMORY_SIZE /*smem*/>>>(
-        global_runtime_config[kernel_id]);
+    if (global_runtime_config[kernel_id].is_static_schedule == true) {
+      int end_of_task_graph_event_pos = global_runtime_config[kernel_id].num_events - 1;
+      static_prepare_kernel<<<dim3(global_runtime_config[kernel_id].num_workers, 1, 1),
+                              dim3(128, 1, 1)>>>(global_runtime_config[kernel_id]);
+      cudaDeviceSynchronize();
+
+      static_persistent_kernel<<<dim3(global_runtime_config[kernel_id].num_workers, 1, 1),
+          dim3(SINGLE_KERNEL_NUM_THREADS, 1, 1),
+          MAX_DYNAMIC_SHARED_MEMORY_SIZE /*smem*/>>>(
+          global_runtime_config[kernel_id]);      
+    }
+    else {
+      int num_sms_to_use = global_runtime_config[kernel_id].num_workers + num_schedulers / 4;
+      #ifdef USE_NVSHMEM
+          void *args[] = {&global_runtime_config[kernel_id]};
+          nvshmemx_collective_launch((void const *)persistent_kernel,
+                                     dim3(num_sms_to_use, 1, 1),
+                                     dim3(SINGLE_KERNEL_NUM_THREADS, 1, 1),
+                                     args,
+                                     MAX_DYNAMIC_SHARED_MEMORY_SIZE /*sharedmem*/,
+                                     0 /*stream*/);
+      #else
+      // print_smem_size();
+      persistent_kernel<<<dim3(num_sms_to_use, 1, 1),
+                          dim3(SINGLE_KERNEL_NUM_THREADS, 1, 1),
+                          MAX_DYNAMIC_SHARED_MEMORY_SIZE /*smem*/>>>(
+          global_runtime_config[kernel_id]);      
+    }
 #endif
   }
   // cudaError_t err = cudaDeviceSynchronize();
@@ -961,6 +1105,19 @@ extern "C" void finalize_persistent_kernel(int kernel_id) {
   gpu_free(global_runtime_config[kernel_id].infer_cnt);
 
   int num_workers = global_runtime_config[kernel_id].num_workers;
+
+  if (global_runtime_config[kernel_id].is_static_schedule == true) {
+    std::vector<int*> host_tasks_index(num_workers);
+    cudaMemcpy(host_tasks_index.data(),
+             global_runtime_config[kernel_id].static_worker_tasks_index,
+             num_workers * sizeof(int *),
+             cudaMemcpyDeviceToHost);
+    for (int i = 0; i < num_workers; i++) {
+      gpu_free(host_tasks_index[i]);
+    }
+    gpu_free(global_runtime_config[kernel_id].static_worker_tasks_index);
+  }
+
   std::vector<TaskId *> host_worker_queues(num_workers * 2);
   cudaMemcpy(host_worker_queues.data(),
              global_runtime_config[kernel_id].worker_queues,

@@ -247,6 +247,7 @@ struct alignas(16) TaskDesc {
 struct RuntimeConfig {
   int num_workers, num_local_schedulers, num_remote_schedulers, num_graphs;
   int num_gpus, my_gpu_id;
+  int num_tasks;
   int num_events;
   unsigned long long int per_worker_queue_len, per_sched_queue_len;
   unsigned long long int *worker_queue_last_ready_task_id;
@@ -254,6 +255,7 @@ struct RuntimeConfig {
   unsigned long long int *sched_queue_next_free_event_id;
   EventCounter *all_event_counters;
   int *all_event_num_triggers;
+  int **static_worker_tasks_index;
   TaskDesc *all_tasks;
   EventDesc *all_events;
   TaskId **worker_queues;
@@ -276,6 +278,7 @@ struct RuntimeConfig {
 
   void *profiler_buffer;
   bool split_worker_scheduler;
+  bool is_static_schedule;
   cudaStream_t worker_stream, scheduler_stream;
 };
 

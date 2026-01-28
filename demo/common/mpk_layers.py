@@ -9,7 +9,7 @@ class MpkLayers:
             self.profiler_tensor = torch.zeros(3000 * 128, dtype=torch.uint64, device="cuda").contiguous()
             
         # int num_sms_to_use = global_runtime_config[kernel_id].num_workers + num_schedulers / 4;
-        num_workers, num_schedulers = 18, 8 #mi.get_configurations_from_gpu(rank) # n, (sm-n)*4
+        num_workers, num_schedulers = 20, 8 #mi.get_configurations_from_gpu(rank) # n, (sm-n)*4
         print("num_workers: ", num_workers)
         print("num_schedulers: ", num_schedulers)
         
