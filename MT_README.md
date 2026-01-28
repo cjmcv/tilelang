@@ -52,6 +52,10 @@ rm -rf .git/modules/3rdparty/tvm/
 git submodule add https://github.com/apache/tvm.git 3rdparty/tvm
 
 # TODO
+1. qwen3++.perfetto-trace: 更均匀分配，避免某一个sm特别少，如10分3份，应得433，而不是442
+2. 跨步同步，不必每个task都读和写一次gmem。task添加标记，event的首task启动，后面连续多个不需要等待，计算完一次写。
+3. 扩大worker数量，使超过sm数量。
+
 1. 基于single_linear尝试检索所有micro kernel配置，尝试找到超越torch的方案，并分析tilelang的自己launch和集成后的耗时是否有一定规律？
    从 single_linear.py 修改，调用 MicroAutoGen(1, 1024, 3072)，MicroAutoGen扩展通过id号选定配置
 2. 考虑tilelang端只生成代码而不编译，看能否减少耗时；

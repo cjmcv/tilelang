@@ -871,31 +871,90 @@ extern "C" void init_persistent_kernel(int kernel_id,
     int capacity_each_worker = tasks_each_worker * 1.5;
     // printf("tasks_each_worker: %d.\n", tasks_each_worker);
 
+    // 按dep event对task分组
+    std::vector<std::vector<int>> event_task_ids;
+    event_task_ids.resize(all_events.size());
+    for (int i=0; i<all_tasks.size(); i++) {
+      TaskDesc task_desc = all_tasks[i];
+      if (task_desc.task_type != TASK_TERMINATE && task_desc.task_type != TASK_BEGIN_TASK_GRAPH) {
+        if (task_desc.dependent_event != EVENT_INVALID_ID) {
+          event_task_ids[task_desc.dependent_event].push_back(i);
+        }
+        else {
+          event_task_ids[0].push_back(i);
+        }
+      }
+    }
     ///////////////////////////////////////////////
     // Static Scheduling Scheme
     std::vector<std::vector<int>> host_tasks_index;
     host_tasks_index.resize(num_workers);
     for (int i=0; i<num_workers; i++) {
       host_tasks_index[i].resize(capacity_each_worker);
-      int cnt = 0;
-      for (int j=0; j<tasks_each_worker; j++) {
-        int task_idx = i*tasks_each_worker+j;
-        if (task_idx < all_tasks.size()) {
-          cnt++;
-          host_tasks_index[i][j+1] = task_idx;          
-        }
-      }
-      host_tasks_index[i][0] = cnt;
+      host_tasks_index[i][0] = 0; // 0 for cnt
     }
 
-    // for (int i=0; i<all_tasks.size(); i++) {
-    //   TaskDesc task_desc = all_tasks[i];
-    //   printf("task_desc[%d]: type %d, block(%d,%d,%d), dep %d, tri %d, varid %d.\n", i, task_desc.task_type, task_desc.bx, task_desc.by, task_desc.bz, task_desc.dependent_event, task_desc.trigger_event, task_desc.variant_id);
+    // // 1. 按顺序直接赋值
+    // for (int i=0; i<num_workers; i++) {
+    //   int cnt = 0;
+    //   for (int j=0; j<tasks_each_worker; j++) {
+    //     int task_idx = i*tasks_each_worker+j;
+    //     if (task_idx < all_tasks.size()) {
+    //       cnt++;
+    //       host_tasks_index[i][j+1] = task_idx;
+    //     }
+    //   }
+    //   host_tasks_index[i][0] = cnt;
     // }
-    // for (int i=0; i<all_events.size(); i++) {
-    //   EventDesc event_desc = all_events[i];
-    //   printf("event_desc[%d]: type %d, tri %d, task (%d, %d).\n", i, event_desc.event_type, event_desc.num_triggers, event_desc.first_task_id, event_desc.last_task_id);
-    // }
+
+    // 2. 按event分组填充task到worker
+    int wid = 0;
+    for (int ei=0; ei<event_task_ids.size(); ei++) {
+      int task_id = 0;
+      int task_num = event_task_ids[ei].size();
+      if (task_num == 0) continue;
+      int task_num_each_worker = (task_num + num_workers - 1) / num_workers;
+      printf("ei: %d, %d, %d.\n", ei, task_num, task_num_each_worker);
+
+      while (task_id < task_num) {
+        for (int j=0; j<task_num_each_worker; j++) {
+          // printf("worker %d, %d, %d, %d.\n", wid, j, host_tasks_index[wid][0], event_task_ids[ei][task_id]);
+          host_tasks_index[wid][host_tasks_index[wid][0]+1] = event_task_ids[ei][task_id];
+          host_tasks_index[wid][0]++;
+          task_id++;
+          if (task_id == task_num) {
+            // printf("break.");
+            break;            
+          }
+        }
+        wid = (wid+1) % num_workers;
+      }
+      // printf("while end.\n");
+    }
+
+    for (int i=0; i<all_tasks.size(); i++) {
+      TaskDesc task_desc = all_tasks[i];
+      printf("task_desc[%d]: type %d, block(%d,%d,%d), dep %d, tri %d, varid %d.\n", i, task_desc.task_type, task_desc.bx, task_desc.by, task_desc.bz, task_desc.dependent_event, task_desc.trigger_event, task_desc.variant_id);
+    }
+    for (int i=0; i<all_events.size(); i++) {
+      EventDesc event_desc = all_events[i];
+      printf("event_desc[%d]: type %d, tri %d, task (%d, %d).\n", i, event_desc.event_type, event_desc.num_triggers, event_desc.first_task_id, event_desc.last_task_id);
+    }
+    for (int i=0; i<event_task_ids.size(); i++) {
+      printf("event_group[%d]-(%d): ", i, event_task_ids[i].size());
+      for (int j=0; j<event_task_ids[i].size(); j++) {
+        printf("%d, ", event_task_ids[i][j]);
+      }
+      printf("\n");
+    }
+    for (int i=0; i<num_workers; i++) {
+      int num = host_tasks_index[i][0];
+      printf("worker[%d]-(%d): ", i, num);
+      for (int j=0; j<num; j++) {
+        printf("%d, ", host_tasks_index[i][j+1]);
+      }
+      printf("\n");
+    }
     ////////////////////////////////////////////////
 
     std::vector<int*> host_tasks_index_arr;
