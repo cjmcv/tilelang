@@ -347,50 +347,48 @@ void static_persistent_kernel(RuntimeConfig config) {
 
     TaskDesc *task_desc = &config.all_tasks[task_idx];
     // Successfully fetched a new task
-    if (task_desc->task_type != TASK_TERMINATE && task_desc->task_type != TASK_BEGIN_TASK_GRAPH) {
-      size_t event_index = get_event_position_index(task_desc->dependent_event);
-      EventDesc *dep_event_desc = &config.all_events[event_index];
-  
-      if (threadIdx.x == 0) {
-        if (task_desc->dependent_event != EVENT_INVALID_ID) {
-          // Wait until the event has been triggered enough times
-          EventId event_id = task_desc->dependent_event;
-          assert(get_event_gpu_id(event_id) == config.my_gpu_id);
-          size_t event_index = get_event_position_index(event_id);
-          
-          EventCounter needed_counts = static_cast<EventCounter>(config.all_event_num_triggers[event_index]);
-          EventCounter actual_counts = 0;
-          // 等待前置任务的 Event 计数达到预期值
-          while (actual_counts < needed_counts) {
-            actual_counts = ld_acquire_sys_u64(&config.all_event_counters[event_index]);
-            // printf("dep(%d):(%d vs %d), ", event_index, actual_counts, needed_counts);
-            __nanosleep(10);
-          }
-        }
-      }
-      __syncthreads();
 
-    #ifdef MPK_ENABLE_PROFILING
-      if (task_desc->task_type != TASK_TERMINATE) {
-        PROFILER_EVENT_START(task_desc->task_type, task_idx);
-      }
-    #endif
-      _execute_task(task_desc, config); 
-    #ifdef MPK_ENABLE_PROFILING
-      if (task_desc->task_type != TASK_TERMINATE) {
-        PROFILER_EVENT_END(task_desc->task_type, task_idx);
-      }
-    #endif
+    size_t event_index = get_event_position_index(task_desc->dependent_event);
+    EventDesc *dep_event_desc = &config.all_events[event_index];
 
-      // Trigger event
-      if (threadIdx.x == 0) {
-        EventId event_id = task_desc->trigger_event;
-        size_t event_index = get_event_position_index(event_id);
-        EventCounter count = atom_add_release_gpu_u64(&config.all_event_counters[event_index], 1);
-        // printf("tri(%d):(%d), ", event_index, count);
-      }       
-    } // CJM
-    __syncthreads();
+    // if (threadIdx.x == 0) {
+    //   if (task_desc->dependent_event != EVENT_INVALID_ID) {
+    //     // Wait until the event has been triggered enough times
+    //     EventId event_id = task_desc->dependent_event;
+    //     assert(get_event_gpu_id(event_id) == config.my_gpu_id);
+    //     size_t event_index = get_event_position_index(event_id);
+        
+    //     EventCounter needed_counts = static_cast<EventCounter>(config.all_event_num_triggers[event_index]);
+    //     EventCounter actual_counts = 0;
+    //     // 等待前置任务的 Event 计数达到预期值
+    //     while (actual_counts < needed_counts) {
+    //       actual_counts = ld_acquire_sys_u64(&config.all_event_counters[event_index]);
+    //       // printf("dep(%d):(%d vs %d), ", event_index, actual_counts, needed_counts);
+    //       __nanosleep(10);
+    //     }
+    //   }
+    // }
+    // __syncthreads();
+
+  #ifdef MPK_ENABLE_PROFILING
+    if (task_desc->task_type != TASK_TERMINATE) {
+      PROFILER_EVENT_START(task_desc->task_type, task_idx);
+    }
+  #endif
+    _execute_task(task_desc, config); 
+  #ifdef MPK_ENABLE_PROFILING
+    if (task_desc->task_type != TASK_TERMINATE) {
+      PROFILER_EVENT_END(task_desc->task_type, task_idx);
+    }
+  #endif
+
+    // // Trigger event
+    // if (threadIdx.x == 0) {
+    //   EventId event_id = task_desc->trigger_event;
+    //   size_t event_index = get_event_position_index(event_id);
+    //   EventCounter count = atom_add_release_gpu_u64(&config.all_event_counters[event_index], 1);
+    //   // printf("tri(%d):(%d), ", event_index, count);
+    // }
   }
 }
 
@@ -913,24 +911,39 @@ extern "C" void init_persistent_kernel(int kernel_id,
       int task_id = 0;
       int task_num = event_task_ids[ei].size();
       if (task_num == 0) continue;
-      int task_num_each_worker = (task_num + num_workers - 1) / num_workers;
-      printf("ei: %d, %d, %d.\n", ei, task_num, task_num_each_worker);
+      int each_worker_num = task_num / num_workers; // (task_num + num_workers - 1) / num_workers;
+      int first_round_num = each_worker_num * num_workers;
+      printf("ei: %d, %d, %d.\n", ei, task_num, each_worker_num);
 
-      while (task_id < task_num) {
-        for (int j=0; j<task_num_each_worker; j++) {
+      // 均等分
+      while (task_id < first_round_num) {
+        for (int j=0; j < each_worker_num; j++) {
           // printf("worker %d, %d, %d, %d.\n", wid, j, host_tasks_index[wid][0], event_task_ids[ei][task_id]);
           host_tasks_index[wid][host_tasks_index[wid][0]+1] = event_task_ids[ei][task_id];
-          host_tasks_index[wid][0]++;
-          task_id++;
-          if (task_id == task_num) {
+          host_tasks_index[wid][0]++; task_id++;
+          if (task_id == first_round_num) {
             // printf("break.");
-            break;            
+            break;
           }
         }
         wid = (wid+1) % num_workers;
       }
-      // printf("while end.\n");
+      // 剩余的逐个分
+      while (task_id < task_num) {
+        for (int j=0; j<1; j++) {
+          host_tasks_index[wid][host_tasks_index[wid][0]+1] = event_task_ids[ei][task_id];
+          host_tasks_index[wid][0]++; task_id++;
+          if (task_id == task_num) {
+            // printf("break.");
+            break;
+          }
+        }
+        wid = (wid+1) % num_workers;
+      }
     }
+
+    // 前置依赖免检标记
+      
 
     for (int i=0; i<all_tasks.size(); i++) {
       TaskDesc task_desc = all_tasks[i];
