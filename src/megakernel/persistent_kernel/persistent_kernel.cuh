@@ -909,7 +909,7 @@ extern "C" void init_persistent_kernel(int kernel_id,
       int idx = 0;  // 对应该轮的第几个worker，每个event重置1次，使前remainder个worker多拿一个task
       while (tasks_assigned < task_num) {
         int target_count = base_num + (idx < remainder ? 1 : 0);          // wid 当前该拿多少
-        int actual_count = min(target_count, task_num - tasks_assigned);
+        int actual_count = min(target_count, task_num - tasks_assigned);  // 边界处理
         // printf("[%d]actual_count: %d.\n", ei, actual_count);
 
         // TaskDesc task_desc = all_tasks[event_task_ids[ei][tasks_assigned]];
@@ -1122,12 +1122,15 @@ extern "C" void launch_persistent_kernel(int kernel_id, int batch_size) {
       // static_prepare_kernel<<<dim3(global_runtime_config[kernel_id].num_workers, 1, 1),
       //                         dim3(128, 1, 1)>>>(global_runtime_config[kernel_id]);
       // cudaDeviceSynchronize();
+      printf("num_event: %d\n", global_runtime_config[kernel_id].num_events);
       cudaMemset(&global_runtime_config[kernel_id].all_event_counters, 0, 
         sizeof(EventCounter) * global_runtime_config[kernel_id].num_events);
       static_persistent_kernel<<<dim3(global_runtime_config[kernel_id].num_workers, 1, 1),
           dim3(SINGLE_KERNEL_NUM_THREADS, 1, 1),
           MAX_DYNAMIC_SHARED_MEMORY_SIZE /*smem*/>>>(
           global_runtime_config[kernel_id]);      
+
+      printf("finish static_persistent_kernel.\n");
     }
     else {
       int num_sms_to_use = global_runtime_config[kernel_id].num_workers + num_schedulers / 4;

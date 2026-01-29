@@ -259,3 +259,5 @@ class PerfReporter:
     # nsys profile --trace=cuda,nvtx --output=my_nsys
     # ncu --set full --section "SpeedOfLight_RooflineChart" -k "persistent_kernel" -o my_profile python...
     # "kernel"
+    # compute-sanitizer --tool memcheck python demo/single_mega.py --nc
+    # compute-sanitizer --tool memcheck --shared-memory-check yes ./your_cuda_program
