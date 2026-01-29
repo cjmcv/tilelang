@@ -901,37 +901,34 @@ extern "C" void init_persistent_kernel(int kernel_id,
       int task_id = 0;
       int task_num = event_task_ids[ei].size();
       if (task_num == 0) continue;
-      int each_worker_num = task_num / num_workers; // (task_num + num_workers - 1) / num_workers;
-      int first_round_num = each_worker_num * num_workers;
-      printf("ei: %d, %d, %d.\n", ei, task_num, each_worker_num);
 
-      // 均等分
-      while (task_id < first_round_num) {
-        for (int j=0; j < each_worker_num; j++) {
-          // printf("worker %d, %d, %d, %d.\n", wid, j, host_tasks_index[wid][0], event_task_ids[ei][task_id]);
-          host_tasks_index[wid][host_tasks_index[wid][0]+1] = event_task_ids[ei][task_id];
-          host_tasks_index[wid][0]++; task_id++;
-          if (task_id == first_round_num) { break; }
+      int base_num = task_num / num_workers; // (task_num + num_workers - 1) / num_workers;
+      int remainder = task_num % num_workers;
+      
+      int tasks_assigned = 0;
+      int idx = 0;  // 对应该轮的第几个worker，每个event重置1次，使前remainder个worker多拿一个task
+      while (tasks_assigned < task_num) {
+        int target_count = base_num + (idx < remainder ? 1 : 0);          // wid 当前该拿多少
+        int actual_count = min(target_count, task_num - tasks_assigned);
+        // printf("[%d]actual_count: %d.\n", ei, actual_count);
+
+        // TaskDesc task_desc = all_tasks[event_task_ids[ei][tasks_assigned]];
+        // if (task_desc.task_type == TASK_SILU_MUL) {
+        //   static int cnt = 0;
+        //   if (cnt < (20-4)*2 && wid != 0 && wid != 17 && wid != 18 && wid != 19) {
+        //     cnt++; 
+        //     wid = (wid + 1) % num_workers;
+        //     continue;            
+        //   }
+        // }
+
+        for (int i = 0; i < actual_count; i++) {
+          host_tasks_index[wid][host_tasks_index[wid][0] + 1] = event_task_ids[ei][tasks_assigned + i];
+          host_tasks_index[wid][0]++;
         }
-        wid = (wid+1) % num_workers;
-      }
-      // 剩余的逐个分
-      while (task_id < task_num) {
-        for (int j=0; j<1; j++) {
-          // TaskDesc task_desc = all_tasks[event_task_ids[ei][task_id]];
-          // if (task_desc.task_type == TASK_SILU_MUL) {
-          //   static int cnt = 0;
-          //   if (cnt < 16 && wid != 0 && wid != 17 && wid != 18 && wid != 19) {
-          //     cnt++;
-          //     printf("%d.", wid);
-          //     break;
-          //   }
-          // }
-          host_tasks_index[wid][host_tasks_index[wid][0]+1] = event_task_ids[ei][task_id];
-          host_tasks_index[wid][0]++; task_id++;
-          if (task_id == task_num) { break; }
-        }
-        wid = (wid+1) % num_workers;
+        tasks_assigned += actual_count;
+        idx++;
+        wid = (wid + 1) % num_workers;
       }
     }
 
@@ -1125,7 +1122,8 @@ extern "C" void launch_persistent_kernel(int kernel_id, int batch_size) {
       // static_prepare_kernel<<<dim3(global_runtime_config[kernel_id].num_workers, 1, 1),
       //                         dim3(128, 1, 1)>>>(global_runtime_config[kernel_id]);
       // cudaDeviceSynchronize();
-      cudaMemset(&global_runtime_config[kernel_id].all_event_counters, 0, sizeof(EventCounter) * global_runtime_config[kernel_id].num_events);
+      cudaMemset(&global_runtime_config[kernel_id].all_event_counters, 0, 
+        sizeof(EventCounter) * global_runtime_config[kernel_id].num_events);
       static_persistent_kernel<<<dim3(global_runtime_config[kernel_id].num_workers, 1, 1),
           dim3(SINGLE_KERNEL_NUM_THREADS, 1, 1),
           MAX_DYNAMIC_SHARED_MEMORY_SIZE /*smem*/>>>(
