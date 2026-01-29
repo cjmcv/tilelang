@@ -163,13 +163,13 @@ __global__ void prepare_kernel(RuntimeConfig config,
   }
 }
 
-__global__ void static_prepare_kernel(RuntimeConfig config) {
-  // Initialize all event counters
-  for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < config.num_events;
-       i += blockDim.x * gridDim.x) {
-    config.all_event_counters[i] = 0;
-  }
-}
+// __global__ void static_prepare_kernel(RuntimeConfig config) {
+//   // Initialize all event counters
+//   for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < config.num_events;
+//        i += blockDim.x * gridDim.x) {
+//     config.all_event_counters[i] = 0;
+//   }
+// }
 
 __device__ __forceinline__ int get_rand_sched_id(size_t event_index,
                                                  int worker_id,
@@ -936,7 +936,7 @@ extern "C" void init_persistent_kernel(int kernel_id,
     }
 
     // 前置依赖免检标记
-      
+    // TODO  
 
     for (int i=0; i<all_tasks.size(); i++) {
       TaskDesc task_desc = all_tasks[i];
@@ -1122,11 +1122,10 @@ extern "C" void launch_persistent_kernel(int kernel_id, int batch_size) {
   } else {
     // printf("a single persistent kernel\n");
     if (global_runtime_config[kernel_id].is_static_schedule == true) {
-      int end_of_task_graph_event_pos = global_runtime_config[kernel_id].num_events - 1;
-      static_prepare_kernel<<<dim3(global_runtime_config[kernel_id].num_workers, 1, 1),
-                              dim3(128, 1, 1)>>>(global_runtime_config[kernel_id]);
-      cudaDeviceSynchronize();
-
+      // static_prepare_kernel<<<dim3(global_runtime_config[kernel_id].num_workers, 1, 1),
+      //                         dim3(128, 1, 1)>>>(global_runtime_config[kernel_id]);
+      // cudaDeviceSynchronize();
+      cudaMemset(&global_runtime_config[kernel_id].all_event_counters, 0, sizeof(EventCounter) * global_runtime_config[kernel_id].num_events);
       static_persistent_kernel<<<dim3(global_runtime_config[kernel_id].num_workers, 1, 1),
           dim3(SINGLE_KERNEL_NUM_THREADS, 1, 1),
           MAX_DYNAMIC_SHARED_MEMORY_SIZE /*smem*/>>>(

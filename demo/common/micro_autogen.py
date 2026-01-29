@@ -3,6 +3,7 @@ import shutil
 from pathlib import Path
 
 import torch
+import tilelang
 import tilelang.language as T
 
 from .pkt_util import TestUtil, TorchRef
@@ -13,6 +14,7 @@ from .micro_silu_mul import MicroSiluMul
 
 class MicroAutoGen:
     def __init__(self, batch_size, hidden_size, intermediate_size):
+        print(tilelang.__version__) # 预先加载完成FFI的静态初始化，以免初始化发生在tuning的多线程场景导致崩溃
         self.batch_size = batch_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
