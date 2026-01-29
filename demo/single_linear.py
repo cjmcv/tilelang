@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
     # # 13/16/20/21/22/30/45: 0.118, 24-29
     # micro = MicroAutoGen(1, 1024, 3072)
-    # micro.gen_qwen3_mlp(1, HparamSelectMode.SPECIFY+0) # HEURISTIC, TUNING, TUNED
+    # micro.gen_qwen3_mlp(1, HparamSelectMode.TUNED) # HEURISTIC, TUNING, TUNED
        
     reporter = PerfReporter() 
     # model, tokenizer = reporter.memory_footprint_simulation(rank)

@@ -11,8 +11,8 @@ WITH_RMS_NORM = 1
 WITH_RESIDUAL = 1
 
 if __name__ == "__main__":
-    max_batch_size = 32
-    batch_size = 32
+    max_batch_size = 1
+    batch_size = 1
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", default=os.getenv("MEGAKERNEL_HOME", default=None)+"/demo/gen", help="Output files directory")
     parser.add_argument("--trace-name", default="qwen3", help="Perfetto trace output name")
@@ -139,11 +139,12 @@ if __name__ == "__main__":
     for _ in range(100):
         graph.replay()
         # ref_run()
-        mpk_run()
-    
+        
+    mpk_run()
     ##
     
-    reporter.generate_report(mpk_run, mpk_output, splitk, 
-                            graph.replay, ref_output, 
-                            warnup_iter=100, test_iter=200, 
-                            allclose_iter=5, print_all=False)
+    if not args.profiling:
+        reporter.generate_report(mpk_run, mpk_output, splitk, 
+                                graph.replay, ref_output, 
+                                warnup_iter=100, test_iter=200, 
+                                allclose_iter=5, print_all=False)

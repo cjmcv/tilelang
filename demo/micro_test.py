@@ -118,5 +118,5 @@ if __name__ == "__main__":
     # test_gemm_add()
     
     # # gen = MicroAutoGen(1, 2560, 9728)
-    gen = MicroAutoGen(32, 1024, 3072)
+    gen = MicroAutoGen(1, 1024, 3072)
     gen.gen_qwen3_mlp(99, HparamSelectMode.TUNED) # HEURISTIC, TUNING, TUNED

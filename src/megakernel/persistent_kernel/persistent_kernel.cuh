@@ -329,46 +329,36 @@ void static_persistent_kernel(RuntimeConfig config) {
   PROFILER_CLOSURE_PARAMS_DECL;
   PROFILER_INIT(static_cast<uint64_t *>(config.profiler_buffer),
                 0, 1, (threadIdx.x % WORKER_NUM_THREADS == 0));
-  
   #endif
-  const int worker_id = blockIdx.x;
 
+  const int worker_id = blockIdx.x;
   int task_num = config.static_worker_tasks_index[worker_id][0];
   int *task_ids = &config.static_worker_tasks_index[worker_id][1];
-  for (int i = 0; i < task_num ; i++) {
-    // if (threadIdx.x == 0) {
-    //   // printf("task_ids1[%d]: %d\n", worker_id, i);// 
-    //   printf("task_ids2[%d]: %d\n", worker_id, task_ids[i]);// 
-    // }
-      
-    int task_idx = task_ids[i]; // worker_id * 9 + i;
-    if (task_idx > config.num_tasks)
-      return;
 
+  for (int i = 0; i < task_num ; i++) {
+    int task_idx = task_ids[i]; // worker_id * 9 + i;
     TaskDesc *task_desc = &config.all_tasks[task_idx];
-    // Successfully fetched a new task
 
     size_t event_index = get_event_position_index(task_desc->dependent_event);
     EventDesc *dep_event_desc = &config.all_events[event_index];
-
-    // if (threadIdx.x == 0) {
-    //   if (task_desc->dependent_event != EVENT_INVALID_ID) {
-    //     // Wait until the event has been triggered enough times
-    //     EventId event_id = task_desc->dependent_event;
-    //     assert(get_event_gpu_id(event_id) == config.my_gpu_id);
-    //     size_t event_index = get_event_position_index(event_id);
+    if (threadIdx.x == 0) {
+      if (task_desc->dependent_event != EVENT_INVALID_ID) {
+        // Wait until the event has been triggered enough times
+        EventId event_id = task_desc->dependent_event;
+        assert(get_event_gpu_id(event_id) == config.my_gpu_id);
+        size_t event_index = get_event_position_index(event_id);
         
-    //     EventCounter needed_counts = static_cast<EventCounter>(config.all_event_num_triggers[event_index]);
-    //     EventCounter actual_counts = 0;
-    //     // 等待前置任务的 Event 计数达到预期值
-    //     while (actual_counts < needed_counts) {
-    //       actual_counts = ld_acquire_sys_u64(&config.all_event_counters[event_index]);
-    //       // printf("dep(%d):(%d vs %d), ", event_index, actual_counts, needed_counts);
-    //       __nanosleep(10);
-    //     }
-    //   }
-    // }
-    // __syncthreads();
+        EventCounter needed_counts = static_cast<EventCounter>(config.all_event_num_triggers[event_index]);
+        EventCounter actual_counts = 0;
+        // 等待前置任务的 Event 计数达到预期值
+        while (actual_counts < needed_counts) {
+          actual_counts = ld_acquire_sys_u64(&config.all_event_counters[event_index]);
+          // printf("dep(%d):(%d vs %d), ", event_index, actual_counts, needed_counts);
+          __nanosleep(10);
+        }
+      }
+    }
+    __syncthreads();
 
   #ifdef MPK_ENABLE_PROFILING
     if (task_desc->task_type != TASK_TERMINATE) {
@@ -382,13 +372,13 @@ void static_persistent_kernel(RuntimeConfig config) {
     }
   #endif
 
-    // // Trigger event
-    // if (threadIdx.x == 0) {
-    //   EventId event_id = task_desc->trigger_event;
-    //   size_t event_index = get_event_position_index(event_id);
-    //   EventCounter count = atom_add_release_gpu_u64(&config.all_event_counters[event_index], 1);
-    //   // printf("tri(%d):(%d), ", event_index, count);
-    // }
+    // Trigger event
+    if (threadIdx.x == 0) {
+      EventId event_id = task_desc->trigger_event;
+      size_t event_index = get_event_position_index(event_id);
+      EventCounter count = atom_add_release_gpu_u64(&config.all_event_counters[event_index], 1);
+      // printf("tri(%d):(%d), ", event_index, count);
+    }
   }
 }
 
@@ -866,7 +856,7 @@ extern "C" void init_persistent_kernel(int kernel_id,
     global_runtime_config[kernel_id].num_tasks = all_tasks.size();
     int num_workers = global_runtime_config[kernel_id].num_workers;
     int tasks_each_worker = (all_tasks.size() + num_workers - 1) / num_workers;
-    int capacity_each_worker = tasks_each_worker * 1.5;
+    int capacity_each_worker = tasks_each_worker * 1.5; // all_tasks.size();
     // printf("tasks_each_worker: %d.\n", tasks_each_worker);
 
     // 按dep event对task分组
@@ -921,22 +911,25 @@ extern "C" void init_persistent_kernel(int kernel_id,
           // printf("worker %d, %d, %d, %d.\n", wid, j, host_tasks_index[wid][0], event_task_ids[ei][task_id]);
           host_tasks_index[wid][host_tasks_index[wid][0]+1] = event_task_ids[ei][task_id];
           host_tasks_index[wid][0]++; task_id++;
-          if (task_id == first_round_num) {
-            // printf("break.");
-            break;
-          }
+          if (task_id == first_round_num) { break; }
         }
         wid = (wid+1) % num_workers;
       }
       // 剩余的逐个分
       while (task_id < task_num) {
         for (int j=0; j<1; j++) {
+          // TaskDesc task_desc = all_tasks[event_task_ids[ei][task_id]];
+          // if (task_desc.task_type == TASK_SILU_MUL) {
+          //   static int cnt = 0;
+          //   if (cnt < 16 && wid != 0 && wid != 17 && wid != 18 && wid != 19) {
+          //     cnt++;
+          //     printf("%d.", wid);
+          //     break;
+          //   }
+          // }
           host_tasks_index[wid][host_tasks_index[wid][0]+1] = event_task_ids[ei][task_id];
           host_tasks_index[wid][0]++; task_id++;
-          if (task_id == task_num) {
-            // printf("break.");
-            break;
-          }
+          if (task_id == task_num) { break; }
         }
         wid = (wid+1) % num_workers;
       }
