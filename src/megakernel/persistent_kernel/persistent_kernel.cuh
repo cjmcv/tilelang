@@ -338,7 +338,6 @@ void static_persistent_kernel(RuntimeConfig config) {
   for (int i = 0; i < task_num ; i++) {
     int task_idx = task_ids[i]; // worker_id * 9 + i;
     TaskDesc *task_desc = &config.all_tasks[task_idx];
-
     size_t event_index = get_event_position_index(task_desc->dependent_event);
     EventDesc *dep_event_desc = &config.all_events[event_index];
     if (threadIdx.x == 0) {
@@ -376,7 +375,6 @@ void static_persistent_kernel(RuntimeConfig config) {
     if (threadIdx.x == 0) {
       EventId event_id = task_desc->trigger_event;
       size_t event_index = get_event_position_index(event_id);
-      // printf("e(%d), ", event_index);
       EventCounter count = atom_add_release_gpu_u64(&config.all_event_counters[event_index], 1);
       // printf("tri(%d):(%d), ", event_index, count);
     }
@@ -857,8 +855,8 @@ extern "C" void init_persistent_kernel(int kernel_id,
     global_runtime_config[kernel_id].num_tasks = all_tasks.size();
     int num_workers = global_runtime_config[kernel_id].num_workers;
     int tasks_each_worker = (all_tasks.size() + num_workers - 1) / num_workers;
-    int capacity_each_worker = tasks_each_worker * 1.5; // all_tasks.size();
-    // printf("tasks_each_worker: %d.\n", tasks_each_worker);
+    int capacity_each_worker = (tasks_each_worker + 1) * 1.5; // each_worker: 0:len, 1:task0, 2:task1... capacity=task_num+1
+    // printf("capacity_each_worker: %d.\n", capacity_each_worker);
 
     // 按dep event对task分组
     std::vector<std::vector<int>> event_task_ids;
@@ -890,7 +888,7 @@ extern "C" void init_persistent_kernel(int kernel_id,
     //     int task_idx = i*tasks_each_worker+j;
     //     if (task_idx < all_tasks.size()) {
     //       cnt++;
-    //       host_tasks_index[i][j+1] = task_idx;
+    //       host_tasks_index[i][j + 1] = task_idx;
     //     }
     //   }
     //   host_tasks_index[i][0] = cnt;
@@ -1130,7 +1128,7 @@ extern "C" void launch_persistent_kernel(int kernel_id, int batch_size) {
           MAX_DYNAMIC_SHARED_MEMORY_SIZE /*smem*/>>>(
           global_runtime_config[kernel_id]);      
 
-      printf("finish static_persistent_kernel.\n");
+      // printf("finish static_persistent_kernel.\n");
     }
     else {
       int num_sms_to_use = global_runtime_config[kernel_id].num_workers + num_schedulers / 4;

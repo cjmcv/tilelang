@@ -175,7 +175,7 @@ if __name__ == "__main__":
     
     reporter.generate_report(mpk_run, mpk_output, splitk, 
                             ref_run, ref_output, 
-                            warnup_iter=10, test_iter=10, 
+                            warnup_iter=100, test_iter=100, 
                             allclose_iter=5, print_all=False)
     
     # ncu --set full --section "SpeedOfLight_RooflineChart" -k "kernel" -o my_profile python demo/single_linear.py --nc
