@@ -376,6 +376,7 @@ void static_persistent_kernel(RuntimeConfig config) {
     if (threadIdx.x == 0) {
       EventId event_id = task_desc->trigger_event;
       size_t event_index = get_event_position_index(event_id);
+      // printf("e(%d), ", event_index);
       EventCounter count = atom_add_release_gpu_u64(&config.all_event_counters[event_index], 1);
       // printf("tri(%d):(%d), ", event_index, count);
     }
@@ -1122,8 +1123,7 @@ extern "C" void launch_persistent_kernel(int kernel_id, int batch_size) {
       // static_prepare_kernel<<<dim3(global_runtime_config[kernel_id].num_workers, 1, 1),
       //                         dim3(128, 1, 1)>>>(global_runtime_config[kernel_id]);
       // cudaDeviceSynchronize();
-      printf("num_event: %d\n", global_runtime_config[kernel_id].num_events);
-      cudaMemset(&global_runtime_config[kernel_id].all_event_counters, 0, 
+      cudaMemset(global_runtime_config[kernel_id].all_event_counters, 0, 
         sizeof(EventCounter) * global_runtime_config[kernel_id].num_events);
       static_persistent_kernel<<<dim3(global_runtime_config[kernel_id].num_workers, 1, 1),
           dim3(SINGLE_KERNEL_NUM_THREADS, 1, 1),
@@ -1159,7 +1159,6 @@ extern "C" void launch_persistent_kernel(int kernel_id, int batch_size) {
 }
 
 extern "C" void finalize_persistent_kernel(int kernel_id) {
-  gpu_free(global_runtime_config[kernel_id].worker_queue_last_ready_task_id);
   gpu_free(global_runtime_config[kernel_id].sched_queue_last_ready_event_id);
   gpu_free(global_runtime_config[kernel_id].sched_queue_next_free_event_id);
   gpu_free(global_runtime_config[kernel_id].all_event_counters);

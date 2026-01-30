@@ -40,7 +40,7 @@ python megakernel_setup.py build_ext --inplace
 
 # 4. 使用tilelang
 export MEGAKERNEL_HOME=/home/cjmcv/project/megakernel && export PYTHONPATH=$MEGAKERNEL_HOME:$PYTHONPATH
-export MEGAKERNEL_HOME=/data/team/cjm/mg && export PYTHONPATH=$MEGAKERNEL_HOME:$PYTHONPATH
+export MEGAKERNEL_HOME=/data/team/cjm/mg89 && export PYTHONPATH=$MEGAKERNEL_HOME:$PYTHONPATH
 
 pushd demo && python micro_test.py && popd
 pushd demo && python fused_mlp.py && popd
