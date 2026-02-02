@@ -82,10 +82,6 @@ if __name__ == "__main__":
         help="Spec length for lookahead spec decode",
     )
 
-    parser.add_argument("--model-path", type=str, default=None, help="Path to a local model (necessary for multi-GPU demo)")
-    parser.add_argument(
-        "--model", type=str, default='Qwen/Qwen3-8B', help="Model path on hugging face"
-    )
     parser.add_argument(
         "--no-use-cutlass-kernel",
         action="store_false",
@@ -149,7 +145,6 @@ if __name__ == "__main__":
 
     print("Input arguments:", args)
     print(f"world_size({world_size}) rank({rank})")
-    model_name = args.model
     torch.set_default_dtype(torch.bfloat16)
 
     model, tokenizer = TorchRef.load_model(rank)
@@ -273,5 +268,3 @@ if __name__ == "__main__":
 
     if world_size > 1:
         dist.destroy_process_group()
-
-# python demo/demo_torch_model_infer.py --model /home/cjmcv/project/llm_models/Qwen/Qwen3-0.6B

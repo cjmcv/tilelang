@@ -14,6 +14,8 @@ from common.micro_base import HparamSelectMode
 from common.micro_linear import MicroLinearStrategy, MicroLinear
 from common.micro_rmsnorm import MicroRmsNorm
 from common.micro_silu_mul import MicroSiluMul
+from common.micro_gqa_decode import MicroGqaDecode
+
 from common.micro_autogen import MicroAutoGen
 
 def profile(target_func, torch_ref_func):
@@ -110,13 +112,52 @@ def test_gemm_add():
     
     profile(target_func, torch_ref)
 
+def test_gqa_decode():
+    batch = 1
+    heads = 16
+    groups = 8
+    kv_seqlen = 8192
+    dim = 128
+    
+    # config = [64,64,64,2,128,0,true]
+    micro = MicroGqaDecode(heads, groups, dim, batch, kv_seqlen, dtype=T.bfloat16, accum_dtype=T.float32)
+    kernel, name, info  = micro.get_kernel(HparamSelectMode.HEURISTIC) # HEURISTIC, TUNING, TUNED
+
+    q = torch.randn(batch, heads, dim, device="cuda", dtype=torch.bfloat16)              # [B, N=q_seqlen=1, H=heads,  D=dim]
+    k = torch.randn(batch, kv_seqlen, groups, dim, device="cuda", dtype=torch.bfloat16)  # [B, N=kv_seqlen,  H=groups, D=dim]
+    v = torch.randn(batch, kv_seqlen, groups, dim, device="cuda", dtype=torch.bfloat16)
+    # mask = torch.randint(0, 2, (batch, kv_seqlen, groups), device="cuda", dtype=torch.uint8) # Only 0/1
+    mask = torch.ones((batch, kv_seqlen, groups), device="cuda", dtype=torch.uint8)      # no mask
+    
+    # 上面的mask(batch, kv_seqlen, groups)，维度其实是(batch, q_seqlen, kv_seqlen, groups),groups维度是广播出来的，mask只跟q_seqlen, kv_seqlen有关
+    # q_len = 4
+    # kv_seqlen = 16
+    # mask = torch.tril(torch.ones((q_len, kv_seqlen), device="cuda", dtype=torch.uint8)).unsqueeze(0).expand(batch, -1, -1) # (q_len, kv_seqlen)
+    # mask.unsqueeze(2).expand(-1, -1, groups, -1).transpose(1, 2)
+    # print(mask, mask.shape)
+    
+    split = 8
+    glse = torch.empty(batch, heads, split, device="cuda", dtype=torch.bfloat16)
+    Output_partial = torch.empty(batch, heads, split, dim, device="cuda", dtype=torch.bfloat16)
+    
+    def target_func():
+        return kernel(q, k, v, mask, glse, Output_partial)
+    
+    def torch_ref():
+        return TorchRef.attention_sdpa(q, k, v, False)
+        # return TorchRef.attention(q, k, v, mask, glse, Output_partial)
+        # return TorchRef.attention_split(q, k, v, mask, glse, Output_partial)
+        
+    profile(target_func, torch_ref)
+    
 if __name__ == "__main__":
     # test_silu_mul()
     # test_rms_norm()
     # test_gemm()
     ## test_silu_mul_gemm() # 逻辑有误，silu_mul被重复计算
     # test_gemm_add()
+    test_gqa_decode()
     
     # # gen = MicroAutoGen(1, 2560, 9728)
-    gen = MicroAutoGen(1, 1024, 3072)
-    gen.gen_qwen3_mlp(99, HparamSelectMode.TUNED) # HEURISTIC, TUNING, TUNED
+    # gen = MicroAutoGen(1, 1024, 3072)
+    # gen.gen_qwen3_mlp(99, HparamSelectMode.TUNED) # HEURISTIC, TUNING, TUNED

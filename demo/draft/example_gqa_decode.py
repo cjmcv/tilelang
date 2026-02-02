@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 import tilelang
-from tilelang.autotuner import *
+# from tilelang.autotuner import *
 import tilelang.language as T
 from einops import rearrange, einsum
 import argparse
@@ -44,7 +44,7 @@ def get_pass_configs():
     return {tilelang.PassConfigKey.TL_DISABLE_TMA_LOWER: True, tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True}
 
 
-@autotune(configs=get_configs(), warmup=10, rep=10)
+# @autotune(configs=get_configs(), warmup=10, rep=10)
 @tilelang.jit(out_idx=[6], pass_configs=get_pass_configs())
 def flashattn(batch, heads, groups, seqlen_kv, dim, block_N, block_H, num_split, num_stages, threads):
     scale = (1.0 / dim) ** 0.5 * 1.44269504  # log2(e)

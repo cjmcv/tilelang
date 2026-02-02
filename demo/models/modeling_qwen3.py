@@ -213,6 +213,7 @@ class Qwen3Attention(nn.Module):
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.key_cache, self.value_cache = kv_cache
+        # print("Qwen3Attention: ", config.num_attention_heads, config.num_key_value_heads, config.head_dim)
         assert kv_cache[0].shape == (
             config.num_hidden_layers,
             16,
@@ -425,7 +426,7 @@ class Qwen3DecoderLayer(nn.Module):
         # print("shape1: ", hidden_states.shape, residual.shape)
         
         # Fully Connected
-        print("input", hidden_states.shape)
+        print("Qwen3DecoderLayer", hidden_states.shape)
         residual = hidden_states
         # hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(
@@ -433,7 +434,7 @@ class Qwen3DecoderLayer(nn.Module):
         )
         hidden_states = residual + hidden_states
         # print("shape2: ", hidden_states.shape, residual.shape)
-        print("outputs", hidden_states.shape)
+        # print("outputs", hidden_states.shape)
         outputs = (hidden_states,)        
         
         return outputs

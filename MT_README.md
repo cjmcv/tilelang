@@ -52,20 +52,17 @@ rm -rf .git/modules/3rdparty/tvm/
 git submodule add https://github.com/apache/tvm.git 3rdparty/tvm
 
 # TODO
-1. qwen3++.perfetto-trace: 更均匀分配，避免某一个sm特别少，如10分3份，应得433，而不是442
-2. 跨步同步，不必每个task都读和写一次gmem。task添加标记，event的首task启动，后面连续多个不需要等待，计算完一次写。
-3. 扩大worker数量，使超过sm数量。
-
-1. 基于single_linear尝试检索所有micro kernel配置，尝试找到超越torch的方案，并分析tilelang的自己launch和集成后的耗时是否有一定规律？
-   从 single_linear.py 修改，调用 MicroAutoGen(1, 1024, 3072)，MicroAutoGen扩展通过id号选定配置
 2. 考虑tilelang端只生成代码而不编译，看能否减少耗时；
 3. 考虑新增megakernel的并行编译；
-4. L40并行编译崩溃问题；
 5. gemv对比性能
-6. 分析：block派发逻辑是否固定，还是属于抢占式派发，每次都不同。
 7. 分析：gemm1的4block -> silu_mul的2block，02->0, 13->1，能否只写回gemm1的后两个block 23，前两个block 01保留在smem，延递silu_mul上。
    尝试: 依托block的固定smem，通过多传入偏移量，实现跨task共享。
 8. 排查block数量不能超过sm数量的本质原因。
+
+
+2. 跨步同步，不必每个task都读和写一次gmem。task添加标记，event的首task启动，后面连续多个不需要等待，计算完一次写。（大显卡不需要处理这个问题？）
+4. L40并行编译崩溃问题；（已解决， tilelang的ffi注册只能在单线程下进行，进入多线程前，应掉调用一下tilelang，提前触发其注册）
+6. 分析：block派发逻辑是否固定，还是属于抢占式派发，每次都不同。（主推静态）
 
 # 备注
 @tilelang.testing.requires_cuda

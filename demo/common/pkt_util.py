@@ -5,6 +5,7 @@ import torch.distributed as dist
 import argparse
 import os
 import time
+from einops import rearrange, einsum
 import megakernel as mi
 import torch.nn.functional as F
 from tilelang.utils.profiler import do_bench
@@ -94,6 +95,139 @@ class TorchRef:
         O3 = TorchRef.silu_and_mul(O2)
         D  = TorchRef.linear(O3, w_down_proj) + O0
         return D
+    
+    # shape_q = [batch, heads, dim]
+    # shape_k = [batch, seqlen_kv, groups, dim]
+    # shape_v = [batch, seqlen_kv, groups, dim]
+    @staticmethod
+    def attention_sdpa(query, key, value, is_causal):
+        q_for_sdpa = query.unsqueeze(2)         # [batch, heads, seqlen_q=1, dim]
+        k_for_sdpa = key.permute(0, 2, 1, 3)    # [batch, groups, seqlen_kv, dim]
+        v_for_sdpa = value.permute(0, 2, 1, 3)  # [batch, groups, seqlen_kv, dim]
+
+        attn_output_sdpa = F.scaled_dot_product_attention(
+            q_for_sdpa, k_for_sdpa, v_for_sdpa, is_causal=is_causal, enable_gqa=True
+        )
+        attn_output = attn_output_sdpa.permute(0, 2, 1, 3)
+        return attn_output
+
+    @staticmethod
+    def attention(query, key, value, mask, glse, Output_partial):
+        #     """
+        #     Inputs:
+        #     - query (Tensor): [batch, heads, dim]
+        #     - key (Tensor): [batch, seqlen_kv, groups, dim]
+        #     - value (Tensor): [batch, seqlen_kv, groups, dim]
+        #     - mask (Tensor): [batch, seqlen_kv, groups]
+        #     Outputs:
+        #     - output (Tensor): [batch, heads, dim]
+        #     """
+        dim = query.shape[-1]
+        num_head_groups = query.shape[1] // key.shape[2]
+        scale = dim**0.5
+        key = rearrange(key, "b n h d -> b h n d")  # [batch_size, groups, seqlen_kv, dim]
+        value = rearrange(value, "b n h d -> b h n d")  # [batch_size, groups, seqlen_kv, dim]
+
+        query = rearrange(query, "b (h g) d -> b g h d", g=num_head_groups)  # [batch_size, num_head_groups, groups, dim]
+
+        scores = einsum(query, key, "b g h d, b h s d -> b g h s")  # [batch_size, num_head_groups, groups, seqlen_kv]
+        if mask is not None:
+            mask = rearrange(mask, "b s h -> b h s")
+            mask = mask.unsqueeze(1)
+            scores = scores.masked_fill(mask == 0, float("-inf"))
+
+        attention = F.softmax(scores / scale, dim=-1)  # [batch_size, num_head_groups, groups, seqlen_kv]
+
+        out = einsum(attention, value, "b g h s, b h s d -> b g h d")  # [batch_size, num_head_groups, groups, dim]
+        out = rearrange(out, "b g h d -> b (h g) d")  # [batch_size, heads, dim]
+        return out
+
+    @staticmethod
+    def attention_split(Q, K, V, mask, glse=None, Output_partial=None):
+        dtype = torch.bfloat16
+        
+        def _flash_split_ref(Q, K, V, mask):
+            num_split = 16
+            batch = Q.size(0)
+            nheads = Q.size(1)
+            groups = K.size(2)
+            dim = Q.size(-1)
+            block_N = 32
+            seqlen_kv = K.size(1)
+            num_head_groups = nheads // groups
+            
+            scale = (1.0 / dim) ** 0.5 * 1.44269504  # log2(e)
+            acc_s = torch.empty((batch, num_head_groups, groups, block_N), device="cuda", dtype=torch.float)
+            acc_s_cast = torch.empty((batch, num_head_groups, groups, block_N), device="cuda", dtype=dtype)
+            acc_o = torch.empty((batch, num_head_groups, groups, dim), device="cuda", dtype=torch.float)
+            scores_max = torch.empty((batch, num_head_groups, groups), device="cuda", dtype=torch.float)
+            scores_max_prev = torch.empty((batch, num_head_groups, groups), device="cuda", dtype=torch.float)
+            scores_scale = torch.empty((batch, num_head_groups, groups), device="cuda", dtype=torch.float)
+            scores_sum = torch.empty((batch, num_head_groups, groups), device="cuda", dtype=torch.float)
+            logsum = torch.empty((batch, num_head_groups, groups), device="cuda", dtype=torch.float)
+            gacc_o = torch.empty((num_split, batch, nheads, dim), device="cuda", dtype=torch.float)
+            glogsum = torch.empty((num_split, batch, nheads), device="cuda", dtype=torch.float)
+
+            Q_ = Q * scale
+            Q_ = rearrange(Q_, "b (h g) d -> b g h d", g=num_head_groups)
+
+            for ks in range(num_split):
+                acc_o.fill_(0)
+                logsum.fill_(0)
+                scores_max.fill_(float("-inf"))
+                scores_max_prev.fill_(float("-inf"))
+                for i in range(int((seqlen_kv // num_split) / block_N)):
+                    acc_s.fill_(0)
+                    acc_s = torch.einsum(
+                        "bghd,bkhd->bghk",
+                        Q_,
+                        K[:, (seqlen_kv // num_split) * ks + i * block_N : (seqlen_kv // num_split) * ks + (i + 1) * block_N, :, :],
+                    )  # [batch, nheads, block_N]
+                    if mask is not None:
+                        mask_local = mask[:, (seqlen_kv // num_split) * ks + i * block_N : (seqlen_kv // num_split) * ks + (i + 1) * block_N, :]
+                        mask_local = rearrange(mask_local, "b s h -> b h s")
+                        mask_local = mask_local.unsqueeze(1)
+                        acc_s = acc_s.masked_fill(mask_local == 0, float("-inf"))
+                    scores_max_prev = scores_max
+                    scores_max = acc_s.max(dim=-1, keepdim=False).values  # [batch, nheads]
+                    scores_scale = torch.exp2(scores_max_prev - scores_max)  # [batch, nheads]
+                    acc_o *= scores_scale[:, :, :, None]
+                    acc_s = torch.exp2(acc_s - scores_max[:, :, :, None])
+                    acc_s_cast = acc_s.to(dtype)  # [batch, nheads, block_N]
+                    acc_o += torch.einsum(
+                        "bghk,bkhd->bghd",
+                        acc_s_cast,
+                        V[:, (seqlen_kv // num_split) * ks + i * block_N : (seqlen_kv // num_split) * ks + (i + 1) * block_N, :, :],
+                    )
+                    scores_sum = acc_s.sum(dim=-1, keepdim=False)
+                    logsum = logsum * scores_scale + scores_sum
+                acc_o_out = rearrange(acc_o, "b g h d->b (h g) d")
+                logsum_out = rearrange(logsum, "b g h->b (h g)")
+                acc_o_out /= logsum_out[:, :, None]
+                logsum_out = torch.log2(logsum_out) + rearrange(scores_max, "b g h->b (h g)")
+                gacc_o[ks, :, :, :] = acc_o_out
+                glogsum[ks, :, :] = logsum_out
+
+            return glogsum.to(dtype).permute(1, 2, 0), gacc_o.to(dtype).permute(1, 2, 0, 3)
+
+
+        def _reduce_ref(Q, K, V, mask, glse, Output_partial):
+            num_split = 16
+            o = torch.empty_like(Output_partial[:, :, 0, :]).fill_(0)
+            lse_logsum = torch.empty_like(glse[:, :, 0]).fill_(0)  # [batch, heads]
+            lse_max = glse.max(dim=2, keepdim=False).values
+            for ks in range(num_split):
+                lse = glse[:, :, ks]
+                lse_logsum += torch.exp2(lse - lse_max)
+            lse_logsum = torch.log2(lse_logsum) + lse_max
+            for ks in range(num_split):
+                lse = glse[:, :, ks]
+                scale = torch.exp2(lse - lse_logsum)  # [batch, heads]
+                o += Output_partial[:, :, ks, :] * scale[:, :, None]
+            return o.to(dtype)
+        
+        glse_, Output_partial_ = _flash_split_ref(Q, K, V, mask)
+        return _reduce_ref(Q, K, V, mask, glse_, Output_partial_)
 
     def load_model(rank):
         torch.cuda.set_device(rank)
@@ -133,64 +267,71 @@ class PerfReporter:
         print(prof.key_averages().table(sort_by="cuda_time_total"))
         prof.export_chrome_trace("trace.json") # chrome://tracing/        
     
-    def check_allclose_inplace(self, mpk_run, mpk_out, splitk, torch_out, iter, print_all):
+
+    # Cosine Similarity 的变种
+    # 余弦相似度公式: 点积 / (a平方和开根号 * b平方和开根号)
+    # for (size_t i = 0; i < len; ++i) {
+    #     dot_product += x[i] * y[i]; // 点积
+    #     norm_sq_x += x[i] * x[i]; // x的L2范数平方, 0时直接返回0
+    #     norm_sq_y += y[i] * y[i]; // y的L2范数平方, 0时直接返回0
+    # }
+    # double norm_x = std::sqrt(norm_sq_x);
+    # double norm_y = std::sqrt(norm_sq_y);
+    # double sim = dot_product / (norm_x * norm_y); // 需要避免norm_x/norm_y为0，然后需要裁剪到[-1,1]
+    def assert_similar(self, x, y, eps=1e-2, name="tensor", assert_=False, print_=True):
+        def print_red_warning(msg):
+            print(f"\033[91m{msg}\033[0m")
+
+        def calc_sim(x, y, name="tensor"):
+            x, y = x.data.double(), y.data.double()
+            denominator = (x * x + y * y).sum()
+            if denominator == 0:
+                print_red_warning(f"{name} all zero")
+                return 1
+            sim = 2 * (x * y).sum() / denominator
+            return sim
+        
+        sim = calc_sim(x, y, name)
+        diff = 1.0 - sim
+        if not (0 <= diff <= eps):
+            print_red_warning(f"{name} Error: {diff}")
+            if assert_:
+                raise AssertionError(f"{name} Error: {diff}")
+        else:
+            if print_:
+                print(f"passed: {name} diff={diff}")
+            
+    def check_allclose_inplace(self, target_run, target_out, splitk, torch_out, iter, print_all):
         if (print_all):
             torch.set_printoptions(threshold=float('inf'))
         torch.cuda.synchronize()
         
         # print("inner: ", torch_out, torch_out.data_ptr())
         for _ in range(iter):
-            mpk_out.zero_()
-            mpk_run()
+            target_out.zero_()
+            target_run()
             # print("inner2: ", torch_out)
             torch.cuda.synchronize()
             
-            mpk_result = mpk_out
+            target_result = target_out
             torch_result = torch_out
             # print("inner3: ", torch_out)
             if splitk != 1:
                 for i in range(1, splitk):
-                    mpk_out[0] += mpk_out[i]
+                    target_out[0] += target_out[i]
                     
-                mpk_result = mpk_out[0]
+                target_result = target_out[0]
                 torch_result = torch_out[0]
                 total_num = torch_result.shape[0]
             else:
-                mpk_result = mpk_out
+                target_result = target_out
                 torch_result = torch_out
                 total_num = torch_result.shape[0] * torch_result.shape[1]
-                
-            if (torch.allclose(mpk_result, torch_result, rtol=1e-2, atol=0)):
-                print("allclose: True")
-            else:
-                print("mpk_out:", mpk_result.shape, "\n", mpk_result)
-                print("torch_out:", torch_result.shape, "\n", torch_result)
-                print("diff: ", mpk_result - torch_result)
-                
-                radio = abs((mpk_result - torch_result)/torch_result)
-                
-                threshold = [0.05, 0.10]
-                count0 = (radio > threshold[0]).sum().item()
-                count1 = (radio > threshold[1]).sum().item()
-                print("radio > ", threshold[0], ": ", count0, "-", count0/total_num, " / ", threshold[1], ": ", count1, "-", count1/total_num)
-    
-    def check_allclose_ret(self, mpk_run, torch_run, iter, print_all):
-        if (print_all):
-            torch.set_printoptions(threshold=float('inf'))
-        torch.cuda.synchronize()
-        
-        # print("inner: ", torch_out, torch_out.data_ptr())
-        for _ in range(iter):
-            target_result = mpk_run()
-            torch_result = torch_run()
-            torch.cuda.synchronize()
             
-            total_num = torch_result.shape[0] * torch_result.shape[1]
-                
             if (torch.allclose(target_result, torch_result, rtol=1e-2, atol=0)):
                 print("allclose: True")
             else:
-                print("mpk_out:", target_result.shape, "\n", target_result)
+                print("target_out:", target_result.shape, "\n", target_result)
                 print("torch_out:", torch_result.shape, "\n", torch_result)
                 print("diff: ", target_result - torch_result)
                 
@@ -200,7 +341,34 @@ class PerfReporter:
                 count0 = (radio > threshold[0]).sum().item()
                 count1 = (radio > threshold[1]).sum().item()
                 print("radio > ", threshold[0], ": ", count0, "-", count0/total_num, " / ", threshold[1], ": ", count1, "-", count1/total_num)
-
+            self.assert_similar(target_result, torch_result, name="similar")    
+            
+    def check_allclose_ret(self, target_run, torch_run, iter, print_all):
+        if (print_all):
+            torch.set_printoptions(threshold=float('inf'))
+        torch.cuda.synchronize()
+        
+        # print("inner: ", torch_out, torch_out.data_ptr())
+        for _ in range(iter):
+            target_result = target_run()
+            torch_result = torch_run()
+            torch.cuda.synchronize()
+            
+            total_num = torch_result.numel()
+            if (torch.allclose(target_result, torch_result, rtol=1e-2, atol=0)):
+                print("allclose: True")
+            else:
+                print("target_out:", target_result.shape, "\n", target_result)
+                print("torch_out:", torch_result.shape, "\n", torch_result)
+                print("diff: ", target_result - torch_result)
+                
+                radio = abs((target_result - torch_result)/torch_result)
+                
+                threshold = [0.05, 0.10]
+                count0 = (radio > threshold[0]).sum().item()
+                count1 = (radio > threshold[1]).sum().item()
+                print("radio > ", threshold[0], ": ", count0, "-", count0/total_num, " / ", threshold[1], ": ", count1, "-", count1/total_num)
+            self.assert_similar(target_result, torch_result, name="similar")    
              
     def time_cuda_event_record(self, name, func, test_iter):
         starter = torch.cuda.Event(enable_timing=True)
@@ -228,24 +396,24 @@ class PerfReporter:
         run_time = (end_time - start_time) * 1000
         print(name, "run time (ms): ", run_time / test_iter)
         
-    def generate_report(self, mpk_run, mpk_out, splitk, torch_run, torch_out, warnup_iter, test_iter, allclose_iter, print_all):  
-        if mpk_out != None:
-            self.check_allclose_inplace(mpk_run, mpk_out, splitk, torch_out, allclose_iter, print_all)
+    def generate_report(self, target_run, target_out, splitk, torch_run, torch_out, warnup_iter, test_iter, allclose_iter, print_all):  
+        if target_out != None:
+            self.check_allclose_inplace(target_run, target_out, splitk, torch_out, allclose_iter, print_all)
         else:
-            self.check_allclose_ret(mpk_run, torch_run, allclose_iter, print_all)
+            self.check_allclose_ret(target_run, torch_run, allclose_iter, print_all)
 
-        latency = do_bench(lambda: mpk_run(), warmup=warnup_iter, rep=test_iter, backend="cupti")
+        latency = do_bench(lambda: target_run(), warmup=warnup_iter, rep=test_iter, backend="cupti")
         torch_latency = do_bench(lambda: torch_run(), warmup=warnup_iter, rep=test_iter, backend="cupti")
         print(f"Latency: {latency:.3f}ms vs {torch_latency:.3f}(torch) ms")
         
         # self.time_cuda_event_record("torch_ref", torch_run, test_iter)   
-        # self.time_cuda_event_record("mpk", mpk_run, test_iter)
+        # self.time_cuda_event_record("mpk", target_run, test_iter)
 
         # self.time_cpu_record("torch_ref", torch_run, test_iter)   
-        # self.time_cpu_record("mpk", mpk_run, test_iter)
+        # self.time_cpu_record("mpk", target_run, test_iter)
         
         self.torch_profile(torch_run)
-        self.torch_profile(mpk_run)
+        self.torch_profile(target_run)
 
 
     # pushd build && make -j8 && popd

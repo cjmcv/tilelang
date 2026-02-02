@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 import tilelang
-from tilelang.autotuner import *
+# from tilelang.autotuner import *
 import tilelang.language as T
 from einops import rearrange, einsum
 import argparse
