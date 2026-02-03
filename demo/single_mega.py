@@ -120,6 +120,50 @@ def test_mlp_linear_residual2(mpk, max_batch_size, batch_size, hidden_size, inte
         return out_torch[:batch_size]
         
     return mpk_run, ref_run
+    
+    
+    
+def test_gqa_decode(mpk, max_batch_size, batch, heads, groups, seqlen_kv, dim):
+    split = 1
+    
+    q_torch = torch.randn(batch, heads, dim, device="cuda", dtype=torch.bfloat16)              # [B, N=seqlen_q=1, H=heads,  D=dim]
+    k_torch = torch.randn(batch, seqlen_kv, groups, dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
+    v_torch = torch.randn(batch, seqlen_kv, groups, dim, device="cuda", dtype=torch.bfloat16)
+    mask_torch = torch.ones(batch, seqlen_kv, groups, device="cuda", dtype=torch.uint8)
+    glse_torch = torch.empty(batch, heads, split, device="cuda", dtype=torch.bfloat16)
+    out_partial_torch = torch.empty(batch, heads, split, dim, device="cuda", dtype=torch.bfloat16)
+    out_torch = torch.empty(batch, heads, dim, device="cuda", dtype=torch.bfloat16)
+    
+    print("torch: ", q_torch.data_ptr(), k_torch.data_ptr(), v_torch.data_ptr(), mask_torch.data_ptr(), out_torch.data_ptr())
+    q = mpk.attach_input(torch_tensor=q_torch, name="q")
+    k = mpk.attach_input(torch_tensor=k_torch, name="k")
+    v = mpk.attach_input(torch_tensor=v_torch, name="v")
+    mask = mpk.attach_input(torch_tensor=mask_torch, name="mask")
+    glse = mpk.attach_input(torch_tensor=glse_torch, name="glse")
+    out_partial = mpk.attach_input(torch_tensor=out_partial_torch, name="out_partial")
+    attn_out = mpk.attach_input(torch_tensor=out_torch, name="attn_out")
+
+    mpk.gqa_decode_layer(
+        q=q,
+        k_cache=k,
+        v_cache=v,
+        mask=mask,
+        glse=glse,
+        out_partial=out_partial,
+        output=attn_out,
+        sync_mode=(0, 0, 0),
+        layout=((1, 8, 1), (64, 64, 1)), # Qwen3MlpConfig.linear2_layout,
+    )
+    layers.compile_load(args.nc, args.output_dir)
+    
+    def target_func():
+        mpk(batch_size)
+        return out_torch
+    
+    def torch_ref():
+        return TorchRef.attention_sdpa(q_torch, k_torch, v_torch, False)
+        
+    return target_func, torch_ref
 
 
 if __name__ == "__main__":
@@ -161,10 +205,11 @@ if __name__ == "__main__":
     hidden_size = 1024
     intermediate_size = 3072
     
-    mpk_run, ref_run = test_mlp_rms_norm(mpk, max_batch_size, batch_size, hidden_size)
+    # mpk_run, ref_run = test_mlp_rms_norm(mpk, max_batch_size, batch_size, hidden_size)
     # mpk_run, ref_run = test_mlp_linear1(mpk, max_batch_size, batch_size, hidden_size, intermediate_size)
     # mpk_run, ref_run = test_mlp_silu_mul(mpk, max_batch_size, batch_size, intermediate_size)
     # mpk_run, ref_run = test_mlp_linear_residual2(mpk, max_batch_size, batch_size, hidden_size, intermediate_size)
+    mpk_run, ref_run = test_gqa_decode(mpk, max_batch_size=1, batch=1, heads=16, groups=8, seqlen_kv=8192, dim=128)
     
     # ###
     ref_output = ref_run()

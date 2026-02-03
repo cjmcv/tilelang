@@ -384,6 +384,9 @@ class PersistentKernel:
         q: DTensor,
         k_cache: DTensor, 
         v_cache: DTensor,
+        mask: DTensor,
+        glse: DTensor,
+        out_partial: DTensor,
         output: DTensor,
         sync_mode: tuple,
         layout: tuple,
@@ -392,11 +395,14 @@ class PersistentKernel:
         assert q.num_dims == 3
         assert output.num_dims == 3
         tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128, 64))
-        tb_graph.new_input(q, sync_mode, True)
+        tb_graph.new_input(q,       sync_mode, True)
         tb_graph.new_input(k_cache, sync_mode, True)
         tb_graph.new_input(v_cache, sync_mode, True)
+        tb_graph.new_input(mask,    sync_mode, True)
+        tb_graph.new_input(glse,    sync_mode, True)
+        tb_graph.new_input(out_partial, sync_mode, True)
         tb_graph.new_input(output, (-1, -1, -1), True)
-        self.kn_graph.customized([q, k_cache, v_cache, output], tb_graph)
+        self.kn_graph.customized([q, k_cache, v_cache, mask, glse, out_partial, output], tb_graph)
         self.kn_graph.register_task(tb_graph, "gqa_decode")
         
     def attention_layer(

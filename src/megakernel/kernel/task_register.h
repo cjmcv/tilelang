@@ -35,6 +35,48 @@ public:
     static TaskRegister singleton;
     return &singleton;
   }
+
+  int register_gqa_decode_task(threadblock::Graph const &bgraph, std::vector<int> const &params) {
+    assert(params.size() == 0);
+    std::vector<tb::TBInputOp *> input_ops;
+    std::vector<tb::TBInputOp *> output_ops;
+    int num_inputs = 5;
+    int num_outputs = 2;
+    assert(bgraph.operators.size() == (size_t)num_inputs + num_outputs);
+    for (auto const &op : bgraph.operators) {
+      assert(op->op_type == megakernel::type::TB_INPUT_OP);
+      if (input_ops.size() < (size_t)num_inputs) {
+        input_ops.push_back(static_cast<tb::TBInputOp *>(op));
+      } else {
+        output_ops.push_back(static_cast<tb::TBInputOp *>(op));
+      }
+    }
+
+    assert(output_ops[0]->output_tensors[0].num_dims == 3);
+    int batch_size = output_ops[1]->output_tensors[0].dim[0];
+    int head = output_ops[1]->output_tensors[0].dim[1];
+    int dim = output_ops[1]->output_tensors[0].dim[2];
+    int groups = input_ops[1]->output_tensors[0].dim[2];
+
+    assert(batch_size == 1);
+    // assert(input_ops[0]->dtensor.num_dims == 2);
+    // assert(output_ops[0]->dtensor.dim[0] == input_ops[0]->dtensor.dim[0]);
+    // assert(output_ops[0]->dtensor.dim[1] == input_ops[0]->dtensor.dim[1]);
+    megakernel::transpiler::CodeKeeper code;
+    code.inc_indent();
+    code.e("kernel::gqa_decode_kernel<bfloat16, $, $, $, $, $>(",
+      bgraph.thread_num, batch_size, head, groups, dim);
+    code.e("    task_desc->bx, task_desc->by, task_desc->bz,");
+    code.e("    task_desc->input_ptrs[0],");
+    code.e("    task_desc->input_ptrs[1],");
+    code.e("    task_desc->input_ptrs[2],");
+    code.e("    task_desc->input_ptrs[3],");
+    code.e("    task_desc->input_ptrs[4],");
+    code.e("    task_desc->output_ptrs[0],");
+    code.e("    task_desc->output_ptrs[1]);");
+    return register_task_variant(TASK_GQA_DECODE, code.to_string());
+  }
+
   int register_embedding_task(threadblock::Graph const &bgraph, std::vector<int> const &params) {
     assert(params.size() == 1);
     // params[0]: input source (0: tokens, 1: input_token)

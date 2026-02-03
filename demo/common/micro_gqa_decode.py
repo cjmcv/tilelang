@@ -5,8 +5,8 @@ import tilelang.language as T
 from common.micro_base import BaseMicroKernel, HparamSelectMode
 
 class _GqaDecodeStrategy:
-    def __init__(self, heads, groups, dim, batch, kv_seqlen, dtype, accum_dtype):
-        self.name = "gqa_decode_tl"+f"_{heads}_{groups}_{dim}_{batch}_{kv_seqlen}"
+    def __init__(self, batch, kv_seqlen, heads, groups, dim, dtype, accum_dtype):
+        self.name = "gqa_decode_tl"+f"_{batch}_{kv_seqlen}_{heads}_{groups}_{dim}"
             
         self.heads = heads
         self.groups = groups
@@ -35,8 +35,8 @@ class _GqaDecodeStrategy:
     
     def get_heuristic_hparams(self):
         # block_N=128, block_H=64, num_split=1, num_stages=0, threads=128
-        # return [128, 64, 1, 0, 128]
-        return [64, 64, 8, 1, 128] 
+        return [64, 64, 1, 1, 128]
+        # return [64, 64, 8, 1, 128] 
     
     def get_kernel(self, selected_hparams):
         print("selected_hparams: ", selected_hparams)
@@ -46,18 +46,18 @@ class _GqaDecodeStrategy:
         return {tilelang.PassConfigKey.TL_DISABLE_TMA_LOWER: True, tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True}
 
     @tilelang.jit(out_idx=[6], pass_configs=get_pass_configs())
-    def kernel_main(batch, heads, groups, seqlen_kv, dim, block_N, block_H, num_split, num_stages, threads, dtype="bfloat16", accum_dtype="float32"):
+    def kernel_main(batch, heads, groups, kv_seqlen, dim, block_N, block_H, num_split, num_stages, threads, dtype="bfloat16", accum_dtype="float32"):
         scale = (1.0 / dim) ** 0.5 * 1.44269504  # log2(e)
         shape_q = [batch, heads, dim]           # [batch, seqlen_q, heads, dim]
-        shape_k = [batch, seqlen_kv, groups, dim]
-        shape_v = [batch, seqlen_kv, groups, dim]
+        shape_k = [batch, kv_seqlen, groups, dim]
+        shape_v = [batch, kv_seqlen, groups, dim]
         shape_o = [batch, heads, dim]
-        shape_mask = [batch, seqlen_kv, groups] # [batch, seqlen_q, seqlen_kv, groups], 因果掩码是 query 和 key 之间的关系，表示当前q能看到哪些kv，而group维度是广播出来的
+        shape_mask = [batch, kv_seqlen, groups] # [batch, seqlen_q, kv_seqlen, groups], 因果掩码是 query 和 key 之间的关系，表示当前q能看到哪些kv，而group维度是广播出来的
         kv_group_num = heads // groups
 
         part_shape = [batch, heads, num_split, dim]
         valid_block_H = min(block_H, kv_group_num)
-        valid_block_N = min(block_N, seqlen_kv // num_split)
+        valid_block_N = min(block_N, kv_seqlen // num_split)
         
         @T.macro
         def flash_attn(
@@ -91,7 +91,7 @@ class _GqaDecodeStrategy:
                 T.fill(logsum, 0)
                 T.fill(scores_max, -T.infinity(accum_dtype))
 
-                loop_range = T.ceildiv((seqlen_kv // num_split), block_N)
+                loop_range = T.ceildiv((kv_seqlen // num_split), block_N)
                 for k in T.Pipelined(loop_range, num_stages=num_stages):
                     T.copy(K[bid, k * block_N : (k + 1) * block_N, cur_kv_head, :], K_shared)
                     T.copy(mask[bid, k * block_N : (k + 1) * block_N, cur_kv_head], mask_local)
@@ -157,13 +157,13 @@ class _GqaDecodeStrategy:
                 T.fill(logsum, 0)
                 T.fill(scores_max, -T.infinity(accum_dtype))
 
-                loop_range = T.ceildiv((seqlen_kv // num_split), block_N)
+                loop_range = T.ceildiv((kv_seqlen // num_split), block_N)
 
                 for k in T.Pipelined(loop_range, num_stages=num_stages):
                     T.copy(
                         K[
                             bid,
-                            (seqlen_kv // num_split) * sid + k * valid_block_N : (seqlen_kv // num_split) * sid + (k + 1) * valid_block_N,
+                            (kv_seqlen // num_split) * sid + k * valid_block_N : (kv_seqlen // num_split) * sid + (k + 1) * valid_block_N,
                             cur_kv_head,
                             :,
                         ],
@@ -172,7 +172,7 @@ class _GqaDecodeStrategy:
                     T.copy(
                         mask[
                             bid,
-                            (seqlen_kv // num_split) * sid + k * valid_block_N : (seqlen_kv // num_split) * sid + (k + 1) * valid_block_N,
+                            (kv_seqlen // num_split) * sid + k * valid_block_N : (kv_seqlen // num_split) * sid + (k + 1) * valid_block_N,
                             cur_kv_head,
                         ],
                         mask_local,
@@ -180,7 +180,7 @@ class _GqaDecodeStrategy:
                     T.clear(acc_s)
                     T.gemm(Q_shared, K_shared, acc_s, transpose_B=True, policy=T.GemmWarpPolicy.FullRow)
                     for i, j in T.Parallel(block_H, block_N):
-                        acc_s[i, j] = T.if_then_else((mask_local[j] != 0) & (j < seqlen_kv // num_split), acc_s[i, j], -T.infinity(accum_dtype))
+                        acc_s[i, j] = T.if_then_else((mask_local[j] != 0) & (j < kv_seqlen // num_split), acc_s[i, j], -T.infinity(accum_dtype))
                     T.copy(scores_max, scores_max_prev)
                     T.fill(scores_max, -T.infinity(accum_dtype))
                     T.reduce_max(acc_s, scores_max, dim=1, clear=False)
@@ -199,7 +199,7 @@ class _GqaDecodeStrategy:
                     T.copy(
                         V[
                             bid,
-                            (seqlen_kv // num_split) * sid + k * valid_block_N : (seqlen_kv // num_split) * sid + (k + 1) * valid_block_N,
+                            (kv_seqlen // num_split) * sid + k * valid_block_N : (kv_seqlen // num_split) * sid + (k + 1) * valid_block_N,
                             cur_kv_head,
                             :,
                         ],
@@ -292,7 +292,7 @@ class _GqaDecodeStrategy:
             return flashattn_gqa_decode_no_split
     
 class MicroGqaDecode(BaseMicroKernel):
-    def __init__(self, heads, groups, dim, batch, kv_seqlen, dtype=T.bfloat16, accum_dtype=T.float32):
+    def __init__(self, batch, kv_seqlen, heads, groups, dim, dtype=T.bfloat16, accum_dtype=T.float32):
         super().__init__()
         
         self.heads = heads
@@ -303,46 +303,50 @@ class MicroGqaDecode(BaseMicroKernel):
         
         self.dtype = dtype
         self.accum_dtype = accum_dtype
-        self.strategy = _GqaDecodeStrategy(heads, groups, dim, batch, kv_seqlen, dtype, accum_dtype)
+        self.strategy = _GqaDecodeStrategy(batch, kv_seqlen, heads, groups, dim, dtype, accum_dtype)
         
     def get_source(self, kernel, selected_hparams):
-        self.layout = "11111"
-        return "abc"
+        # self.layout = "11111"
+        # return kernel.get_kernel_source()
         head_str = \
 '''
 namespace kernel {
 
 template <typename T,
           int THREAD_NUM,
-          int TILE_DIM_X, 
-          int TILE_DIM_Y, 
-          int TILE_DIM_Z,
-          int M,
-          int N,
-          int I_STRIDE,
-          int O_STRIDE>
+          int M, 
+          int HEAD,
+          int GROUPS,
+          int DIM>
 __device__ __forceinline__ void flashattn_kernel_<name_suffix>(const int bx, const int by, const int bz,
-                                                   void const *input_ptr,
-                                                   void *output_ptr,
-                                                   int num_active_tokens) {
+                                                   const void* __restrict__ q, 
+                                                   const void* __restrict__ k, 
+                                                   const void* __restrict__ v,
+                                                   const void* __restrict__ mask_ptr, 
+                                                   const void* __restrict__ glse_ptr,
+                                                   void* __restrict__ output_partial_ptr,
+                                                   void* __restrict__ output_ptr) {
   static_assert(THREAD_NUM==<threads>);
-  static_assert(TILE_DIM_X==<BLOCK_N>); static_assert(TILE_DIM_Y==<BLOCK_M>); static_assert(TILE_DIM_Z==<BLOCK_K>);
-  static_assert(M==<M>); static_assert(N==<N>);
+  static_assert(M==<BATCH>); static_assert(HEAD==<HEAD>); static_assert(GROUPS==<GROUPS>); static_assert(DIM==<DIM>);
   
-  const <dtype>* __restrict__ A = static_cast<const <dtype>*>(input_ptr);
-  <dtype>* __restrict__ C = static_cast<<dtype>*>(output_ptr);
+  const <dtype>* __restrict__ Q = static_cast<const <dtype>*>(q);
+  const <dtype>* __restrict__ K = static_cast<const <dtype>*>(k);
+  const <dtype>* __restrict__ V = static_cast<const <dtype>*>(v);
+  const uchar* __restrict__ mask = static_cast<const uchar*>(mask_ptr);
+  const <dtype>* __restrict__ glse = static_cast<const <dtype>*>(glse_ptr);
+  <dtype>* __restrict__ Output_partial = static_cast<<dtype>*>(output_partial_ptr);
+  <dtype>* __restrict__ Output = static_cast<<dtype>*>(output_ptr);
   
 '''     
-        BLOCK_M, BLOCK_N, threads = selected_hparams
-        BLOCK_K = 1
-        
+
+        BLOCK_N, BLOCK_H, num_split, num_stages, threads = selected_hparams
+
         head_str = head_str.replace('<threads>', str(threads))
-        head_str = head_str.replace('<BLOCK_M>', str(BLOCK_M))
-        head_str = head_str.replace('<BLOCK_N>', str(BLOCK_N)) 
-        head_str = head_str.replace('<BLOCK_K>', str(BLOCK_K)) 
-        head_str = head_str.replace('<M>', str(self.M))
-        head_str = head_str.replace('<N>', str(self.N)) 
-        head_str = head_str.replace('<name_suffix>', str(self.M)+"_"+str(self.N))
+        head_str = head_str.replace('<BATCH>', str(self.batch))
+        head_str = head_str.replace('<HEAD>', str(self.heads))
+        head_str = head_str.replace('<GROUPS>', str(self.groups))
+        head_str = head_str.replace('<DIM>', str(self.dim))
+        head_str = head_str.replace('<name_suffix>', f"{self.batch}_{self.kv_seqlen}_{self.heads}_{self.groups}_{self.dim}")
         if self.dtype == T.bfloat16:
             dtype = "bfloat16_t"
         else:
@@ -357,8 +361,7 @@ __device__ __forceinline__ void flashattn_kernel_<name_suffix>(const int bx, con
         source += "\n} // kernel"
         
         grid_dim, block_dim, dynamic_smem_buf, use_cooperative_groups = kernel.get_launch_info()
-        self.layout = f"({grid_dim['blockIdx.x']}, {grid_dim['blockIdx.y']}, {grid_dim['blockIdx.z']}), ({BLOCK_N}, {BLOCK_M}, {BLOCK_K})"
-        self.grid_tile_info = f"grid_dim=({grid_dim['blockIdx.x']}, {grid_dim['blockIdx.y']}, {grid_dim['blockIdx.z']}), tile_dim=({BLOCK_N}, {BLOCK_M}, {BLOCK_K})"
+        self.layout = f"({grid_dim['blockIdx.x']}, {grid_dim['blockIdx.y']}, {grid_dim['blockIdx.z']}), ({BLOCK_N}, {BLOCK_H}, {num_split})"
         extra_attr = f"\n// Strategy: {self.strategy.name}"
         extra_attr += f"\n// selected_hparams: {selected_hparams}."
         extra_attr += f"\n// smem: {dynamic_smem_buf} bytes."

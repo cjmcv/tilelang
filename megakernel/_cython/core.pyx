@@ -285,6 +285,8 @@ def get_tb_operator_type_string(int op_type):
 def convert_dtype_to_ctype(type : dtype):
     if type.is_int8():
         return DT_INT8
+    elif type.is_uint8():
+        return DT_UINT8
     elif type.is_uint16():
         return DT_UINT16
     elif type.is_fp16():
@@ -343,6 +345,8 @@ def convert_ctype_to_dtype(type):
 def convert_torch_type_to_dtype(type):
     if type is torch.int8:
         return int8
+    elif type is torch.uint8:
+        return uint8
     elif type is torch.uint16:
         return uint16
     elif type is torch.int32:

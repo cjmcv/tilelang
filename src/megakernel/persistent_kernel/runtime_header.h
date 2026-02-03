@@ -82,6 +82,7 @@ enum TaskType {
   TASK_LINEAR = 120,
   TASK_IDENTITY = 121,
   TASK_SILU_MUL_LINEAR = 122,
+  TASK_GQA_DECODE = 123,
   // Hopper Tasks
   TASK_HOPPER_TASK_BEGIN = 150, // Hopper start placeholder, not a real task
   TASK_LINEAR_WITH_RESIDUAL_HOPPER = 151,

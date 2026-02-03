@@ -120,14 +120,14 @@ def test_gqa_decode():
     dim = 128
     
     # config = [64,64,64,2,128,0,true]
-    micro = MicroGqaDecode(heads, groups, dim, batch, kv_seqlen, dtype=T.bfloat16, accum_dtype=T.float32)
+    micro = MicroGqaDecode(batch, kv_seqlen, heads, groups, dim, dtype=T.bfloat16, accum_dtype=T.float32)
     kernel, name, info  = micro.get_kernel(HparamSelectMode.HEURISTIC) # HEURISTIC, TUNING, TUNED
 
     q = torch.randn(batch, heads, dim, device="cuda", dtype=torch.bfloat16)              # [B, N=q_seqlen=1, H=heads,  D=dim]
     k = torch.randn(batch, kv_seqlen, groups, dim, device="cuda", dtype=torch.bfloat16)  # [B, N=kv_seqlen,  H=groups, D=dim]
     v = torch.randn(batch, kv_seqlen, groups, dim, device="cuda", dtype=torch.bfloat16)
     # mask = torch.randint(0, 2, (batch, kv_seqlen, groups), device="cuda", dtype=torch.uint8) # Only 0/1
-    mask = torch.ones((batch, kv_seqlen, groups), device="cuda", dtype=torch.uint8)      # no mask
+    mask = torch.ones(batch, kv_seqlen, groups, device="cuda", dtype=torch.uint8)      # no mask
     
     # 上面的mask(batch, kv_seqlen, groups)，维度其实是(batch, q_seqlen, kv_seqlen, groups),groups维度是广播出来的，mask只跟q_seqlen, kv_seqlen有关
     # q_len = 4
@@ -136,7 +136,7 @@ def test_gqa_decode():
     # mask.unsqueeze(2).expand(-1, -1, groups, -1).transpose(1, 2)
     # print(mask, mask.shape)
     
-    split = 8
+    split = 1
     glse = torch.empty(batch, heads, split, device="cuda", dtype=torch.bfloat16)
     Output_partial = torch.empty(batch, heads, split, dim, device="cuda", dtype=torch.bfloat16)
     

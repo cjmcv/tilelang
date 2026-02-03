@@ -371,7 +371,10 @@ public:
     assert(op->op_type == type::KN_CUSTOMIZED_OP);
     KNCustomizedOp const *customized = static_cast<KNCustomizedOp const *>(op);
     TaskRegister *task_register = TaskRegister::get_instance();
-    if (name == "embedding") {
+    if (name == "gqa_decode") {
+      int variant_id = task_register->register_gqa_decode_task(customized->bgraph, params);
+      task_config[op] = std::make_tuple(5, 2, TASK_GQA_DECODE, variant_id);
+    } else if (name == "embedding") {
       int variant_id = task_register->register_embedding_task(customized->bgraph, params);
       task_config[op] = std::make_tuple(2, 1, TASK_EMBEDDING, variant_id);
     } else if (name == "rmsnorm") {
@@ -1528,7 +1531,6 @@ private:
     code.e("cudaDeviceSynchronize();");
     code.e("}");
     code.e("");
-
     // Generate task implementation
     std::map<TaskType, std::string> task_type_to_name;
     task_type_to_name[TASK_EMBEDDING] = "TASK_EMBEDDING";
@@ -1536,6 +1538,7 @@ private:
     task_type_to_name[TASK_RMS_NORM_LINEAR] = "TASK_RMS_NORM_LINEAR";
     task_type_to_name[TASK_ATTENTION_1] = "TASK_ATTENTION_1";
     task_type_to_name[TASK_SILU_MUL] = "TASK_SILU_MUL";
+    task_type_to_name[TASK_GQA_DECODE] = "TASK_GQA_DECODE";
     task_type_to_name[TASK_IDENTITY] = "TASK_IDENTITY";
     task_type_to_name[TASK_SILU_MUL_LINEAR_WITH_RESIDUAL] = "TASK_SILU_MUL_LINEAR_WITH_RESIDUAL";
     task_type_to_name[TASK_LINEAR] = "TASK_LINEAR";
