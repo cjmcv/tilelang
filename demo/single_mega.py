@@ -28,14 +28,20 @@ def test_mlp_rms_norm(mpk, max_batch_size, batch_size, hidden_size):
     )
     layers.compile_load(args.nc, args.output_dir)
 
-    def ref_run():
+    def torch_ref():
         return TorchRef.rms_norm(x_torch[:batch_size], w_rms_norm_torch)
 
-    def mpk_run():
+    def target_func():
         mpk(batch_size)
         return out_torch[:batch_size]
-        
-    return mpk_run, ref_run
+    
+    mpk_output = target_func()    
+    ref_output = torch_ref()
+    reporter.generate_report(target_func, mpk_output, splitk, 
+                            torch_ref, ref_output, 
+                            warnup_iter=100, test_iter=100, 
+                            allclose_iter=5, print_all=False)
+
 
 def test_mlp_linear1(mpk, max_batch_size, batch_size, hidden_size, intermediate_size):
     x_torch = torch.randn((max_batch_size, hidden_size), dtype=torch.bfloat16, device="cuda")
@@ -59,14 +65,19 @@ def test_mlp_linear1(mpk, max_batch_size, batch_size, hidden_size, intermediate_
     )
     layers.compile_load(args.nc, args.output_dir)
     
-    def ref_run():
+    def torch_ref():
         return TorchRef.linear(x_torch[:batch_size], w_torch)
     
-    def mpk_run():
+    def target_func():
         mpk(batch_size)
         return out_torch[:batch_size]
         
-    return mpk_run, ref_run
+    mpk_output = target_func()
+    ref_output = torch_ref()
+    reporter.generate_report(target_func, mpk_output, splitk, 
+                            torch_ref, ref_output, 
+                            warnup_iter=100, test_iter=100, 
+                            allclose_iter=5, print_all=False)
 
 def test_mlp_silu_mul(mpk, max_batch_size, batch_size, intermediate_size):
     x_torch = torch.randn((max_batch_size, intermediate_size*2), dtype=torch.bfloat16, device="cuda")
@@ -82,15 +93,20 @@ def test_mlp_silu_mul(mpk, max_batch_size, batch_size, intermediate_size):
     )
     layers.compile_load(args.nc, args.output_dir)
 
-    def ref_run():
+    def torch_ref():
         return TorchRef.silu_and_mul(x_torch[:batch_size])
     
-    def mpk_run():
+    def target_func():
         mpk(batch_size)
         return out_torch[:batch_size]
         
-    return mpk_run, ref_run
-
+    mpk_output = target_func()    
+    ref_output = torch_ref()
+    reporter.generate_report(target_func, mpk_output, splitk, 
+                            torch_ref, ref_output, 
+                            warnup_iter=100, test_iter=100, 
+                            allclose_iter=5, print_all=False)
+    
 def test_mlp_linear_residual2(mpk, max_batch_size, batch_size, hidden_size, intermediate_size):
     x_residual_torch = torch.randn((max_batch_size, hidden_size), dtype=torch.bfloat16, device="cuda")
     x_torch = torch.randn((max_batch_size, intermediate_size), dtype=torch.bfloat16, device="cuda")
@@ -112,29 +128,34 @@ def test_mlp_linear_residual2(mpk, max_batch_size, batch_size, hidden_size, inte
     )
     layers.compile_load(args.nc, args.output_dir)
     
-    def ref_run():
+    def torch_ref():
         return TorchRef.linear(x_torch[:batch_size], w_down_proj_torch) + x_residual_torch
 
-    def mpk_run():
+    def target_func():
         mpk(batch_size)
         return out_torch[:batch_size]
         
-    return mpk_run, ref_run
+    mpk_output = target_func()    
+    ref_output = torch_ref()
+    reporter.generate_report(target_func, mpk_output, splitk, 
+                            torch_ref, ref_output, 
+                            warnup_iter=100, test_iter=100, 
+                            allclose_iter=5, print_all=False)
     
     
     
 def test_gqa_decode(mpk, max_batch_size, batch, heads, groups, seqlen_kv, dim):
     split = 1
     
-    q_torch = torch.randn(batch, heads, dim, device="cuda", dtype=torch.bfloat16)              # [B, N=seqlen_q=1, H=heads,  D=dim]
-    k_torch = torch.randn(batch, seqlen_kv, groups, dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
-    v_torch = torch.randn(batch, seqlen_kv, groups, dim, device="cuda", dtype=torch.bfloat16)
-    mask_torch = torch.ones(batch, seqlen_kv, groups, device="cuda", dtype=torch.uint8)
+    q_torch = torch.randn(batch, heads, dim, device="cuda", dtype=torch.bfloat16).contiguous()              # [B, N=seqlen_q=1, H=heads,  D=dim]
+    k_torch = torch.randn(batch, seqlen_kv, groups, dim, device="cuda", dtype=torch.bfloat16).contiguous()  # [B, N=seqlen_kv,  H=groups, D=dim]
+    v_torch = torch.randn(batch, seqlen_kv, groups, dim, device="cuda", dtype=torch.bfloat16).contiguous()
+    mask_torch = torch.ones(batch, seqlen_kv, groups, device="cuda", dtype=torch.uint8).contiguous()
     glse_torch = torch.empty(batch, heads, split, device="cuda", dtype=torch.bfloat16)
     out_partial_torch = torch.empty(batch, heads, split, dim, device="cuda", dtype=torch.bfloat16)
-    out_torch = torch.empty(batch, heads, dim, device="cuda", dtype=torch.bfloat16)
+    out_torch = torch.empty(batch, heads, dim, device="cuda", dtype=torch.bfloat16).contiguous()
     
-    print("torch: ", q_torch.data_ptr(), k_torch.data_ptr(), v_torch.data_ptr(), mask_torch.data_ptr(), out_torch.data_ptr())
+    # print("torch: ", q_torch.data_ptr(), k_torch.data_ptr(), v_torch.data_ptr(), mask_torch.data_ptr(), out_torch.data_ptr())
     q = mpk.attach_input(torch_tensor=q_torch, name="q")
     k = mpk.attach_input(torch_tensor=k_torch, name="k")
     v = mpk.attach_input(torch_tensor=v_torch, name="v")
@@ -162,8 +183,16 @@ def test_gqa_decode(mpk, max_batch_size, batch, heads, groups, seqlen_kv, dim):
     
     def torch_ref():
         return TorchRef.attention_sdpa(q_torch, k_torch, v_torch, False)
-        
-    return target_func, torch_ref
+    
+    mpk_output = target_func()    
+    ref_output = torch_ref()
+    # if (torch.allclose(out_torch, ref_output, rtol=1e-2, atol=0)):
+    #     print("allclose: True")
+    
+    reporter.generate_report(target_func, mpk_output, splitk, 
+                            torch_ref, ref_output, 
+                            warnup_iter=100, test_iter=100, 
+                            allclose_iter=5, print_all=False)
 
 
 if __name__ == "__main__":
@@ -205,23 +234,11 @@ if __name__ == "__main__":
     hidden_size = 1024
     intermediate_size = 3072
     
-    # mpk_run, ref_run = test_mlp_rms_norm(mpk, max_batch_size, batch_size, hidden_size)
-    # mpk_run, ref_run = test_mlp_linear1(mpk, max_batch_size, batch_size, hidden_size, intermediate_size)
-    # mpk_run, ref_run = test_mlp_silu_mul(mpk, max_batch_size, batch_size, intermediate_size)
-    # mpk_run, ref_run = test_mlp_linear_residual2(mpk, max_batch_size, batch_size, hidden_size, intermediate_size)
-    mpk_run, ref_run = test_gqa_decode(mpk, max_batch_size=1, batch=1, heads=16, groups=8, seqlen_kv=8192, dim=128)
-    
-    # ###
-    ref_output = ref_run()
-    mpk_output = mpk_run()
-    # if (torch.allclose(out_torch, ref_output, rtol=1e-2, atol=0)):
-    #     print("allclose: True")
-    ###
-    
-    reporter.generate_report(mpk_run, mpk_output, splitk, 
-                            ref_run, ref_output, 
-                            warnup_iter=100, test_iter=100, 
-                            allclose_iter=5, print_all=False)
+    # test_mlp_rms_norm(mpk, max_batch_size, batch_size, hidden_size)
+    # test_mlp_linear1(mpk, max_batch_size, batch_size, hidden_size, intermediate_size)
+    # test_mlp_silu_mul(mpk, max_batch_size, batch_size, intermediate_size) # 5us vs 2us，需要加速
+    # test_mlp_linear_residual2(mpk, max_batch_size, batch_size, hidden_size, intermediate_size)
+    test_gqa_decode(mpk, max_batch_size=1, batch=1, heads=16, groups=8, seqlen_kv=8192, dim=128)
     
     # ncu --set full --section "SpeedOfLight_RooflineChart" -k "kernel" -o my_profile python demo/single_linear.py --nc
     # ncu --set full --section "SpeedOfLight_RooflineChart" -k "persistent_kernel" -o my_profile python demo/single_linear.py

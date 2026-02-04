@@ -322,13 +322,15 @@ class PerfReporter:
                     
                 target_result = target_out[0]
                 torch_result = torch_out[0]
-                total_num = torch_result.shape[0]
             else:
                 target_result = target_out
                 torch_result = torch_out
-                total_num = torch_result.shape[0] * torch_result.shape[1]
             
+            total_num = torch_result.numel()
             if (torch.allclose(target_result, torch_result, rtol=1e-2, atol=0)):
+                if (print_all):
+                    print("target_out:", target_result.shape, "\n", target_result)
+                    print("torch_out:", torch_result.shape, "\n", torch_result)
                 print("allclose: True")
             else:
                 print("target_out:", target_result.shape, "\n", target_result)

@@ -28,6 +28,7 @@ __device__ __forceinline__ void flashattn_kernel_1_8192_16_8_128(const int bx, c
                                                    void* __restrict__ output_partial_ptr,
                                                    void* __restrict__ output_ptr) {
   // printf("gqa q: %lld, k: %lld, v: %lld, m: %lld, o: %lld.\n", q, k, v, mask_ptr, output_ptr);
+  // printf("<%d, %d, %d>-<%d>\n", bx, by, bx, threadIdx.x);
   static_assert(THREAD_NUM==128);
   static_assert(M==1); static_assert(HEAD==16); static_assert(GROUPS==8); static_assert(DIM==128);
   

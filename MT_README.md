@@ -45,6 +45,13 @@ export MEGAKERNEL_HOME=/data/team/cjm/mg89 && export PYTHONPATH=$MEGAKERNEL_HOME
 pushd demo && python micro_test.py && popd
 pushd demo && python fused_mlp.py && popd
 
+# 指令
+nsys profile --trace=cuda,nvtx --output=my_nsys
+ncu --set full --section "SpeedOfLight_RooflineChart" -k "persistent_kernel" -o my_profile python...
+"kernel"
+compute-sanitizer --tool memcheck python demo/single_mega.py --nc
+compute-sanitizer --tool memcheck --shared-memory-check yes ./your_cuda_program
+
 # 清submodule
 git submodule deinit -f 3rdparty/tvm/
 git rm -f 3rdparty/tvm/
