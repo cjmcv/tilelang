@@ -152,12 +152,13 @@ class JITKernel(Generic[_P, _T]):
     def get_launch_info(self):
         assert self.artifact is not None, "self.artifact is not available"
         
-        grid_dim = {"blockIdx.x": 1, "blockIdx.y": 1, "blockIdx.z": 1}
-        block_dim = {"threadIdx.x": 1, "threadIdx.y": 1, "threadIdx.z": 1}
-        dynamic_smem_buf = 0
-        use_cooperative_groups = 0
-        
+        infos = []
         for g_var, func in self.artifact.device_mod.functions.items():
+            grid_dim = {"blockIdx.x": 1, "blockIdx.y": 1, "blockIdx.z": 1}
+            block_dim = {"threadIdx.x": 1, "threadIdx.y": 1, "threadIdx.z": 1}
+            dynamic_smem_buf = 0
+            use_cooperative_groups = 0
+        
             attrs = func.attrs
             if "use_cooperative_groups" in attrs:
                 use_cooperative_groups = attrs["use_cooperative_groups"]
@@ -171,9 +172,8 @@ class JITKernel(Generic[_P, _T]):
                         grid_dim[tag] = extent
                     elif tag in block_dim:
                         block_dim[tag] = extent
-                        
-        # print(grid_dim, block_dim, dynamic_smem_buf, use_cooperative_groups)
-        return grid_dim, block_dim, dynamic_smem_buf, use_cooperative_groups
+            infos.append((grid_dim, block_dim, dynamic_smem_buf, use_cooperative_groups))
+        return infos
             
     def _compile_and_create_adapter(self, tilelang_func: PrimFunc, out_idx: list[int]) -> BaseKernelAdapter:
         """

@@ -391,19 +391,27 @@ class PersistentKernel:
         sync_mode: tuple,
         layout: tuple,
     ):
-        grid_dim, tile_dim = layout
         assert q.num_dims == 3
         assert output.num_dims == 3
-        tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128, 64))
-        tb_graph.new_input(q,       sync_mode, True)
-        tb_graph.new_input(k_cache, sync_mode, True)
-        tb_graph.new_input(v_cache, sync_mode, True)
-        tb_graph.new_input(mask,    sync_mode, True)
-        tb_graph.new_input(glse,    sync_mode, True)
-        tb_graph.new_input(out_partial, sync_mode, True)
-        tb_graph.new_input(output, (-1, -1, -1), True)
-        self.kn_graph.customized([q, k_cache, v_cache, mask, glse, out_partial, output], tb_graph)
-        self.kn_graph.register_task(tb_graph, "gqa_decode")
+    
+        for i in range(0, len(layout), 2):
+            grid_dim, tile_dim = layout[i], layout[i+1]
+            print(grid_dim, tile_dim, sync_mode)
+            tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128, 64))
+            tb_graph.new_input(q,       sync_mode, True)
+            tb_graph.new_input(k_cache, sync_mode, True)
+            tb_graph.new_input(v_cache, sync_mode, True)
+            tb_graph.new_input(mask,    sync_mode, True)
+            tb_graph.new_input(output, (-1, -1, -1), True)
+            tb_graph.new_input(glse,    (-1, -1, -1), True)
+            tb_graph.new_input(out_partial, (-1, -1, -1), True)
+            
+            self.kn_graph.customized([q, k_cache, v_cache, mask, output, glse, out_partial], tb_graph)
+            if len(layout) == 2:
+                self.kn_graph.register_task(tb_graph, "gqa_decode", [-1])
+            else:
+                self.kn_graph.register_task(tb_graph, "gqa_decode", [i//2])
+        
         
     def attention_layer(
         self,

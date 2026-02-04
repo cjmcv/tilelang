@@ -136,7 +136,7 @@ def test_gqa_decode():
     # mask.unsqueeze(2).expand(-1, -1, groups, -1).transpose(1, 2)
     # print(mask, mask.shape)
     
-    split = kernel.config[3]
+    split = kernel.config[2]
     glse = torch.empty(batch, heads, split, device="cuda", dtype=torch.bfloat16)
     Output_partial = torch.empty(batch, heads, split, dim, device="cuda", dtype=torch.bfloat16)
     
@@ -161,3 +161,5 @@ if __name__ == "__main__":
     # # gen = MicroAutoGen(1, 2560, 9728)
     # gen = MicroAutoGen(1, 1024, 3072)
     # gen.gen_qwen3_mlp(99, HparamSelectMode.TUNED) # HEURISTIC, TUNING, TUNED
+    
+    print("Test single_micro completed.")

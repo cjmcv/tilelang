@@ -35,9 +35,9 @@ def test_mlp_rms_norm(mpk, max_batch_size, batch_size, hidden_size):
         mpk(batch_size)
         return out_torch[:batch_size]
     
-    mpk_output = target_func()    
+    target_output = target_func()    
     ref_output = torch_ref()
-    reporter.generate_report(target_func, mpk_output, splitk, 
+    reporter.generate_report(target_func, target_output, splitk, 
                             torch_ref, ref_output, 
                             warnup_iter=100, test_iter=100, 
                             allclose_iter=5, print_all=False)
@@ -72,9 +72,9 @@ def test_mlp_linear1(mpk, max_batch_size, batch_size, hidden_size, intermediate_
         mpk(batch_size)
         return out_torch[:batch_size]
         
-    mpk_output = target_func()
+    target_output = target_func()
     ref_output = torch_ref()
-    reporter.generate_report(target_func, mpk_output, splitk, 
+    reporter.generate_report(target_func, target_output, splitk, 
                             torch_ref, ref_output, 
                             warnup_iter=100, test_iter=100, 
                             allclose_iter=5, print_all=False)
@@ -100,9 +100,9 @@ def test_mlp_silu_mul(mpk, max_batch_size, batch_size, intermediate_size):
         mpk(batch_size)
         return out_torch[:batch_size]
         
-    mpk_output = target_func()    
+    target_output = target_func()    
     ref_output = torch_ref()
-    reporter.generate_report(target_func, mpk_output, splitk, 
+    reporter.generate_report(target_func, target_output, splitk, 
                             torch_ref, ref_output, 
                             warnup_iter=100, test_iter=100, 
                             allclose_iter=5, print_all=False)
@@ -135,9 +135,9 @@ def test_mlp_linear_residual2(mpk, max_batch_size, batch_size, hidden_size, inte
         mpk(batch_size)
         return out_torch[:batch_size]
         
-    mpk_output = target_func()    
+    target_output = target_func()    
     ref_output = torch_ref()
-    reporter.generate_report(target_func, mpk_output, splitk, 
+    reporter.generate_report(target_func, target_output, splitk, 
                             torch_ref, ref_output, 
                             warnup_iter=100, test_iter=100, 
                             allclose_iter=5, print_all=False)
@@ -145,15 +145,15 @@ def test_mlp_linear_residual2(mpk, max_batch_size, batch_size, hidden_size, inte
     
     
 def test_gqa_decode(mpk, max_batch_size, batch, heads, groups, seqlen_kv, dim):
-    split = 1
-    
-    q_torch = torch.randn(batch, heads, dim, device="cuda", dtype=torch.bfloat16).contiguous()              # [B, N=seqlen_q=1, H=heads,  D=dim]
-    k_torch = torch.randn(batch, seqlen_kv, groups, dim, device="cuda", dtype=torch.bfloat16).contiguous()  # [B, N=seqlen_kv,  H=groups, D=dim]
-    v_torch = torch.randn(batch, seqlen_kv, groups, dim, device="cuda", dtype=torch.bfloat16).contiguous()
-    mask_torch = torch.ones(batch, seqlen_kv, groups, device="cuda", dtype=torch.uint8).contiguous()
+    split = 8
     glse_torch = torch.empty(batch, heads, split, device="cuda", dtype=torch.bfloat16)
     out_partial_torch = torch.empty(batch, heads, split, dim, device="cuda", dtype=torch.bfloat16)
-    out_torch = torch.empty(batch, heads, dim, device="cuda", dtype=torch.bfloat16).contiguous()
+    
+    q_torch = torch.randn(batch, heads, dim, device="cuda", dtype=torch.bfloat16)              # [B, N=seqlen_q=1, H=heads,  D=dim]
+    k_torch = torch.randn(batch, seqlen_kv, groups, dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
+    v_torch = torch.randn(batch, seqlen_kv, groups, dim, device="cuda", dtype=torch.bfloat16)
+    mask_torch = torch.ones(batch, seqlen_kv, groups, device="cuda", dtype=torch.uint8)
+    out_torch = torch.empty(batch, heads, dim, device="cuda", dtype=torch.bfloat16)
     
     # print("torch: ", q_torch.data_ptr(), k_torch.data_ptr(), v_torch.data_ptr(), mask_torch.data_ptr(), out_torch.data_ptr())
     q = mpk.attach_input(torch_tensor=q_torch, name="q")
@@ -173,7 +173,8 @@ def test_gqa_decode(mpk, max_batch_size, batch, heads, groups, seqlen_kv, dim):
         out_partial=out_partial,
         output=attn_out,
         sync_mode=(0, 0, 0),
-        layout=((1, 8, 1), (64, 64, 1)), # Qwen3MlpConfig.linear2_layout,
+        # layout=((1, 8, 1), (64, 64, 1)), # Qwen3MlpConfig.linear2_layout,(1, 8, 8), (64, 64, 8), (16, 1, 1), (64, 64, 8)
+        layout=((1, 8, 8), (64, 64, 8), (16, 1, 1), (64, 64, 8))
     )
     layers.compile_load(args.nc, args.output_dir)
     
@@ -184,16 +185,24 @@ def test_gqa_decode(mpk, max_batch_size, batch, heads, groups, seqlen_kv, dim):
     def torch_ref():
         return TorchRef.attention_sdpa(q_torch, k_torch, v_torch, False)
     
-    mpk_output = target_func()    
+    target_output = target_func()    
     ref_output = torch_ref()
+    print("target_output", target_output)
+    print("ref_output", ref_output)
+    
+    print("target_output", target_func())
+    print("ref_output", torch_ref())
+    # print("target_output", target_func())
+    # print("ref_output", torch_ref())
+    # print("target_output", target_func())
+    # print("ref_output", torch_ref())
     # if (torch.allclose(out_torch, ref_output, rtol=1e-2, atol=0)):
     #     print("allclose: True")
     
-    reporter.generate_report(target_func, mpk_output, splitk, 
+    reporter.generate_report(target_func, target_output, splitk, 
                             torch_ref, ref_output, 
                             warnup_iter=100, test_iter=100, 
                             allclose_iter=5, print_all=False)
-
 
 if __name__ == "__main__":
     max_batch_size = 1
@@ -240,5 +249,6 @@ if __name__ == "__main__":
     # test_mlp_linear_residual2(mpk, max_batch_size, batch_size, hidden_size, intermediate_size)
     test_gqa_decode(mpk, max_batch_size=1, batch=1, heads=16, groups=8, seqlen_kv=8192, dim=128)
     
+    print("Test single_mega completed.")
     # ncu --set full --section "SpeedOfLight_RooflineChart" -k "kernel" -o my_profile python demo/single_linear.py --nc
     # ncu --set full --section "SpeedOfLight_RooflineChart" -k "persistent_kernel" -o my_profile python demo/single_linear.py

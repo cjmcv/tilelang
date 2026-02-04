@@ -124,7 +124,7 @@ __device__ __forceinline__ void silu_mul_kernel_<name_suffix>(const int bx, cons
         source = origin_source.replace("blockIdx.x", "bx")
         source = source.replace("blockIdx.y", "by")
         source = source.replace("blockIdx.z", "bz")
-        source = self.replace_line(source, "extern \"C\" __global__", 1, head_str)
+        source = self.replace_header(source, "extern \"C\" __global__", False, head_str)
         source += "\n} // kernel"
         
         grid_dim, block_dim, dynamic_smem_buf, use_cooperative_groups = kernel.get_launch_info()

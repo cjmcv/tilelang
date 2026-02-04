@@ -139,20 +139,34 @@ class BaseMicroKernel:
         target_dir = Path(self.base_path)
         target_dir.mkdir(parents=True, exist_ok=True)
 
-    def replace_line(self, text: str, src_target: str, skip_count: int, dst_target: str) -> str:
+    def replace_header(self, text: str, src_target: str, num_split: int, dst_target: str) -> str:
         lines = text.splitlines(True)
         processed_lines = []
         target_count = 0
-        
+        matched_count = 0
+            
+        if num_split > 1:
+            skip_count = 2
+        else:
+            skip_count = 1
+            
         for line in lines:
             if src_target in line:
-                target_count += 1
-                if target_count == skip_count:
+                matched_count += 1
+                if matched_count == 1:
+                    processed_lines.append("namespace kernel {\n")  # 第一次命中函数名时，加入命名空间的头
+                if matched_count <= skip_count:
                     continue
-                processed_lines.append(dst_target)
+                
+                target_count += 1
+                if num_split > 1:
+                    processed_lines.append(dst_target.replace('<kernel_id>', str(target_count-1))) # 更换kernel_id号，从下标0开始
+                else:
+                    processed_lines.append(dst_target)
             else:
                 processed_lines.append(line)
-        return "".join(processed_lines)
+        code = "".join(processed_lines)
+        return code + "\n} // kernel"
 
     def write_tuned_hparams_to_json(self, latency_hparams_list, file_path):
         with open(file_path, "w", encoding="utf-8") as f:

@@ -364,7 +364,7 @@ public:
                             io_config,
                             true /*use_json_format*/);
   }
-  
+
   void register_task(char const *task_type, std::vector<int> params) {
     std::string name = std::string(task_type);
     KNOperator const *op = operators.back();
@@ -373,7 +373,7 @@ public:
     TaskRegister *task_register = TaskRegister::get_instance();
     if (name == "gqa_decode") {
       int variant_id = task_register->register_gqa_decode_task(customized->bgraph, params);
-      task_config[op] = std::make_tuple(5, 2, TASK_GQA_DECODE, variant_id);
+      task_config[op] = std::make_tuple(4, 3, TASK_GQA_DECODE, variant_id);
     } else if (name == "embedding") {
       int variant_id = task_register->register_embedding_task(customized->bgraph, params);
       task_config[op] = std::make_tuple(2, 1, TASK_EMBEDDING, variant_id);
@@ -634,7 +634,7 @@ private:
     std::map<dim3, TaskId, Dim3Comparator> &cur_task_map) {
     
     int fence_mode = input_map.x + input_map.y*10 + input_map.z*100;
-
+    printf("fence_mode: %d.\n", fence_mode);
     std::vector<std::pair<std::vector<dim3>, std::vector<dim3>>> pv;
     size_t event_num = 1;
     // 获取映射信息
@@ -898,7 +898,7 @@ private:
       } else {
         // Step 2.1: analyze dependencies between thread blocks of the two ops
         int num_shared_tensors = 0;
-        int3 input_map, output_map;
+        int3 input_map={0,0,0}, output_map={-1,-1,-1};
         for (auto const &input : input_ops) {
           for (auto const &output : pre_output_ops) {
             if (input->dtensor.guid == output->dtensor.guid) {
@@ -906,7 +906,8 @@ private:
               output_map = output->input_map;
               num_shared_tensors++;
             }
-            printf("task_type: %d: guid: %ld, %ld.\n", task_type, input->dtensor.guid, output->dtensor.guid);
+            printf("task_type: %d: guid: %ld vs %ld, map: (%d,%d,%d) vs (%d,%d,%d).\n", task_type, input->dtensor.guid, output->dtensor.guid,
+              input_map.x, input_map.y, input_map.z, output_map.x, output_map.y, output_map.z);
           }
         }
 

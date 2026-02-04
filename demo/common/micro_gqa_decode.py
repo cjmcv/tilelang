@@ -35,8 +35,8 @@ class _GqaDecodeStrategy:
     
     def get_heuristic_hparams(self):
         # block_N=128, block_H=64, num_split=1, num_stages=0, threads=128
-        return [64, 64, 1, 1, 128]
-        # return [64, 64, 8, 1, 128] 
+        # return [64, 64, 1, 1, 128]
+        return [64, 64, 8, 1, 128] 
     
     def get_kernel(self, selected_hparams):
         print("selected_hparams: ", selected_hparams)
@@ -310,10 +310,9 @@ class MicroGqaDecode(BaseMicroKernel):
         # return kernel.get_kernel_source()
         head_str = \
 '''
-namespace kernel {
-
 template <typename T,
           int THREAD_NUM,
+          int SUB_KERNEL_ID,
           int M, 
           int HEAD,
           int GROUPS,
@@ -323,9 +322,9 @@ __device__ __forceinline__ void flashattn_kernel_<name_suffix>(const int bx, con
                                                    const void* __restrict__ k, 
                                                    const void* __restrict__ v,
                                                    const void* __restrict__ mask_ptr, 
-                                                   const void* __restrict__ glse_ptr,
-                                                   void* __restrict__ output_partial_ptr,
-                                                   void* __restrict__ output_ptr) {
+                                                   void* __restrict__ output_ptr,
+                                                   void* __restrict__ glse_ptr,
+                                                   void* __restrict__ output_partial_ptr) {
   static_assert(THREAD_NUM==<threads>);
   static_assert(M==<BATCH>); static_assert(HEAD==<HEAD>); static_assert(GROUPS==<GROUPS>); static_assert(DIM==<DIM>);
   
@@ -333,10 +332,10 @@ __device__ __forceinline__ void flashattn_kernel_<name_suffix>(const int bx, con
   const <dtype>* __restrict__ K = static_cast<const <dtype>*>(k);
   const <dtype>* __restrict__ V = static_cast<const <dtype>*>(v);
   const uchar* __restrict__ mask = static_cast<const uchar*>(mask_ptr);
-  const <dtype>* __restrict__ glse = static_cast<const <dtype>*>(glse_ptr);
-  <dtype>* __restrict__ Output_partial = static_cast<<dtype>*>(output_partial_ptr);
   <dtype>* __restrict__ Output = static_cast<<dtype>*>(output_ptr);
-  
+  <dtype>* __restrict__ glse = static_cast<<dtype>*>(glse_ptr);
+  <dtype>* __restrict__ Output_partial = static_cast<<dtype>*>(output_partial_ptr);
+
 '''     
 
         BLOCK_N, BLOCK_H, num_split, num_stages, threads = selected_hparams
@@ -346,7 +345,10 @@ __device__ __forceinline__ void flashattn_kernel_<name_suffix>(const int bx, con
         head_str = head_str.replace('<HEAD>', str(self.heads))
         head_str = head_str.replace('<GROUPS>', str(self.groups))
         head_str = head_str.replace('<DIM>', str(self.dim))
-        head_str = head_str.replace('<name_suffix>', f"{self.batch}_{self.kv_seqlen}_{self.heads}_{self.groups}_{self.dim}")
+        if num_split > 1:
+            head_str = head_str.replace('<name_suffix>', f"{self.batch}_{self.kv_seqlen}_{self.heads}_{self.groups}_{self.dim}__<kernel_id>")
+        else:
+            head_str = head_str.replace('<name_suffix>', f"{self.batch}_{self.kv_seqlen}_{self.heads}_{self.groups}_{self.dim}")
         if self.dtype == T.bfloat16:
             dtype = "bfloat16_t"
         else:
@@ -354,14 +356,17 @@ __device__ __forceinline__ void flashattn_kernel_<name_suffix>(const int bx, con
         head_str = head_str.replace('<dtype>', str(dtype))
                 
         origin_source = kernel.get_kernel_source()
-        source = origin_source.replace("blockIdx.x", "bx")
+        source = self.replace_header(origin_source, "extern \"C\" __global__", num_split, head_str)
+        source = source.replace("blockIdx.x", "bx")
         source = source.replace("blockIdx.y", "by")
         source = source.replace("blockIdx.z", "bz")
-        source = self.replace_line(source, "extern \"C\" __global__", 1, head_str)
-        source += "\n} // kernel"
         
-        grid_dim, block_dim, dynamic_smem_buf, use_cooperative_groups = kernel.get_launch_info()
+        infos = kernel.get_launch_info()
+        grid_dim, block_dim, dynamic_smem_buf, use_cooperative_groups = infos[0]
         self.layout = f"({grid_dim['blockIdx.x']}, {grid_dim['blockIdx.y']}, {grid_dim['blockIdx.z']}), ({BLOCK_N}, {BLOCK_H}, {num_split})"
+        if (num_split > 1):
+            grid_dim, block_dim, dynamic_smem_buf, use_cooperative_groups = infos[1]
+            self.layout += f", ({grid_dim['blockIdx.x']}, {grid_dim['blockIdx.y']}, {grid_dim['blockIdx.z']}), ({BLOCK_N}, {BLOCK_H}, {num_split})"
         extra_attr = f"\n// Strategy: {self.strategy.name}"
         extra_attr += f"\n// selected_hparams: {selected_hparams}."
         extra_attr += f"\n// smem: {dynamic_smem_buf} bytes."
