@@ -5,7 +5,7 @@ import tilelang.language as T
 from common.micro_base import BaseMicroKernel, HparamSelectMode
 
 class _GqaDecodeStrategy:
-    def __init__(self, batch, kv_seqlen, heads, groups, dim, dtype, accum_dtype):
+    def __init__(self, batch, kv_seqlen, heads, groups, dim, is_causal, dtype, accum_dtype):
         self.name = "gqa_decode_tl"+f"_{batch}_{kv_seqlen}_{heads}_{groups}_{dim}"
             
         self.heads = heads
@@ -13,6 +13,7 @@ class _GqaDecodeStrategy:
         self.dim = dim
         self.batch = batch
         self.kv_seqlen = kv_seqlen
+        self.is_causal = is_causal
         
         self.dtype = dtype
         self.accum_dtype = accum_dtype
@@ -36,17 +37,17 @@ class _GqaDecodeStrategy:
     def get_heuristic_hparams(self):
         # block_N=128, block_H=64, num_split=1, num_stages=0, threads=128
         # return [64, 64, 1, 1, 128]
-        return [64, 64, 8, 1, 128] 
+        return [64, 64, 4, 1, 128] 
     
     def get_kernel(self, selected_hparams):
         print("selected_hparams: ", selected_hparams)
-        return self.kernel_main(self.batch, self.heads, self.groups, self.kv_seqlen, self.dim, *selected_hparams, self.dtype, self.accum_dtype) 
+        return self.kernel_main(self.batch, self.heads, self.groups, self.kv_seqlen, self.dim, self.is_causal, *selected_hparams, self.dtype, self.accum_dtype) 
 
     def get_pass_configs():
         return {tilelang.PassConfigKey.TL_DISABLE_TMA_LOWER: True, tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True}
 
     @tilelang.jit(out_idx=[6], pass_configs=get_pass_configs())
-    def kernel_main(batch, heads, groups, kv_seqlen, dim, block_N, block_H, num_split, num_stages, threads, dtype="bfloat16", accum_dtype="float32"):
+    def kernel_main(batch, heads, groups, kv_seqlen, dim, is_causal, block_N, block_H, num_split, num_stages, threads, dtype="bfloat16", accum_dtype="float32"):
         scale = (1.0 / dim) ** 0.5 * 1.44269504  # log2(e)
         shape_q = [batch, heads, dim]           # [batch, seqlen_q, heads, dim]
         shape_k = [batch, kv_seqlen, groups, dim]
@@ -94,11 +95,13 @@ class _GqaDecodeStrategy:
                 loop_range = T.ceildiv((kv_seqlen // num_split), block_N)
                 for k in T.Pipelined(loop_range, num_stages=num_stages):
                     T.copy(K[bid, k * block_N : (k + 1) * block_N, cur_kv_head, :], K_shared)
-                    T.copy(mask[bid, k * block_N : (k + 1) * block_N, cur_kv_head], mask_local)
+                    if is_causal:
+                        T.copy(mask[bid, k * block_N : (k + 1) * block_N, cur_kv_head], mask_local)
                     T.clear(acc_s)
                     T.gemm(Q_shared, K_shared, acc_s, transpose_B=True, policy=T.GemmWarpPolicy.FullRow)
-                    for i, j in T.Parallel(block_H, block_N):
-                        acc_s[i, j] = T.if_then_else(mask_local[j] != 0, acc_s[i, j], -T.infinity(accum_dtype))
+                    if is_causal:
+                        for i, j in T.Parallel(block_H, block_N):
+                            acc_s[i, j] = T.if_then_else(mask_local[j] != 0, acc_s[i, j], -T.infinity(accum_dtype))
                     T.copy(scores_max, scores_max_prev)
                     T.fill(scores_max, -T.infinity(accum_dtype))
                     T.reduce_max(acc_s, scores_max, dim=1, clear=False)
@@ -169,18 +172,20 @@ class _GqaDecodeStrategy:
                         ],
                         K_shared,
                     )
-                    T.copy(
-                        mask[
-                            bid,
-                            (kv_seqlen // num_split) * sid + k * valid_block_N : (kv_seqlen // num_split) * sid + (k + 1) * valid_block_N,
-                            cur_kv_head,
-                        ],
-                        mask_local,
-                    )
+                    if is_causal:
+                        T.copy(
+                            mask[
+                                bid,
+                                (kv_seqlen // num_split) * sid + k * valid_block_N : (kv_seqlen // num_split) * sid + (k + 1) * valid_block_N,
+                                cur_kv_head,
+                            ],
+                            mask_local,
+                        )
                     T.clear(acc_s)
                     T.gemm(Q_shared, K_shared, acc_s, transpose_B=True, policy=T.GemmWarpPolicy.FullRow)
-                    for i, j in T.Parallel(block_H, block_N):
-                        acc_s[i, j] = T.if_then_else((mask_local[j] != 0) & (j < kv_seqlen // num_split), acc_s[i, j], -T.infinity(accum_dtype))
+                    if is_causal:
+                        for i, j in T.Parallel(block_H, block_N):
+                            acc_s[i, j] = T.if_then_else((mask_local[j] != 0) & (j < kv_seqlen // num_split), acc_s[i, j], -T.infinity(accum_dtype))
                     T.copy(scores_max, scores_max_prev)
                     T.fill(scores_max, -T.infinity(accum_dtype))
                     T.reduce_max(acc_s, scores_max, dim=1, clear=False)
@@ -292,7 +297,7 @@ class _GqaDecodeStrategy:
             return flashattn_gqa_decode_no_split
     
 class MicroGqaDecode(BaseMicroKernel):
-    def __init__(self, batch, kv_seqlen, heads, groups, dim, dtype=T.bfloat16, accum_dtype=T.float32):
+    def __init__(self, batch, kv_seqlen, heads, groups, dim, is_causal, dtype=T.bfloat16, accum_dtype=T.float32):
         super().__init__()
         
         self.heads = heads
@@ -300,10 +305,11 @@ class MicroGqaDecode(BaseMicroKernel):
         self.dim = dim
         self.batch = batch
         self.kv_seqlen = kv_seqlen
+        self.is_causal = is_causal
         
         self.dtype = dtype
         self.accum_dtype = accum_dtype
-        self.strategy = _GqaDecodeStrategy(batch, kv_seqlen, heads, groups, dim, dtype, accum_dtype)
+        self.strategy = _GqaDecodeStrategy(batch, kv_seqlen, heads, groups, dim, is_causal, dtype, accum_dtype)
         
     def get_source(self, kernel, selected_hparams):
         # self.layout = "11111"

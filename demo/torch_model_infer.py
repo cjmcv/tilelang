@@ -53,9 +53,7 @@ if __name__ == "__main__":
     parser.add_argument("--max-num-pages", default=16, type=int, help="Max num pages")
     parser.add_argument("--output-dir", help="Output files directory")
     parser.add_argument("--trace-name", default="", help="Perfetto trace output name")
-    parser.add_argument(
-        "--profiling", action="store_true", help="Use Profiler to generate trace"
-    )
+    parser.add_argument("--profiling", action="store_true", help="Use Profiler to generate trace")
     # lookahead or promptlookup
     parser.add_argument(
         "--spec-decode",
