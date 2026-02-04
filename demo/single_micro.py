@@ -156,10 +156,11 @@ if __name__ == "__main__":
     # test_gemm()
     ## test_silu_mul_gemm() # 逻辑有误，silu_mul被重复计算
     # test_gemm_add()
-    test_gqa_decode()
-    
+    # test_gqa_decode()
+
     # # gen = MicroAutoGen(1, 2560, 9728)
-    # gen = MicroAutoGen(1, 1024, 3072)
-    # gen.gen_qwen3_mlp(99, HparamSelectMode.TUNED) # HEURISTIC, TUNING, TUNED
+    gen = MicroAutoGen(batch_size=1, hidden_size=1024, intermediate_size=3072, 
+                       kv_seqlen=8192, heads=16, groups=8, dim=128)
+    gen.gen_qwen3_mlp(layer_id=99, mode=HparamSelectMode.TUNED) # HEURISTIC, TUNING, TUNED
     
     print("Test single_micro completed.")

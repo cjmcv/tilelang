@@ -173,8 +173,8 @@ def test_gqa_decode(mpk, max_batch_size, batch, heads, groups, seqlen_kv, dim):
         out_partial=out_partial,
         output=attn_out,
         sync_mode=(0, 0, 0),
-        # layout=((1, 8, 1), (64, 64, 1)), # Qwen3MlpConfig.linear2_layout,(1, 8, 8), (64, 64, 8), (16, 1, 1), (64, 64, 8)
-        layout=((1, 8, 8), (64, 64, 8), (16, 1, 1), (64, 64, 8))
+        layout=Qwen3MlpConfig.gqa_decode_layout,
+        # layout=((1, 8, 8), (64, 64, 8), (16, 1, 1), (64, 64, 8))
     )
     layers.compile_load(args.nc, args.output_dir)
     

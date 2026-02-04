@@ -11,13 +11,19 @@ from .micro_base import HparamSelectMode
 from .micro_linear import MicroLinearStrategy, MicroLinear
 from .micro_rmsnorm import MicroRmsNorm
 from .micro_silu_mul import MicroSiluMul
+from .micro_gqa_decode import MicroGqaDecode
 
 class MicroAutoGen:
-    def __init__(self, batch_size, hidden_size, intermediate_size):
+    def __init__(self, batch_size, hidden_size, intermediate_size, kv_seqlen, heads, groups, dim):
         print(tilelang.__version__) # 预先加载完成FFI的静态初始化，以免初始化发生在tuning的多线程场景导致崩溃
         self.batch_size = batch_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
+        self.kv_seqlen = kv_seqlen
+        self.heads = heads
+        self.groups = groups
+        self.dim = dim
+        
         self.dtype = T.bfloat16
         self.accum_dtype = T.float32
         
@@ -65,5 +71,8 @@ class MicroAutoGen:
             if (layer_id == 3 or layer_id == 99):
                 kernel = MicroLinear(MicroLinearStrategy.GEMM_ADD, self.batch_size, self.hidden_size, self.intermediate_size, dtype=self.dtype, accum_dtype=self.accum_dtype)
                 self._save_target(kernel, mode, code_dir, config_file, "linear2_layout")
+            if (layer_id == 4 or layer_id == 99):
+                kernel = MicroGqaDecode(self.batch_size, self.kv_seqlen, self.heads, self.groups, self.dim, dtype=self.dtype, accum_dtype=self.accum_dtype)
+                self._save_target(kernel, mode, code_dir, config_file, "gqa_decode_layout")
             
         

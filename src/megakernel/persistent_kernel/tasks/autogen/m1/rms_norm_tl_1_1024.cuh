@@ -8,7 +8,6 @@
 #include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>
 #endif
 
-
 namespace kernel {
 
 template <typename T,
@@ -89,4 +88,4 @@ __device__ __forceinline__ void rms_norm_kernel_1_1024(const int bx, const int b
 // use_cooperative_groups: 0.
 // layout: (1, 1, 1), (1, 1, 1)
 // block_dim=(128, 1, 1).
-// latency: 0.00351
+// latency: 0.00394

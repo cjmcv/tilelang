@@ -81,8 +81,6 @@ class MicroSiluMul(BaseMicroKernel):
     def get_source(self, kernel, selected_hparams):
         head_str = \
 '''
-namespace kernel {
-
 template <typename T,
           int THREAD_NUM,
           int TILE_DIM_X, 
@@ -121,13 +119,12 @@ __device__ __forceinline__ void silu_mul_kernel_<name_suffix>(const int bx, cons
         head_str = head_str.replace('<dtype>', str(dtype))
                 
         origin_source = kernel.get_kernel_source()
-        source = origin_source.replace("blockIdx.x", "bx")
+        source = self.replace_header(origin_source, "extern \"C\" __global__", 1, head_str)
+        source = source.replace("blockIdx.x", "bx")
         source = source.replace("blockIdx.y", "by")
         source = source.replace("blockIdx.z", "bz")
-        source = self.replace_header(source, "extern \"C\" __global__", False, head_str)
-        source += "\n} // kernel"
         
-        grid_dim, block_dim, dynamic_smem_buf, use_cooperative_groups = kernel.get_launch_info()
+        grid_dim, block_dim, dynamic_smem_buf, use_cooperative_groups = kernel.get_launch_info()[0]
         self.layout = f"({grid_dim['blockIdx.x']}, {grid_dim['blockIdx.y']}, {grid_dim['blockIdx.z']}), ({BLOCK_N}, {BLOCK_M}, {BLOCK_K})"
         extra_attr = f"\n// Strategy: {self.strategy.name}"
         extra_attr += f"\n// selected_hparams: {selected_hparams}."
