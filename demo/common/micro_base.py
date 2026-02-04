@@ -269,6 +269,7 @@ class BaseMicroKernel:
             print(f"[SPECIFY] selected_hparams[{id}]({latency}ms): {selected_hparams}")
             
         kernel = strategy.get_kernel(selected_hparams)
+        kernel.config = selected_hparams
         profiler = kernel.get_profiler()
         latency = round(profiler.do_bench(backend="cupti"), 5)
         # kernel.export_sources(kernel_path=save_path+f"_src.cuh")

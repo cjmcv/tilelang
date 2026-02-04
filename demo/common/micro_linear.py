@@ -375,7 +375,6 @@ template <typename T,
         source += "\n} // kernel"
         
         grid_dim, block_dim, dynamic_smem_buf, use_cooperative_groups = kernel.get_launch_info()
-        
         self.layout = f"({grid_dim['blockIdx.x']}, {grid_dim['blockIdx.y']}, {grid_dim['blockIdx.z']}), ({BLOCK_N}, {BLOCK_M}, {BLOCK_K})"
         extra_attr = f"\n// Strategy: {self.strategy.name}"
         extra_attr += f"\n// selected_hparams: {selected_hparams}."

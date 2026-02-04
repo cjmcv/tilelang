@@ -136,7 +136,7 @@ def test_gqa_decode():
     # mask.unsqueeze(2).expand(-1, -1, groups, -1).transpose(1, 2)
     # print(mask, mask.shape)
     
-    split = 1
+    split = kernel.config[3]
     glse = torch.empty(batch, heads, split, device="cuda", dtype=torch.bfloat16)
     Output_partial = torch.empty(batch, heads, split, dim, device="cuda", dtype=torch.bfloat16)
     
