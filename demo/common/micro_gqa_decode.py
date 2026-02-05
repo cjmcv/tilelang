@@ -4,6 +4,20 @@ import tilelang
 import tilelang.language as T
 from common.micro_base import BaseMicroKernel, HparamSelectMode
 
+# ┌──────────────────────────────────────────┐
+# │  Step 1: Q × K^T                         │
+# │  - 矩阵乘法: [seq_q, dim] × [dim, seq_k]  │
+# │  - 结果: [seq_q, seq_k]                   │
+# │  - 缩放: 除以 √d_k                        │
+# │  Step 2: Softmax                         │
+# │  - 每行减最大值（数值稳定性）               │
+# │  - exp(x) 计算                            │
+# │  - 每行求和并归一化                        │
+# │  Step 3: × V                              │
+# │  - 矩阵乘法: [seq_q, seq_k] × [seq_k, dim] │
+# │  - 结果: [seq_q, dim] (输出)               │
+# └───────────────────────────────────────────┘
+
 class _GqaDecodeStrategy:
     def __init__(self, batch, kv_seqlen, heads, groups, dim, is_causal, dtype, accum_dtype):
         self.name = "gqa_decode_tl"+f"_{batch}_{kv_seqlen}_{heads}_{groups}_{dim}"
@@ -54,11 +68,11 @@ class _GqaDecodeStrategy:
         shape_v = [batch, kv_seqlen, groups, dim]
         shape_o = [batch, heads, dim]
         shape_mask = [batch, kv_seqlen, groups] # [batch, seqlen_q, kv_seqlen, groups], 因果掩码是 query 和 key 之间的关系，表示当前q能看到哪些kv，而group维度是广播出来的
-        kv_group_num = heads // groups
+        kv_group_num = heads // groups  # kv_heads_num
 
         part_shape = [batch, heads, num_split, dim]
-        valid_block_H = min(block_H, kv_group_num)
-        valid_block_N = min(block_N, kv_seqlen // num_split)
+        valid_block_H = min(block_H, kv_group_num)            # 如 kv_heads_num 凑不够 block_H 时，则缩减至实际值以处理边界，但不处理kv_group_num超过block_H时的边界问题。
+        valid_block_N = min(block_N, kv_seqlen // num_split)  # 如 kv_seqlen 凑不够 block_N 时，则缩减至实际值，但不处理kv_seqlen
         
         @T.macro
         def flash_attn(
@@ -68,7 +82,12 @@ class _GqaDecodeStrategy:
             mask: T.Tensor(shape_mask, "uint8"),
             Output: T.Tensor([batch, heads, dim], dtype),
         ):
-            with T.Kernel(batch, heads // valid_block_H, num_split, threads=threads) as (bx, by, bz):
+            with T.Kernel(batch, heads // valid_block_H, threads=threads) as (bx, by):
+                # qkv应围绕ND分块做计算，这里布局对应的是推理用的BNHD，所以分块需要跨过H取ND。N是seqlen，H是head，d是dim。
+                # flashdecoding中q的N(q_seqlen)=1, 分块是[1, dim]，数据量少，可以多份一起放到smem，smem分块取[block_H, dim]
+                # K和V则正常取[N, dim]
+                # smem的申请中QKV涉及计算，直接按硬件友好的固定分块 block_H/block_N，而不使用实际的 valid_block_H / valid_block_N。
+                # O_shared作为输出，不再需要固定分块，则需要多少就开多少，按实际申请。
                 Q_shared = T.alloc_shared([block_H, dim], dtype)
                 K_shared = T.alloc_shared([block_N, dim], dtype)
                 V_shared = T.alloc_shared([block_N, dim], dtype)
@@ -92,7 +111,9 @@ class _GqaDecodeStrategy:
                 T.fill(logsum, 0)
                 T.fill(scores_max, -T.infinity(accum_dtype))
 
-                loop_range = T.ceildiv((kv_seqlen // num_split), block_N)
+                # ceildiv 向上取整，T.copy会自动校验并截断，超出范围部分会被赋0，
+                # 但输出是[batch, heads, dim]，即所有kv_seqlen都参与了计算，0会影响结果，正确做法是需要屏蔽掉超范围部分
+                loop_range = T.ceildiv((kv_seqlen), block_N) 
                 for k in T.Pipelined(loop_range, num_stages=num_stages):
                     T.copy(K[bid, k * block_N : (k + 1) * block_N, cur_kv_head, :], K_shared)
                     if is_causal:
@@ -101,7 +122,11 @@ class _GqaDecodeStrategy:
                     T.gemm(Q_shared, K_shared, acc_s, transpose_B=True, policy=T.GemmWarpPolicy.FullRow)
                     if is_causal:
                         for i, j in T.Parallel(block_H, block_N):
-                            acc_s[i, j] = T.if_then_else(mask_local[j] != 0, acc_s[i, j], -T.infinity(accum_dtype))
+                            acc_s[i, j] = T.if_then_else((mask_local[j] != 0) & (k * block_N + j < kv_seqlen), acc_s[i, j], -T.infinity(accum_dtype))
+                    else:
+                        # 超出范围部分，需要置为-inf，不能设置为0. softmax中0会参与贡献，-inf不会，因为exp(−inf)=0，exp(0)=1
+                        for i, j in T.Parallel(block_H, block_N):
+                            acc_s[i, j] = T.if_then_else(k * block_N + j<kv_seqlen, acc_s[i, j], -T.infinity(accum_dtype))
                     T.copy(scores_max, scores_max_prev)
                     T.fill(scores_max, -T.infinity(accum_dtype))
                     T.reduce_max(acc_s, scores_max, dim=1, clear=False)
@@ -185,7 +210,10 @@ class _GqaDecodeStrategy:
                     T.gemm(Q_shared, K_shared, acc_s, transpose_B=True, policy=T.GemmWarpPolicy.FullRow)
                     if is_causal:
                         for i, j in T.Parallel(block_H, block_N):
-                            acc_s[i, j] = T.if_then_else((mask_local[j] != 0) & (j < kv_seqlen // num_split), acc_s[i, j], -T.infinity(accum_dtype))
+                            acc_s[i, j] = T.if_then_else((mask_local[j] != 0) & (k * block_N + j < kv_seqlen // num_split), acc_s[i, j], -T.infinity(accum_dtype))
+                    else:
+                        for i, j in T.Parallel(block_H, block_N):
+                            acc_s[i, j] = T.if_then_else(k * block_N + j < kv_seqlen // num_split, acc_s[i, j], -T.infinity(accum_dtype))
                     T.copy(scores_max, scores_max_prev)
                     T.fill(scores_max, -T.infinity(accum_dtype))
                     T.reduce_max(acc_s, scores_max, dim=1, clear=False)
