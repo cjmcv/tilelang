@@ -43,6 +43,8 @@ class TorchRef:
                 output = compiled_ref_fn()
         return graph, output
     
+    # nn.Linear(in_features=K, out_features=N), 
+    # F.linear 对应 转置B的gemm，即 A[m,k] * B[n,k] = C[m,n]
     @staticmethod
     def linear(x, w):
         return F.linear(x, w)
@@ -96,13 +98,13 @@ class TorchRef:
         D  = TorchRef.linear(O3, w_down_proj) + O0
         return D
     
-    # shape_q = [batch, heads, dim]
-    # shape_k = [batch, seqlen_kv, groups, dim]
-    # shape_v = [batch, seqlen_kv, groups, dim]
     @staticmethod
     def attention_sdpa(query, key, value, is_causal):
-        q_for_sdpa = query.unsqueeze(2)         # [batch, heads, seqlen_q=1, dim]
-        k_for_sdpa = key.permute(0, 2, 1, 3)    # [batch, groups, seqlen_kv, dim]
+        if query.ndim == 3:
+            q_for_sdpa = query.unsqueeze(2)         # [batch, heads, seqlen_q=1, dim]
+        else:
+            q_for_sdpa = query.permute(0, 2, 1, 3)
+        k_for_sdpa = key.permute(0, 2, 1, 3)    # [batch, groups, seqlen_kv, dim]  groups即是num_kv_heads
         v_for_sdpa = value.permute(0, 2, 1, 3)  # [batch, groups, seqlen_kv, dim]
 
         attn_output_sdpa = F.scaled_dot_product_attention(

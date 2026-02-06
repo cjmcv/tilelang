@@ -145,7 +145,7 @@ def test_mlp_linear_residual2(mpk, max_batch_size, batch_size, hidden_size, inte
     
     
 def test_gqa_decode(mpk, max_batch_size, batch, heads, groups, seqlen_kv, dim):
-    split = 8
+    split = 8 # TODO
     glse_torch = torch.empty(batch, heads, split, device="cuda", dtype=torch.bfloat16)
     out_partial_torch = torch.empty(batch, heads, split, dim, device="cuda", dtype=torch.bfloat16)
     
