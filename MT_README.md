@@ -64,9 +64,9 @@ git submodule add https://github.com/apache/tvm.git 3rdparty/tvm
 5. gemv对比性能
 7. 分析：gemm1的4block -> silu_mul的2block，02->0, 13->1，能否只写回gemm1的后两个block 23，前两个block 01保留在smem，延递silu_mul上。
    尝试: 依托block的固定smem，通过多传入偏移量，实现跨task共享。
-8. 排查block数量不能超过sm数量的本质原因。
 
 
+8. 排查block数量不能超过sm数量的本质原因。（因为kernel限制一个sm仅持有一个block，当worker超过sm数量时，worker将会占据所有gpu资源，scheduler因缺少资源难以被启动，导致worker也接不到任务卡住）
 2. 跨步同步，不必每个task都读和写一次gmem。task添加标记，event的首task启动，后面连续多个不需要等待，计算完一次写。（大显卡不需要处理这个问题？）
 4. L40并行编译崩溃问题；（已解决， tilelang的ffi注册只能在单线程下进行，进入多线程前，应掉调用一下tilelang，提前触发其注册）
 6. 分析：block派发逻辑是否固定，还是属于抢占式派发，每次都不同。（主推静态）

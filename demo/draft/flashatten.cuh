@@ -1,6 +1,6 @@
 
-
-// block: (batch, num_heads), threads: tile_q 
+//           x         y
+// grid: (num_heads, batch), block: tile_q 
 // 参数：N:  是seq_len，QKV需一样长，适用于self-attention的训练阶段，不适用于带kvcache的推理场景或cross-attention
 //         (交叉注意力机制，q和kv分别来自不同seq， 用于decode-encoder模式， 常见llm模型如qwen3是Decoder-only)
 //      d:  是head_dim
@@ -18,11 +18,12 @@
 // 外层循环遍历K/V块（j循环），内层循环遍历Q块（i循环）
 // 每对(Q块, KV块)计算一次注意力，采用在线softmax算法增量更新
 __global__
-void forward_kernel(const float* Q, const float* K, const float* V, const int N, const int d,
+void forward_kernel(const float* __restrict__ Q, const float* __restrict__ K, const float* __restrict__ V, 
+                    const int N, const int d,
                     const int num_tile_kv, const int num_tile_q, const int tile_kv, const int tile_q, 
                     const float softmax_scale, float* l, float *m, float* O) {
     int tx = threadIdx.x;
-    int bx = blockIdx.x; int by = blockIdx.y;  // batch and head index
+    int by = blockIdx.y; int bx = blockIdx.x;   // batch and head index
 
     //   d        d
     // N    x   N    = N x N
@@ -31,8 +32,8 @@ void forward_kernel(const float* Q, const float* K, const float* V, const int N,
     // n1       nb     n1xna  n1xnb
     // n0/n1对应q的一个block内的小分块，大小为tile_q, tile_q*num_tile_q=N; na/nb对应kv的小分块，大小为tile_kv, tile_kv*num_tile_kv=N
     // 全局内存的偏移量，Offset into Q,K,V,O,l,m - different for each batch and head
-    int qkv_offset = (bx * gridDim.y * N * d) + (by * N * d);  // gridDim.y = num_heads， bx对应batch维度， by对应head维度，切分后一个block对应一份(N * d)
-    int lm_offset = (bx * gridDim.y * N) + (by * N);           // offset for l and m, 一个block对应一份N，QK计算后得到(N,N)，没有d维度. 每行都有一对l/m值, 正好对应每一个线程（下面都用tx充当行号）
+    int qkv_offset = (by * gridDim.y * N * d) + (bx * N * d);  // gridDim.y = num_heads， by对应batch维度， bx对应head维度，切分后一个block对应一份(N * d)
+    int lm_offset = (by * gridDim.y * N) + (bx * N);           // offset for l and m, 一个block对应一份N，QK计算后得到(N,N)，没有d维度. 每行都有一对l/m值, 正好对应每一个线程（下面都用tx充当行号）
 
     // N = num_tile_q × tile_q = num_tile_kv × tile_kv
     // 一个block对应一份(N*d)，一份(N*d)里会继续划分(tile_kv*d)的tile，
@@ -120,5 +121,74 @@ void forward_kernel(const float* Q, const float* K, const float* V, const int N,
             l[lm_offset + (tile_q * i) + tx] = row_l_new;
         }
         __syncthreads();  // otherwise, thread can use the wrong Kj, Vj in inner loop
+    }
+}
+
+
+// row A col B
+// A[m,k] * B[n,k] = C[m,n]
+// dim3 block_dim(16, 16);
+// dim3 grid_dim((N + block_dim.x - 1) / block_dim.x, (M + block_dim.y - 1) / block_dim.y);
+__global__ void gemm(const float* __restrict__ A, 
+                     const float* __restrict__ B, 
+                     float* __restrict__ C,
+                     int M, int N, int K) {
+    int i = blockIdx.y * blockDim.y + threadIdx.y;
+    int j = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= M || j >= N) {
+        return;
+    }
+
+    float sum = 0.0f;
+    for (int k = 0; k < K; ++k) {
+        sum += A[i * K + k] * B[j * K + k];
+    }
+    C[i * N + j] = sum;
+}
+
+// TILE_SIZE
+// dim3 block(TILE_SIZE, TILE_SIZE);
+// dim3 grid((N+TILE_SIZE-1)/TILE_SIZE, (M+TILE_SIZE-1)/TILE_SIZE);
+// gemm_shared<TILE><<<grid, block>>>(d_A, d_B, d_C, M, N, K);
+template <int TILE_SIZE>
+__global__ void gemm_shared(const float* __restrict__ A, 
+                           const float* __restrict__ B, 
+                           float* __restrict__ C,
+                           int M, int N, int K) {
+
+    __shared__ float s_A[TILE_SIZE][TILE_SIZE];
+    __shared__ float s_B[TILE_SIZE][TILE_SIZE];
+
+    const int tx = threadIdx.x, ty = threadIdx.y;
+    const int i = blockIdx.y * TILE_SIZE + ty; // TILE_SIZE 等同于 blockDim.y 和 blockDim.x
+    const int j = blockIdx.x * TILE_SIZE + tx;
+
+    float sum = 0.0f;
+
+    // 3. K维度分块循环（核心优化逻辑）
+    for (int t = 0; t < (K + TILE_SIZE - 1) / TILE_SIZE; ++t) {
+        // A[i * K + k]，i对应全局的y，用x偏移取列
+        const int x_k = t * TILE_SIZE + tx;
+        s_A[ty][tx] = (i < M && x_k < K) ? A[i * K + x_k] : 0.0f;
+        
+        // B[j * K + b_k], j对应全局的x，用y偏移取列
+        const int y_k = t * TILE_SIZE + ty;
+        s_B[tx][ty] = (j < N && y_k < K) ? B[j * K + y_k] : 0.0f;
+
+        __syncthreads();
+
+        // 子块内乘累加（仅访问共享内存）
+        #pragma unroll
+        for (int k = 0; k < TILE_SIZE; ++k) {
+            sum += s_A[ty][k] * s_B[tx][k];
+        }
+
+        // 同步：等待计算完成，准备加载下一个子块
+        __syncthreads();
+    }
+
+    // 写入结果到C矩阵
+    if (i < M && j < N) {
+        C[i * N + j] = sum;
     }
 }
