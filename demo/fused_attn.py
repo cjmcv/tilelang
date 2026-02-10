@@ -49,10 +49,10 @@ if __name__ == "__main__":
     w_layer_norm_torch = torch.randn((1, hidden_size), dtype=torch.bfloat16, device="cuda")
     
     w_qkv_proj_torch = torch.randn(((num_heads+2*num_kv_heads)*head_dim, hidden_size), dtype=torch.bfloat16, device="cuda")
-    w_q_norm_torch = torch.randn((1, head_dim), dtype=torch.bfloat16, device="cuda")
-    w_k_norm_torch = torch.randn((1, head_dim), dtype=torch.bfloat16, device="cuda")
-    w_cos_torch = torch.randn((batch, 1, head_dim), dtype=torch.bfloat16, device="cuda")
-    w_sin_torch = torch.randn((batch, 1, head_dim), dtype=torch.bfloat16, device="cuda")
+    w_q_norm_torch = torch.randn((seqlen_q, head_dim), dtype=torch.bfloat16, device="cuda")
+    w_k_norm_torch = torch.randn((seqlen_q, head_dim), dtype=torch.bfloat16, device="cuda")
+    w_cos_torch = torch.randn((batch, seqlen_q, head_dim), dtype=torch.bfloat16, device="cuda")
+    w_sin_torch = torch.randn((batch, seqlen_q, head_dim), dtype=torch.bfloat16, device="cuda")
     
     key_cache_torch = torch.randn(batch, seqlen_kv, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
     value_cache_torch = torch.randn(batch, seqlen_kv, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)
@@ -62,17 +62,14 @@ if __name__ == "__main__":
 
     ###
     def ref_run():
-        bsz = 1
-        q_len = 1
-        
         o1 = TorchRef.rms_norm(x_torch, w_layer_norm_torch)
         qkv_out = TorchRef.linear(o1, w_qkv_proj_torch)
         
         q_dim = num_heads*head_dim
         kv_dim = num_kv_heads*head_dim
-        query_states = qkv_out[:, :q_dim].view(bsz, q_len, num_heads , head_dim) 
-        key_states = qkv_out[:, q_dim:q_dim+kv_dim].view(bsz, q_len, num_kv_heads, head_dim) 
-        value_states = qkv_out[:, q_dim+kv_dim:].view(bsz, q_len, num_kv_heads, head_dim) 
+        query_states = qkv_out[:, :q_dim].view(batch, seqlen_q, num_heads , head_dim) 
+        key_states = qkv_out[:, q_dim:q_dim+kv_dim].view(batch, seqlen_q, num_kv_heads, head_dim) 
+        value_states = qkv_out[:, q_dim+kv_dim:].view(batch, seqlen_q, num_kv_heads, head_dim) 
         
         query_states = TorchRef.rms_norm(query_states, w_q_norm_torch)
         key_states = TorchRef.rms_norm(key_states, w_k_norm_torch)
@@ -90,7 +87,7 @@ if __name__ == "__main__":
         # print("cache v", value_cache_torch.size())
         attn_output = TorchRef.attention_sdpa(query_states, key_cache_torch, value_cache_torch, False)
         
-        attn_output = attn_output.reshape(bsz, q_len, q_dim)
+        attn_output = attn_output.reshape(batch, seqlen_q, q_dim)
         attn_output = TorchRef.linear(attn_output, w_o_proj_torch)
         # print(key_states.size())
         # print(value_states.size())

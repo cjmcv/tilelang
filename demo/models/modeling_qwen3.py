@@ -237,21 +237,25 @@ class Qwen3Attention(nn.Module):
             (self.num_heads // world_size) * self.head_dim,
             bias=config.attention_bias,
         )
+        # print("q_proj:", self.q_proj.weight.shape, self.num_heads, self.num_key_value_heads, self.head_dim)
         self.k_proj = nn.Linear(
             self.hidden_size,
             (self.num_key_value_heads // world_size) * self.head_dim,
             bias=config.attention_bias,
         )
+        # print("k_proj:", self.k_proj.weight.shape)
         self.v_proj = nn.Linear(
             self.hidden_size,
             (self.num_key_value_heads // world_size) * self.head_dim,
             bias=config.attention_bias,
         )
+        # print("v_proj:", self.v_proj.weight.shape)
         self.o_proj = nn.Linear(
             (self.num_heads // world_size) * self.head_dim,
             self.hidden_size,
             bias=config.attention_bias,
         )
+        # print("o_proj:", self.o_proj.weight.shape)
         self.q_norm = Qwen3RMSNorm(
             self.head_dim, eps=config.rms_norm_eps
         )  # unlike olmo, only on the head dim!
@@ -272,6 +276,7 @@ class Qwen3Attention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
+        # print("hidden_states:", hidden_states.shape)
         hidden_states = input_layernorm(hidden_states)
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
@@ -292,6 +297,7 @@ class Qwen3Attention(nn.Module):
         )
 
         cos, sin = position_embeddings
+        print("position_embeddings: ", query_states.size(), key_states.size(), cos.size(), sin.size())
 
         # query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=2)
         query_states, key_states = apply_rotary_pos_emb_triton(
