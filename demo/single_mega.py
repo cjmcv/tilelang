@@ -245,9 +245,9 @@ if __name__ == "__main__":
     
     # test_mlp_rms_norm(mpk, max_batch_size, batch_size, hidden_size)
     # test_mlp_linear1(mpk, max_batch_size, batch_size, hidden_size, intermediate_size)
-    # test_mlp_silu_mul(mpk, max_batch_size, batch_size, intermediate_size) # 5us vs 2us，需要加速
+    test_mlp_silu_mul(mpk, max_batch_size, batch_size, intermediate_size) # 5us vs 2us，需要加速
     # test_mlp_linear_residual2(mpk, max_batch_size, batch_size, hidden_size, intermediate_size)
-    test_gqa_decode(mpk, max_batch_size=1, batch=1, heads=16, groups=8, seqlen_kv=8192, dim=128)
+    # test_gqa_decode(mpk, max_batch_size=1, batch=1, heads=16, groups=8, seqlen_kv=8192, dim=128)
     
     print("Test single_mega completed.")
     # ncu --set full --section "SpeedOfLight_RooflineChart" -k "kernel" -o my_profile python demo/single_linear.py --nc

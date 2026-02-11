@@ -232,7 +232,7 @@ class TorchRef:
         return _reduce_ref(Q, K, V, mask, glse_, Output_partial_)
 
     @staticmethod
-    def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=-2):
+    def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=2):
         """Applies Rotary Position Embedding to the query and key tensors.
                            cos/sin表	                 Q使用的位置	      K使用的位置
         训练/prefill: 共享同一张表 [max_len, dim],	[0, 1, ..., L-1], 	 [0, 1, ..., L-1]
@@ -254,6 +254,12 @@ class TorchRef:
         k_embed = (k * cos) + (rotate_half(k) * sin)
         return q_embed, k_embed
 
+    @staticmethod
+    def apply_rotary_pos_emb_triton(q, k, cos, sin, position_ids=None, unsqueeze_dim=2):
+        from models.rope import apply_rotary_pos_emb_triton
+        q_embed, k_embed = apply_rotary_pos_emb_triton(q, k, cos, sin, unsqueeze_dim=2)
+        return q_embed, k_embed
+    
     def load_model(rank):
         torch.cuda.set_device(rank)
         with torch.device("cuda"):

@@ -71,11 +71,6 @@ class _SiluMulStrategy:
 class MicroSiluMul(BaseMicroKernel):
     def __init__(self, M, N, dtype=T.bfloat16, accum_dtype=T.float32):
         super().__init__()
-        
-        self.M = M
-        self.N = N
-        self.dtype = dtype
-        self.accum_dtype = accum_dtype
         self.strategy = _SiluMulStrategy(M, N, dtype, accum_dtype)
         
     def get_source(self, kernel, selected_hparams):
@@ -109,10 +104,10 @@ __device__ __forceinline__ void silu_mul_kernel_<name_suffix>(const int bx, cons
         head_str = head_str.replace('<BLOCK_M>', str(BLOCK_M))
         head_str = head_str.replace('<BLOCK_N>', str(BLOCK_N)) 
         head_str = head_str.replace('<BLOCK_K>', str(BLOCK_K)) 
-        head_str = head_str.replace('<M>', str(self.M))
-        head_str = head_str.replace('<N>', str(self.N)) 
-        head_str = head_str.replace('<name_suffix>', str(self.M)+"_"+str(self.N))
-        if self.dtype == T.bfloat16:
+        head_str = head_str.replace('<M>', str(self.strategy.M))
+        head_str = head_str.replace('<N>', str(self.strategy.N)) 
+        head_str = head_str.replace('<name_suffix>', str(self.strategy.M)+"_"+str(self.strategy.N))
+        if self.strategy.dtype == T.bfloat16:
             dtype = "bfloat16_t"
         else:
             dtype = "float16_t"
