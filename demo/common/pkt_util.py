@@ -231,6 +231,29 @@ class TorchRef:
         glse_, Output_partial_ = _flash_split_ref(Q, K, V, mask)
         return _reduce_ref(Q, K, V, mask, glse_, Output_partial_)
 
+    @staticmethod
+    def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=-2):
+        """Applies Rotary Position Embedding to the query and key tensors.
+                           cos/sin表	                 Q使用的位置	      K使用的位置
+        训练/prefill: 共享同一张表 [max_len, dim],	[0, 1, ..., L-1], 	 [0, 1, ..., L-1]
+        推理：        共享同一张表 [max_len, dim],	  [L] (新token)	, 	  [L] (新token)	老的k不需要重复算rope
+        """
+        # Copied from transformers.models.llama.modeling_llama.rotate_half
+        def rotate_half(x):
+            # input:  [ a, b,  c, d,  e, f,  g, h]
+            # output: [-b, a, -d, c, -f, e, -h, g]
+            """Rotates half the hidden dims of the input."""
+            x1 = x[..., : x.shape[-1] // 2]
+            x2 = x[..., x.shape[-1] // 2 :]
+            return torch.cat((-x2, x1), dim=-1)
+        
+        # cos torch.Size([1, 1, 1, 128]) q torch.Size([1, 1, 16, 128]) k torch.Size([1, 1, 8, 128])
+        cos = cos.unsqueeze(unsqueeze_dim)
+        sin = sin.unsqueeze(unsqueeze_dim)
+        q_embed = (q * cos) + (rotate_half(q) * sin)
+        k_embed = (k * cos) + (rotate_half(k) * sin)
+        return q_embed, k_embed
+
     def load_model(rank):
         torch.cuda.set_device(rank)
         with torch.device("cuda"):
@@ -407,8 +430,8 @@ class PerfReporter:
             self.check_allclose_ret(target_run, torch_run, allclose_iter, print_all)
 
         latency = do_bench(lambda: target_run(), warmup=warnup_iter, rep=test_iter, backend="cupti")
-        torch_latency = do_bench(lambda: torch_run(), warmup=warnup_iter, rep=test_iter, backend="cupti")
-        print(f"Latency: {latency:.3f}ms vs {torch_latency:.3f}(torch) ms")
+        ref_latency = do_bench(lambda: torch_run(), warmup=warnup_iter, rep=test_iter, backend="cupti")
+        print(f"Latency: {latency:.4f}ms vs {ref_latency:.4f}(torch) ms")
         
         # self.time_cuda_event_record("torch_ref", torch_run, test_iter)   
         # self.time_cuda_event_record("mpk", target_run, test_iter)
@@ -416,8 +439,8 @@ class PerfReporter:
         # self.time_cpu_record("torch_ref", torch_run, test_iter)   
         # self.time_cpu_record("mpk", target_run, test_iter)
         
-        self.torch_profile(torch_run)
         self.torch_profile(target_run)
+        self.torch_profile(torch_run)
 
 
     # pushd build && make -j8 && popd

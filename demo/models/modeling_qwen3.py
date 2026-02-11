@@ -108,7 +108,7 @@ class Qwen3RotaryEmbedding(nn.Module):
             freqs = (
                 inv_freq_expanded.float() @ position_ids_expanded.float()
             ).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
+            emb = torch.cat((freqs, freqs), dim=-1) # 前一半和后一半相同
             cos = emb.cos()
             sin = emb.sin()
 
