@@ -81,6 +81,9 @@ class MicroAutoGen:
             if (layer_id == 6 or layer_id == 99):
                 kernel = MicroGqaDecode(self.batch_size, self.kv_seqlen, self.heads, self.groups, self.dim, False, dtype=self.dtype, accum_dtype=self.accum_dtype)
                 self._save_target(kernel, mode, code_dir, config_file, "gqa_decode_layout")
+            if (layer_id == 7 or layer_id == 99):
+                kernel = MicroLinear(MicroLinearStrategy.GEMM_ADD, self.batch_size, self.hidden_size, self.heads*self.dim, dtype=self.dtype, accum_dtype=self.accum_dtype)
+                self._save_target(kernel, mode, code_dir, config_file, "o_proj_layout")
             
             
         

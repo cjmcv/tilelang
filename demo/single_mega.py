@@ -102,11 +102,11 @@ def test_silu_mul(mpk, max_batch_size, batch_size, intermediate_size):
                             warnup_iter=100, test_iter=100, 
                             allclose_iter=5, print_all=False)
     
-def test_mlp_linear_residual2(mpk, max_batch_size, batch_size, hidden_size, intermediate_size):
-    x_residual_torch = torch.randn((max_batch_size, hidden_size), dtype=torch.bfloat16, device="cuda")
-    x_torch = torch.randn((max_batch_size, intermediate_size), dtype=torch.bfloat16, device="cuda")
-    w_down_proj_torch = torch.randn((hidden_size, intermediate_size), dtype=torch.bfloat16, device="cuda")
-    out_torch = torch.zeros((max_batch_size, hidden_size), dtype=torch.bfloat16, device="cuda")
+def test_linear_residual(mpk, max_batch_size, batch_size, N, K, layout):
+    x_residual_torch = torch.randn((max_batch_size, N), dtype=torch.bfloat16, device="cuda")
+    x_torch = torch.randn((max_batch_size, K), dtype=torch.bfloat16, device="cuda")
+    w_down_proj_torch = torch.randn((N, K), dtype=torch.bfloat16, device="cuda")
+    out_torch = torch.zeros((max_batch_size, N), dtype=torch.bfloat16, device="cuda")
 
     x_residual = mpk.attach_input(torch_tensor=x_residual_torch, name="res")
     x = mpk.attach_input(torch_tensor=x_torch, name="in")
@@ -119,7 +119,7 @@ def test_mlp_linear_residual2(mpk, max_batch_size, batch_size, hidden_size, inte
         residual=x_residual,
         output=mlp_out,
         sync_mode=(0, 0, 0),
-        layout=Qwen3MegaConfig.linear2_layout,
+        layout=layout,
     )
     layers.compile_load(args.nc, args.output_dir)
     
@@ -295,16 +295,16 @@ if __name__ == "__main__":
     # test_rms_norm(mpk, max_batch_size, batch_size, hidden_size)
     # test_linear(mpk, max_batch_size, batch_size, intermediate_size*2, hidden_size, Qwen3MegaConfig.linear1_layout)
     # test_silu_mul(mpk, max_batch_size, batch_size, intermediate_size) # 5us vs 2us，需要加速
-    # test_mlp_linear_residual2(mpk, max_batch_size, batch_size, hidden_size, intermediate_size)
+    # test_linear_residual(mpk, max_batch_size, batch_size, hidden_size, intermediate_size, Qwen3MegaConfig.linear2_layout)
     
     heads=16
     groups=8
     dim=128
     seqlen_kv=8192
-    test_linear(mpk, max_batch_size, batch_size, (heads+2*groups)*dim, hidden_size, Qwen3MegaConfig.qkv_proj_layout)
+    # test_linear(mpk, max_batch_size, batch_size, (heads+2*groups)*dim, hidden_size, Qwen3MegaConfig.qkv_proj_layout)
     # test_rope(mpk, max_batch_size=1, batch=1, heads=heads, groups=groups, dim=dim)
     # test_gqa_decode(mpk, max_batch_size=1, batch=1, heads=heads, groups=groups, seqlen_kv=seqlen_kv, dim=dim)
-    
+    test_linear_residual(mpk, max_batch_size, batch_size, hidden_size, heads*dim, Qwen3MegaConfig.o_proj_layout)
         
     print("Test single_mega completed.")
     # ncu --set full --section "SpeedOfLight_RooflineChart" -k "kernel" -o my_profile python demo/single_linear.py --nc

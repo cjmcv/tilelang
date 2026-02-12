@@ -19,6 +19,7 @@
 
 // attn
 #include "m1/linear_gemm_tl_1_4096_1024.cuh"
+#include "m1/linear_gemm_add_tl_1_1024_2048.cuh"
 
 namespace kernel {
 
@@ -49,6 +50,10 @@ template <typename T,
       }
       else if constexpr (N == 1024 && K == 3072) {
         linear_gemm_add_tl_1_1024_3072<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
+          bx, by, bz, input_ptr, weight_ptr, residual_ptr, output_ptr, num_active_tokens, residual);  
+      }
+      else if constexpr (N == 1024 && K == 2048) {
+        linear_gemm_add_tl_1_1024_2048<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
           bx, by, bz, input_ptr, weight_ptr, residual_ptr, output_ptr, num_active_tokens, residual);  
       }
     } 

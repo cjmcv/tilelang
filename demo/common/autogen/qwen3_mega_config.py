@@ -6,3 +6,4 @@ class Qwen3MegaConfig:
     qkv_proj_layout = (64, 1, 1), (64, 16, 128)
     rope_layout = (24, 1, 1), (1, 1, 1)
     gqa_decode_layout = (1, 8, 4), (64, 64, 4), (16, 1, 1), (64, 64, 4)
+    o_proj_layout = (16, 1, 1), (64, 16, 128)

@@ -67,7 +67,7 @@ if __name__ == "__main__":
     def ref_run():
         o1 = TorchRef.rms_norm(x_torch, w_layernorm_torch)
         qkv_out = TorchRef.linear(o1, w_qkv_proj_torch)
-        print(x_torch.size(), w_qkv_proj_torch.size())
+        print("qkv_proj", x_torch.size(), w_qkv_proj_torch.size()) # qkv_proj torch.Size([1, 1024]) torch.Size([4096, 1024])
         
         q_dim = num_heads*head_dim
         kv_dim = num_kv_heads*head_dim
@@ -84,8 +84,9 @@ if __name__ == "__main__":
         value_cache_torch[0, step, :, :] = value_states
         attn_output = TorchRef.attention_sdpa(query_states, key_cache_torch, value_cache_torch, False)
         attn_output = attn_output.reshape(batch*seqlen_q, q_dim)
-        attn_output = TorchRef.linear(attn_output, w_o_proj_torch)
-        return attn_output
+        final_output = TorchRef.linear(attn_output, w_o_proj_torch) + x_torch # res
+        print("o_proj", attn_output.size(), w_o_proj_torch.size()) # o_proj torch.Size([1, 1024]) torch.Size([1024, 2048])
+        return final_output
     
     # layers = MpkLayers(0, 1, world_size, rank, max_batch_size, args.trace_name, args.profiling)
     # mpk = layers.get_mpk()

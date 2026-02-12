@@ -22,7 +22,7 @@ template <typename T,
     int O_STRIDE = N,
     int PIPE_MAX = 3,
     bool FUSE_RES = false>
-    __device__ __forceinline__ void linear_gemm_add_tl_1_1024_3072(const int bx, const int by, const int bz,
+    __device__ __forceinline__ void linear_gemm_add_tl_1_1024_2048(const int bx, const int by, const int bz,
                                                 const void* __restrict__ input_ptr,
                                                 const void* __restrict__ weight_ptr,
                                                 const void* __restrict__ residual_ptr,
@@ -31,7 +31,7 @@ template <typename T,
                                                 bool residual) {
   static_assert(THREAD_NUM==128);
   static_assert(TILE_DIM_X==64); static_assert(TILE_DIM_Y==16); static_assert(TILE_DIM_Z==128);
-  static_assert(M==1); static_assert(N==1024); static_assert(K==3072);
+  static_assert(M==1); static_assert(N==1024); static_assert(K==2048);
   
   const bfloat16_t* __restrict__ A = static_cast<const bfloat16_t*>(input_ptr);
   const bfloat16_t* __restrict__ B = static_cast<const bfloat16_t*>(weight_ptr);
@@ -48,31 +48,31 @@ template <typename T,
   }
   #pragma unroll
   for (int i_1 = 0; i_1 < 2; ++i_1) {
-    tl::cp_async_gs_conditional<16>(buf_dyn_shmem+((((((((((int)threadIdx.x) & 15) >> 3) * 2048) + (i_1 * 1024)) + ((((int)threadIdx.x) >> 4) * 128)) + ((((((int)threadIdx.x) >> 6) + ((((int)threadIdx.x) & 7) >> 2)) & 1) * 64)) + (((((((int)threadIdx.x) & 63) >> 5) + ((((int)threadIdx.x) & 3) >> 1)) & 1) * 32)) + (((((((int)threadIdx.x) & 31) >> 4) + (((int)threadIdx.x) & 1)) & 1) * 16)), A+(((i_1 * 24576) + ((((int)threadIdx.x) >> 4) * 3072)) + ((((int)threadIdx.x) & 15) * 8)), ((((i_1 * 8) + (((int)threadIdx.x) >> 4)) < 1) && (((i_1 * 8) + (((int)threadIdx.x) >> 4)) < 1)));
+    tl::cp_async_gs_conditional<16>(buf_dyn_shmem+((((((((((int)threadIdx.x) & 15) >> 3) * 2048) + (i_1 * 1024)) + ((((int)threadIdx.x) >> 4) * 128)) + ((((((int)threadIdx.x) >> 6) + ((((int)threadIdx.x) & 7) >> 2)) & 1) * 64)) + (((((((int)threadIdx.x) & 63) >> 5) + ((((int)threadIdx.x) & 3) >> 1)) & 1) * 32)) + (((((((int)threadIdx.x) & 31) >> 4) + (((int)threadIdx.x) & 1)) & 1) * 16)), A+(((i_1 * 16384) + ((((int)threadIdx.x) >> 4) * 2048)) + ((((int)threadIdx.x) & 15) * 8)), ((((i_1 * 8) + (((int)threadIdx.x) >> 4)) < 1) && (((i_1 * 8) + (((int)threadIdx.x) >> 4)) < 1)));
   }
   #pragma unroll
   for (int i_2 = 0; i_2 < 8; ++i_2) {
-    tl::cp_async_gs<16>(buf_dyn_shmem+(((((((((((int)threadIdx.x) & 15) >> 3) * 8192) + (i_2 * 1024)) + ((((int)threadIdx.x) >> 4) * 128)) + ((((((int)threadIdx.x) >> 6) + ((((int)threadIdx.x) & 7) >> 2)) & 1) * 64)) + (((((((int)threadIdx.x) & 63) >> 5) + ((((int)threadIdx.x) & 3) >> 1)) & 1) * 32)) + (((((((int)threadIdx.x) & 31) >> 4) + (((int)threadIdx.x) & 1)) & 1) * 16)) + 12288), B+((((((int)bx) * 196608) + (i_2 * 24576)) + ((((int)threadIdx.x) >> 4) * 3072)) + ((((int)threadIdx.x) & 15) * 8)));
+    tl::cp_async_gs<16>(buf_dyn_shmem+(((((((((((int)threadIdx.x) & 15) >> 3) * 8192) + (i_2 * 1024)) + ((((int)threadIdx.x) >> 4) * 128)) + ((((((int)threadIdx.x) >> 6) + ((((int)threadIdx.x) & 7) >> 2)) & 1) * 64)) + (((((((int)threadIdx.x) & 63) >> 5) + ((((int)threadIdx.x) & 3) >> 1)) & 1) * 32)) + (((((((int)threadIdx.x) & 31) >> 4) + (((int)threadIdx.x) & 1)) & 1) * 16)) + 12288), B+((((((int)bx) * 131072) + (i_2 * 16384)) + ((((int)threadIdx.x) >> 4) * 2048)) + ((((int)threadIdx.x) & 15) * 8)));
   }
   tl::cp_async_commit();
   #pragma unroll
   for (int i_3 = 0; i_3 < 2; ++i_3) {
-    tl::cp_async_gs_conditional<16>(buf_dyn_shmem+(((((((((((int)threadIdx.x) & 15) >> 3) * 2048) + (i_3 * 1024)) + ((((int)threadIdx.x) >> 4) * 128)) + ((((((int)threadIdx.x) >> 6) + ((((int)threadIdx.x) & 7) >> 2)) & 1) * 64)) + (((((((int)threadIdx.x) & 63) >> 5) + ((((int)threadIdx.x) & 3) >> 1)) & 1) * 32)) + (((((((int)threadIdx.x) & 31) >> 4) + (((int)threadIdx.x) & 1)) & 1) * 16)) + 4096), A+((((i_3 * 24576) + ((((int)threadIdx.x) >> 4) * 3072)) + ((((int)threadIdx.x) & 15) * 8)) + 128), ((((i_3 * 8) + (((int)threadIdx.x) >> 4)) < 1) && (((i_3 * 8) + (((int)threadIdx.x) >> 4)) < 1)));
+    tl::cp_async_gs_conditional<16>(buf_dyn_shmem+(((((((((((int)threadIdx.x) & 15) >> 3) * 2048) + (i_3 * 1024)) + ((((int)threadIdx.x) >> 4) * 128)) + ((((((int)threadIdx.x) >> 6) + ((((int)threadIdx.x) & 7) >> 2)) & 1) * 64)) + (((((((int)threadIdx.x) & 63) >> 5) + ((((int)threadIdx.x) & 3) >> 1)) & 1) * 32)) + (((((((int)threadIdx.x) & 31) >> 4) + (((int)threadIdx.x) & 1)) & 1) * 16)) + 4096), A+((((i_3 * 16384) + ((((int)threadIdx.x) >> 4) * 2048)) + ((((int)threadIdx.x) & 15) * 8)) + 128), ((((i_3 * 8) + (((int)threadIdx.x) >> 4)) < 1) && (((i_3 * 8) + (((int)threadIdx.x) >> 4)) < 1)));
   }
   #pragma unroll
   for (int i_4 = 0; i_4 < 8; ++i_4) {
-    tl::cp_async_gs<16>(buf_dyn_shmem+(((((((((((int)threadIdx.x) & 15) >> 3) * 8192) + (i_4 * 1024)) + ((((int)threadIdx.x) >> 4) * 128)) + ((((((int)threadIdx.x) >> 6) + ((((int)threadIdx.x) & 7) >> 2)) & 1) * 64)) + (((((((int)threadIdx.x) & 63) >> 5) + ((((int)threadIdx.x) & 3) >> 1)) & 1) * 32)) + (((((((int)threadIdx.x) & 31) >> 4) + (((int)threadIdx.x) & 1)) & 1) * 16)) + 28672), B+(((((((int)bx) * 196608) + (i_4 * 24576)) + ((((int)threadIdx.x) >> 4) * 3072)) + ((((int)threadIdx.x) & 15) * 8)) + 128));
+    tl::cp_async_gs<16>(buf_dyn_shmem+(((((((((((int)threadIdx.x) & 15) >> 3) * 8192) + (i_4 * 1024)) + ((((int)threadIdx.x) >> 4) * 128)) + ((((((int)threadIdx.x) >> 6) + ((((int)threadIdx.x) & 7) >> 2)) & 1) * 64)) + (((((((int)threadIdx.x) & 63) >> 5) + ((((int)threadIdx.x) & 3) >> 1)) & 1) * 32)) + (((((((int)threadIdx.x) & 31) >> 4) + (((int)threadIdx.x) & 1)) & 1) * 16)) + 28672), B+(((((((int)bx) * 131072) + (i_4 * 16384)) + ((((int)threadIdx.x) >> 4) * 2048)) + ((((int)threadIdx.x) & 15) * 8)) + 128));
   }
   tl::cp_async_commit();
-  for (int k = 0; k < 22; ++k) {
+  for (int k = 0; k < 14; ++k) {
     __syncthreads();
     #pragma unroll
     for (int i_5 = 0; i_5 < 2; ++i_5) {
-      tl::cp_async_gs_conditional<16>(buf_dyn_shmem+(((((((((k + 2) % 3) * 4096) + (((((int)threadIdx.x) & 15) >> 3) * 2048)) + (i_5 * 1024)) + ((((int)threadIdx.x) >> 4) * 128)) + ((((((int)threadIdx.x) >> 6) + ((((int)threadIdx.x) & 7) >> 2)) & 1) * 64)) + (((((((int)threadIdx.x) & 63) >> 5) + ((((int)threadIdx.x) & 3) >> 1)) & 1) * 32)) + (((((((int)threadIdx.x) & 31) >> 4) + (((int)threadIdx.x) & 1)) & 1) * 16)), A+(((((i_5 * 24576) + ((((int)threadIdx.x) >> 4) * 3072)) + (k * 128)) + ((((int)threadIdx.x) & 15) * 8)) + 256), ((((i_5 * 8) + (((int)threadIdx.x) >> 4)) < 1) && (((i_5 * 8) + (((int)threadIdx.x) >> 4)) < 1)));
+      tl::cp_async_gs_conditional<16>(buf_dyn_shmem+(((((((((k + 2) % 3) * 4096) + (((((int)threadIdx.x) & 15) >> 3) * 2048)) + (i_5 * 1024)) + ((((int)threadIdx.x) >> 4) * 128)) + ((((((int)threadIdx.x) >> 6) + ((((int)threadIdx.x) & 7) >> 2)) & 1) * 64)) + (((((((int)threadIdx.x) & 63) >> 5) + ((((int)threadIdx.x) & 3) >> 1)) & 1) * 32)) + (((((((int)threadIdx.x) & 31) >> 4) + (((int)threadIdx.x) & 1)) & 1) * 16)), A+(((((i_5 * 16384) + ((((int)threadIdx.x) >> 4) * 2048)) + (k * 128)) + ((((int)threadIdx.x) & 15) * 8)) + 256), ((((i_5 * 8) + (((int)threadIdx.x) >> 4)) < 1) && (((i_5 * 8) + (((int)threadIdx.x) >> 4)) < 1)));
     }
     #pragma unroll
     for (int i_6 = 0; i_6 < 8; ++i_6) {
-      tl::cp_async_gs<16>(buf_dyn_shmem+((((((((((k + 2) % 3) * 16384) + (((((int)threadIdx.x) & 15) >> 3) * 8192)) + (i_6 * 1024)) + ((((int)threadIdx.x) >> 4) * 128)) + ((((((int)threadIdx.x) >> 6) + ((((int)threadIdx.x) & 7) >> 2)) & 1) * 64)) + (((((((int)threadIdx.x) & 63) >> 5) + ((((int)threadIdx.x) & 3) >> 1)) & 1) * 32)) + (((((((int)threadIdx.x) & 31) >> 4) + (((int)threadIdx.x) & 1)) & 1) * 16)) + 12288), B+((((((((int)bx) * 196608) + (i_6 * 24576)) + ((((int)threadIdx.x) >> 4) * 3072)) + (k * 128)) + ((((int)threadIdx.x) & 15) * 8)) + 256));
+      tl::cp_async_gs<16>(buf_dyn_shmem+((((((((((k + 2) % 3) * 16384) + (((((int)threadIdx.x) & 15) >> 3) * 8192)) + (i_6 * 1024)) + ((((int)threadIdx.x) >> 4) * 128)) + ((((((int)threadIdx.x) >> 6) + ((((int)threadIdx.x) & 7) >> 2)) & 1) * 64)) + (((((((int)threadIdx.x) & 63) >> 5) + ((((int)threadIdx.x) & 3) >> 1)) & 1) * 32)) + (((((((int)threadIdx.x) & 31) >> 4) + (((int)threadIdx.x) & 1)) & 1) * 16)) + 12288), B+((((((((int)bx) * 131072) + (i_6 * 16384)) + ((((int)threadIdx.x) >> 4) * 2048)) + (k * 128)) + ((((int)threadIdx.x) & 15) * 8)) + 256));
     }
     tl::cp_async_commit();
     tl::cp_async_wait<2>();
@@ -87,16 +87,16 @@ template <typename T,
   tl::cp_async_wait<1>();
   __syncthreads();
   for (int ki_1 = 0; ki_1 < 8; ++ki_1) {
-    tl::ptx_ldmatrix_x4((&(((bfloat16_t*)buf_dyn_shmem)[(((((ki_1 >> 2) * 1024) + (((((int)threadIdx.x) & 15) >> 3) * 512)) + ((((((((int)threadIdx.x) & 15) * 64) + (((((((int)threadIdx.x) & 7) >> 2) + ((ki_1 & 3) >> 1)) & 1) * 32)) + (((((((int)threadIdx.x) & 3) >> 1) + (ki_1 & 1)) & 1) * 16)) + (((((((int)threadIdx.x) & 31) >> 4) + (((int)threadIdx.x) & 1)) & 1) * 8)) & 511)) + 2048)])) + 0, A_local + 0);
-    tl::ptx_ldmatrix_x4((&(((bfloat16_t*)buf_dyn_shmem)[((((((((ki_1 >> 2) * 4096) + ((((int)threadIdx.x) >> 4) * 512)) + ((((int)threadIdx.x) & 7) * 64)) + (((((((int)threadIdx.x) & 7) >> 2) + ((ki_1 & 3) >> 1)) & 1) * 32)) + (((((((int)threadIdx.x) & 3) >> 1) + (ki_1 & 1)) & 1) * 16)) + (((((((int)threadIdx.x) & 15) >> 3) + (((int)threadIdx.x) & 1)) & 1) * 8)) + 14336)])) + 0, B_local + 0);
+    tl::ptx_ldmatrix_x4((&(((bfloat16_t*)buf_dyn_shmem)[(((((ki_1 >> 2) * 1024) + (((((int)threadIdx.x) & 15) >> 3) * 512)) + ((((((((int)threadIdx.x) & 15) * 64) + (((((((int)threadIdx.x) & 7) >> 2) + ((ki_1 & 3) >> 1)) & 1) * 32)) + (((((((int)threadIdx.x) & 3) >> 1) + (ki_1 & 1)) & 1) * 16)) + (((((((int)threadIdx.x) & 31) >> 4) + (((int)threadIdx.x) & 1)) & 1) * 8)) & 511)) + 4096)])) + 0, A_local + 0);
+    tl::ptx_ldmatrix_x4((&(((bfloat16_t*)buf_dyn_shmem)[((((((((ki_1 >> 2) * 4096) + ((((int)threadIdx.x) >> 4) * 512)) + ((((int)threadIdx.x) & 7) * 64)) + (((((((int)threadIdx.x) & 7) >> 2) + ((ki_1 & 3) >> 1)) & 1) * 32)) + (((((((int)threadIdx.x) & 3) >> 1) + (ki_1 & 1)) & 1) * 16)) + (((((((int)threadIdx.x) & 15) >> 3) + (((int)threadIdx.x) & 1)) & 1) * 8)) + 22528)])) + 0, B_local + 0);
     tl::mma_sync<tl::DataType::kBFloat16, tl::DataType::kBFloat16, tl::DataType::kFloat32, 16, 8, 16, false, true>(reinterpret_cast<float*>(C_local + 0), reinterpret_cast<const unsigned*>(A_local + 0), reinterpret_cast<const unsigned*>(B_local + 0));
     tl::mma_sync<tl::DataType::kBFloat16, tl::DataType::kBFloat16, tl::DataType::kFloat32, 16, 8, 16, false, true>(reinterpret_cast<float*>(C_local + 4), reinterpret_cast<const unsigned*>(A_local + 0), reinterpret_cast<const unsigned*>(B_local + 4));
   }
   tl::cp_async_wait<0>();
   __syncthreads();
   for (int ki_2 = 0; ki_2 < 8; ++ki_2) {
-    tl::ptx_ldmatrix_x4((&(((bfloat16_t*)buf_dyn_shmem)[(((((ki_2 >> 2) * 1024) + (((((int)threadIdx.x) & 15) >> 3) * 512)) + ((((((((int)threadIdx.x) & 15) * 64) + (((((((int)threadIdx.x) & 7) >> 2) + ((ki_2 & 3) >> 1)) & 1) * 32)) + (((((((int)threadIdx.x) & 3) >> 1) + (ki_2 & 1)) & 1) * 16)) + (((((((int)threadIdx.x) & 31) >> 4) + (((int)threadIdx.x) & 1)) & 1) * 8)) & 511)) + 4096)])) + 0, A_local + 0);
-    tl::ptx_ldmatrix_x4((&(((bfloat16_t*)buf_dyn_shmem)[((((((((ki_2 >> 2) * 4096) + ((((int)threadIdx.x) >> 4) * 512)) + ((((int)threadIdx.x) & 7) * 64)) + (((((((int)threadIdx.x) & 7) >> 2) + ((ki_2 & 3) >> 1)) & 1) * 32)) + (((((((int)threadIdx.x) & 3) >> 1) + (ki_2 & 1)) & 1) * 16)) + (((((((int)threadIdx.x) & 15) >> 3) + (((int)threadIdx.x) & 1)) & 1) * 8)) + 22528)])) + 0, B_local + 0);
+    tl::ptx_ldmatrix_x4((&(((bfloat16_t*)buf_dyn_shmem)[((((ki_2 >> 2) * 1024) + (((((int)threadIdx.x) & 15) >> 3) * 512)) + ((((((((int)threadIdx.x) & 15) * 64) + (((((((int)threadIdx.x) & 7) >> 2) + ((ki_2 & 3) >> 1)) & 1) * 32)) + (((((((int)threadIdx.x) & 3) >> 1) + (ki_2 & 1)) & 1) * 16)) + (((((((int)threadIdx.x) & 31) >> 4) + (((int)threadIdx.x) & 1)) & 1) * 8)) & 511))])) + 0, A_local + 0);
+    tl::ptx_ldmatrix_x4((&(((bfloat16_t*)buf_dyn_shmem)[((((((((ki_2 >> 2) * 4096) + ((((int)threadIdx.x) >> 4) * 512)) + ((((int)threadIdx.x) & 7) * 64)) + (((((((int)threadIdx.x) & 7) >> 2) + ((ki_2 & 3) >> 1)) & 1) * 32)) + (((((((int)threadIdx.x) & 3) >> 1) + (ki_2 & 1)) & 1) * 16)) + (((((((int)threadIdx.x) & 15) >> 3) + (((int)threadIdx.x) & 1)) & 1) * 8)) + 6144)])) + 0, B_local + 0);
     tl::mma_sync<tl::DataType::kBFloat16, tl::DataType::kBFloat16, tl::DataType::kFloat32, 16, 8, 16, false, true>(reinterpret_cast<float*>(C_local + 0), reinterpret_cast<const unsigned*>(A_local + 0), reinterpret_cast<const unsigned*>(B_local + 0));
     tl::mma_sync<tl::DataType::kBFloat16, tl::DataType::kBFloat16, tl::DataType::kFloat32, 16, 8, 16, false, true>(reinterpret_cast<float*>(C_local + 4), reinterpret_cast<const unsigned*>(A_local + 0), reinterpret_cast<const unsigned*>(B_local + 4));
   }
@@ -131,10 +131,10 @@ template <typename T,
 
 
 } // kernel
-// Strategy: linear_gemm_add_tl_1_1024_3072
+// Strategy: linear_gemm_add_tl_1_1024_2048
 // selected_hparams: [16, 64, 128, 1, 3, 128, 1, False].
 // smem: 61440 bytes.
 // use_cooperative_groups: 0.
 // layout: (16, 1, 1), (64, 16, 128)
 // block_dim=(128, 1, 1).
-// latency: 0.0671
+// latency: 0.04801
