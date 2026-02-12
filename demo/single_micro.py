@@ -21,8 +21,7 @@ from common.micro_autogen import MicroAutoGen
 
 def profile(target_func, torch_ref_func):
     reporter = PerfReporter() 
-    reporter.generate_report(target_func, None, 1, 
-                            torch_ref_func, None, 
+    reporter.generate_report(target_func, torch_ref_func,
                             warnup_iter=100, test_iter=500, 
                             allclose_iter=5, print_all=False)
     

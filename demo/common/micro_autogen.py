@@ -58,8 +58,8 @@ class MicroAutoGen:
         # silu_mul_layout = (48, 1, 1), (64, 16, 1)
         # linear2_layout = (32, 1, 1), (32, 16, 128)
     
-        with open(config_path+"qwen3_mlp_config.py", "w", encoding="utf-8") as config_file:
-            config_file.write(f"class Qwen3MlpConfig:\n")
+        with open(config_path+"qwen3_mega_config.py", "w", encoding="utf-8") as config_file:
+            config_file.write(f"class Qwen3MegaConfig:\n")
             if (layer_id == 0 or layer_id == 99):
                 kernel = MicroRmsNorm(self.batch_size, self.hidden_size, dtype=self.dtype, accum_dtype=self.accum_dtype)
                 self._save_target(kernel, mode, code_dir, config_file, "rmsnorm_layout")

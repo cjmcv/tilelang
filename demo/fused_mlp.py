@@ -5,7 +5,7 @@ import megakernel as mi
 
 from common.pkt_util import TorchRef, PerfReporter
 from common.mpk_layers import MpkLayers
-from common.autogen.qwen3_mlp_config import Qwen3MlpConfig
+from common.autogen.qwen3_mega_config import Qwen3MegaConfig
 
 WITH_RMS_NORM = 1
 WITH_RESIDUAL = 1
@@ -62,7 +62,7 @@ if __name__ == "__main__":
             weight=w_rms_norm,
             output=rms_out,
             sync_mode=(0, 0, 0),
-            layout=Qwen3MlpConfig.rmsnorm_layout,
+            layout=Qwen3MegaConfig.rmsnorm_layout,
         )
         x = rms_out
         
@@ -74,7 +74,7 @@ if __name__ == "__main__":
         weight=w_gatedup,
         output=mlp_mid,
         sync_mode=(0, 0, 0),
-        layout=Qwen3MlpConfig.linear1_layout,
+        layout=Qwen3MegaConfig.linear1_layout,
     )
     
     if 1:
@@ -86,7 +86,7 @@ if __name__ == "__main__":
             input=mlp_mid,
             output=silu_mul_out,
             sync_mode=(2, 0, 0),
-            layout=Qwen3MlpConfig.silu_mul_layout,
+            layout=Qwen3MegaConfig.silu_mul_layout,
             # grid_dim=(2, 4, 1), tile_dim=(128, 1, 1),
             # sync_mode=(2, 0, 0),
         )
@@ -97,7 +97,7 @@ if __name__ == "__main__":
                 residual=x_residual,
                 output=mlp_out,
                 sync_mode=(0, 0, 0),
-                layout=Qwen3MlpConfig.linear2_layout,
+                layout=Qwen3MegaConfig.linear2_layout,
             )
         else:
             mpk.linear_layer(
@@ -105,7 +105,7 @@ if __name__ == "__main__":
                 weight=w_down_proj,
                 output=mlp_out,
                 sync_mode=(0, 0, 0),
-                layout=Qwen3MlpConfig.inear2_layout,
+                layout=Qwen3MegaConfig.inear2_layout,
             )
     else:
         mpk.silu_mul_linear_layer(
@@ -130,21 +130,16 @@ if __name__ == "__main__":
         # return TorchRef.linear(O1, w_gatedup_torch)
     graph, ref_output = TorchRef.compile_capture(ref_run, is_compile=False)
     
-    def mpk_run():
-        mpk(batch_size)
-        
-    ref_output = ref_run()
-    mpk_output = out_torch[:batch_size]
-
-    for _ in range(100):
-        graph.replay()
-        # ref_run()
-        
-    mpk_run()
     ##
+    def torch_ref():
+        graph.replay()
+        return ref_output
+
+    def target_func():
+        mpk(batch_size)
+        return out_torch[:batch_size]
     
     if not args.profiling:
-        reporter.generate_report(mpk_run, mpk_output, splitk, 
-                                graph.replay, ref_output, 
+        reporter.generate_report(target_func, target_func,
                                 warnup_iter=100, test_iter=200, 
                                 allclose_iter=5, print_all=False)

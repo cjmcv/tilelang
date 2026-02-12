@@ -9,7 +9,7 @@ from common.mpk_layers import MpkLayers
 
 from common.micro_base import HparamSelectMode
 from common.micro_autogen import MicroAutoGen
-from common.autogen.qwen3_mlp_config import Qwen3MlpConfig
+from common.autogen.qwen3_mega_config import Qwen3MegaConfig
 
 def test_rms_norm(mpk, max_batch_size, batch_size, hidden_size):
     x_torch = torch.randn((max_batch_size, hidden_size), dtype=torch.bfloat16, device="cuda")
@@ -24,7 +24,7 @@ def test_rms_norm(mpk, max_batch_size, batch_size, hidden_size):
         weight=w_rms_norm,
         output=rms_out,
         sync_mode=(0, 0, 0),
-        layout=Qwen3MlpConfig.rmsnorm_layout,
+        layout=Qwen3MegaConfig.rmsnorm_layout,
     )
     layers.compile_load(args.nc, args.output_dir)
 
@@ -35,10 +35,7 @@ def test_rms_norm(mpk, max_batch_size, batch_size, hidden_size):
         mpk(batch_size)
         return out_torch[:batch_size]
     
-    target_output = target_func()    
-    ref_output = torch_ref()
-    reporter.generate_report(target_func, target_output, splitk, 
-                            torch_ref, ref_output, 
+    reporter.generate_report(target_func, torch_ref,
                             warnup_iter=100, test_iter=100, 
                             allclose_iter=5, print_all=False)
 
@@ -61,7 +58,7 @@ def test_mlp_linear1(mpk, max_batch_size, batch_size, hidden_size, intermediate_
         weight=w,
         output=linear_out,
         sync_mode=(0, 0, 0),
-        layout=Qwen3MlpConfig.linear1_layout,
+        layout=Qwen3MegaConfig.linear1_layout,
     )
     layers.compile_load(args.nc, args.output_dir)
     
@@ -72,10 +69,9 @@ def test_mlp_linear1(mpk, max_batch_size, batch_size, hidden_size, intermediate_
         mpk(batch_size)
         return out_torch[:batch_size]
         
-    target_output = target_func()
-    ref_output = torch_ref()
-    reporter.generate_report(target_func, target_output, splitk, 
-                            torch_ref, ref_output, 
+    # target_output = target_func()
+    # ref_output = torch_ref()
+    reporter.generate_report(target_func, torch_ref, 
                             warnup_iter=100, test_iter=100, 
                             allclose_iter=5, print_all=False)
 
@@ -89,7 +85,7 @@ def test_silu_mul(mpk, max_batch_size, batch_size, intermediate_size):
         input=x,
         output=silu_mul_out,
         sync_mode=(0, 0, 0), # (2, 0, 0)
-        layout=Qwen3MlpConfig.silu_mul_layout,
+        layout=Qwen3MegaConfig.silu_mul_layout,
     )
     layers.compile_load(args.nc, args.output_dir)
 
@@ -100,10 +96,9 @@ def test_silu_mul(mpk, max_batch_size, batch_size, intermediate_size):
         mpk(batch_size)
         return out_torch[:batch_size]
         
-    target_output = target_func()    
-    ref_output = torch_ref()
-    reporter.generate_report(target_func, target_output, splitk, 
-                            torch_ref, ref_output, 
+    # target_output = target_func()    
+    # ref_output = torch_ref()
+    reporter.generate_report(target_func, torch_ref, 
                             warnup_iter=100, test_iter=100, 
                             allclose_iter=5, print_all=False)
     
@@ -124,7 +119,7 @@ def test_mlp_linear_residual2(mpk, max_batch_size, batch_size, hidden_size, inte
         residual=x_residual,
         output=mlp_out,
         sync_mode=(0, 0, 0),
-        layout=Qwen3MlpConfig.linear2_layout,
+        layout=Qwen3MegaConfig.linear2_layout,
     )
     layers.compile_load(args.nc, args.output_dir)
     
@@ -137,8 +132,7 @@ def test_mlp_linear_residual2(mpk, max_batch_size, batch_size, hidden_size, inte
         
     target_output = target_func()    
     ref_output = torch_ref()
-    reporter.generate_report(target_func, target_output, splitk, 
-                            torch_ref, ref_output, 
+    reporter.generate_report(target_func, torch_ref, 
                             warnup_iter=100, test_iter=100, 
                             allclose_iter=5, print_all=False)
     
@@ -171,7 +165,7 @@ def test_gqa_decode(mpk, max_batch_size, batch, heads, groups, seqlen_kv, dim):
         out_partial=out_partial,
         output=attn_out,
         sync_mode=(0, 0, 0),
-        layout=Qwen3MlpConfig.gqa_decode_layout,
+        layout=Qwen3MegaConfig.gqa_decode_layout,
         # layout=((1, 8, 8), (64, 64, 8), (16, 1, 1), (64, 64, 8))
     )
     layers.compile_load(args.nc, args.output_dir)
@@ -197,8 +191,7 @@ def test_gqa_decode(mpk, max_batch_size, batch, heads, groups, seqlen_kv, dim):
     # if (torch.allclose(out_torch, ref_output, rtol=1e-2, atol=0)):
     #     print("allclose: True")
     
-    reporter.generate_report(target_func, target_output, splitk, 
-                            torch_ref, ref_output, 
+    reporter.generate_report(target_func, torch_ref, 
                             warnup_iter=100, test_iter=100, 
                             allclose_iter=5, print_all=False)
 
@@ -229,7 +222,7 @@ def test_rope(mpk, max_batch_size, batch, heads, groups, dim):
         q_embed=q_out,
         k_embed=k_out,
         sync_mode=(0, 0, 0),
-        layout=Qwen3MlpConfig.rope_layout,
+        layout=Qwen3MegaConfig.rope_layout,
     )
     layers.compile_load(args.nc, args.output_dir)
     
@@ -255,8 +248,7 @@ def test_rope(mpk, max_batch_size, batch, heads, groups, dim):
     # if (torch.allclose(out_torch, ref_output, rtol=1e-2, atol=0)):
     #     print("allclose: True")
     
-    reporter.generate_report(target_func, None, splitk, 
-                            torch_ref, None, 
+    reporter.generate_report(target_func, torch_ref, 
                             warnup_iter=100, test_iter=100, 
                             allclose_iter=5, print_all=False)
 

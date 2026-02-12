@@ -5,7 +5,7 @@ import megakernel as mi
 
 from common.pkt_util import TorchRef, PerfReporter
 from common.mpk_layers import MpkLayers
-from common.autogen.qwen3_mlp_config import Qwen3MlpConfig
+from common.autogen.qwen3_mega_config import Qwen3MegaConfig
 
 if __name__ == "__main__":
     max_batch_size = 1
@@ -51,8 +51,11 @@ if __name__ == "__main__":
     w_qkv_proj_torch = torch.randn(((num_heads+2*num_kv_heads)*head_dim, hidden_size), dtype=torch.bfloat16, device="cuda")
     w_q_norm_torch = torch.randn((seqlen_q, head_dim), dtype=torch.bfloat16, device="cuda")
     w_k_norm_torch = torch.randn((seqlen_q, head_dim), dtype=torch.bfloat16, device="cuda")
-    w_cos_torch = torch.randn((batch, seqlen_q, head_dim), dtype=torch.bfloat16, device="cuda")
-    w_sin_torch = torch.randn((batch, seqlen_q, head_dim), dtype=torch.bfloat16, device="cuda")
+    
+    cos_half = torch.randn((batch, seqlen_q, head_dim//2), dtype=torch.bfloat16, device="cuda")
+    sin_half = torch.randn((batch, seqlen_q, head_dim//2), dtype=torch.bfloat16, device="cuda")
+    w_cos_torch = torch.cat((cos_half, cos_half), dim=-1)
+    w_sin_torch = torch.cat((sin_half, sin_half), dim=-1)
     
     key_cache_torch = torch.randn(batch, seqlen_kv, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
     value_cache_torch = torch.randn(batch, seqlen_kv, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)
@@ -73,26 +76,28 @@ if __name__ == "__main__":
         
         query_states = TorchRef.rms_norm(query_states, w_q_norm_torch)
         key_states = TorchRef.rms_norm(key_states, w_k_norm_torch)
-        
-        from models.rope import apply_rotary_pos_emb_triton
-        query_states, key_states = apply_rotary_pos_emb_triton(
-            query_states, key_states, w_cos_torch, w_sin_torch, unsqueeze_dim=2
-        )
+        query_states, key_states = TorchRef.apply_rotary_pos_emb_triton(query_states, key_states, w_cos_torch, w_sin_torch, unsqueeze_dim=2)
         
         step = 63
         key_cache_torch[0, step, :, :] = key_states
         value_cache_torch[0, step, :, :] = value_states
-        # print("q", query_states.size())
-        # print("cache k", key_cache_torch.size())
-        # print("cache v", value_cache_torch.size())
         attn_output = TorchRef.attention_sdpa(query_states, key_cache_torch, value_cache_torch, False)
-        
-        attn_output = attn_output.reshape(batch, seqlen_q, q_dim)
+        attn_output = attn_output.reshape(batch*seqlen_q, q_dim)
         attn_output = TorchRef.linear(attn_output, w_o_proj_torch)
-        # print(key_states.size())
-        # print(value_states.size())
-        # print(out.size())
         return attn_output
+    
+    # layers = MpkLayers(0, 1, world_size, rank, max_batch_size, args.trace_name, args.profiling)
+    # mpk = layers.get_mpk()
+
+    # rms_out = mpk.new_tensor(dims=(max_batch_size, hidden_size), dtype=mi.bfloat16, name="rms_out", io_category="cuda_tensor")
+    # mpk.rmsnorm_layer(
+    #     input=x,
+    #     weight=w_rms_norm,
+    #     output=rms_out,
+    #     sync_mode=(0, 0, 0),
+    #     layout=Qwen3MegaConfig.rmsnorm_layout,
+    # )
+    # x = rms_out
     
     graph, ref_output = TorchRef.compile_capture(ref_run, is_compile=False)
     
@@ -111,7 +116,6 @@ if __name__ == "__main__":
     ##
     
     # if not args.profiling:
-    #     reporter.generate_report(mpk_run, mpk_output, splitk, 
-    #                             graph.replay, ref_output, 
+    #     reporter.generate_report(mpk_run, graph.replay, 
     #                             warnup_iter=100, test_iter=200, 
     #                             allclose_iter=5, print_all=False)

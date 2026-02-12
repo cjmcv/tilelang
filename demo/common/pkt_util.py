@@ -331,40 +331,7 @@ class PerfReporter:
         else:
             if print_:
                 print(f"passed: {name} diff={diff}")
-            
-    def check_allclose_inplace(self, target_run, target_out, splitk, torch_out, iter, print_all):
-        if (print_all):
-            torch.set_printoptions(threshold=float('inf'))
-        torch.cuda.synchronize()
-        
-        # print("inner: ", torch_out, torch_out.data_ptr())
-        for _ in range(iter):
-            target_out.zero_()
-            target_run()
-            torch.cuda.synchronize()
-            
-            target_result = target_out
-            torch_result = torch_out
-            
-            total_num = torch_result.numel()
-            if (torch.allclose(target_result, torch_result, rtol=1e-2, atol=0)):
-                if (print_all):
-                    print("target_out:", target_result.shape, "\n", target_result)
-                    print("torch_out:", torch_result.shape, "\n", torch_result)
-                print("allclose: True")
-            else:
-                print("target_out:", target_result.shape, "\n", target_result)
-                print("torch_out:", torch_result.shape, "\n", torch_result)
-                print("diff: ", target_result - torch_result)
                 
-                radio = abs((target_result - torch_result)/torch_result)
-                
-                threshold = [0.05, 0.10]
-                count0 = (radio > threshold[0]).sum().item()
-                count1 = (radio > threshold[1]).sum().item()
-                print("radio > ", threshold[0], ": ", count0, "-", count0/total_num, " / ", threshold[1], ": ", count1, "-", count1/total_num)
-            self.assert_similar(target_result, torch_result, name="similar")    
-            
     def check_allclose_ret(self, target_run, torch_run, iter, print_all):
         if (print_all):
             torch.set_printoptions(threshold=float('inf'))
@@ -418,11 +385,8 @@ class PerfReporter:
         run_time = (end_time - start_time) * 1000
         print(name, "run time (ms): ", run_time / test_iter)
         
-    def generate_report(self, target_run, target_out, splitk, torch_run, torch_out, warnup_iter, test_iter, allclose_iter, print_all):  
-        if target_out != None:
-            self.check_allclose_inplace(target_run, target_out, splitk, torch_out, allclose_iter, print_all)
-        else:
-            self.check_allclose_ret(target_run, torch_run, allclose_iter, print_all)
+    def generate_report(self, target_run, torch_run, warnup_iter, test_iter, allclose_iter, print_all):  
+        self.check_allclose_ret(target_run, torch_run, allclose_iter, print_all)
 
         latency = do_bench(lambda: target_run(), warmup=warnup_iter, rep=test_iter, backend="cupti")
         ref_latency = do_bench(lambda: torch_run(), warmup=warnup_iter, rep=test_iter, backend="cupti")
@@ -430,7 +394,6 @@ class PerfReporter:
         
         # self.time_cuda_event_record("torch_ref", torch_run, test_iter)   
         # self.time_cuda_event_record("mpk", target_run, test_iter)
-
         # self.time_cpu_record("torch_ref", torch_run, test_iter)   
         # self.time_cpu_record("mpk", target_run, test_iter)
         
