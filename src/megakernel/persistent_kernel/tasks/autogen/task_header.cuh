@@ -3,3 +3,4 @@
 #include "silu_mul.cuh"
 #include "rmsnorm.cuh"
 #include "gqa_decode.cuh"
+#include "rope.cuh"

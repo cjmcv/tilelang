@@ -371,7 +371,10 @@ public:
     assert(op->op_type == type::KN_CUSTOMIZED_OP);
     KNCustomizedOp const *customized = static_cast<KNCustomizedOp const *>(op);
     TaskRegister *task_register = TaskRegister::get_instance();
-    if (name == "gqa_decode") {
+    if (name == "rope") {
+      int variant_id = task_register->register_rope_task(customized->bgraph, params);
+      task_config[op] = std::make_tuple(4, 2, TASK_ROPE, variant_id);
+    } else if (name == "gqa_decode") {
       int variant_id = task_register->register_gqa_decode_task(customized->bgraph, params);
       task_config[op] = std::make_tuple(4, 3, TASK_GQA_DECODE, variant_id);
     } else if (name == "embedding") {
@@ -1540,6 +1543,7 @@ private:
     task_type_to_name[TASK_ATTENTION_1] = "TASK_ATTENTION_1";
     task_type_to_name[TASK_SILU_MUL] = "TASK_SILU_MUL";
     task_type_to_name[TASK_GQA_DECODE] = "TASK_GQA_DECODE";
+    task_type_to_name[TASK_ROPE] = "TASK_ROPE";
     task_type_to_name[TASK_IDENTITY] = "TASK_IDENTITY";
     task_type_to_name[TASK_SILU_MUL_LINEAR_WITH_RESIDUAL] = "TASK_SILU_MUL_LINEAR_WITH_RESIDUAL";
     task_type_to_name[TASK_LINEAR] = "TASK_LINEAR";

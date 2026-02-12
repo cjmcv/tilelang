@@ -161,8 +161,9 @@ def test_rope():
     
     micro = MicroRope(batch, seqlen, heads, groups, dim, dtype=T.bfloat16, accum_dtype=T.float32)
     kernel, name, info  = micro.get_kernel(HparamSelectMode.HEURISTIC) # HEURISTIC, TUNING, TUNED
-
-    q = torch.randn(batch,  seqlen,  heads, dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen=1, H=heads,  D=dim]
+    # kernel.export_sources(kernel_path="demo/gen/single_micro.cu")
+    
+    q = torch.randn(batch, seqlen, heads, dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen=1, H=heads,  D=dim]
     k = torch.randn(batch, seqlen, groups, dim, device="cuda", dtype=torch.bfloat16)   # [B, N=seqlen=1, H=groups, D=dim]
     cos_half = torch.randn(batch, seqlen, dim//2, device="cuda", dtype=torch.bfloat16)
     sin_half = torch.randn(batch, seqlen, dim//2, device="cuda", dtype=torch.bfloat16)
@@ -172,36 +173,17 @@ def test_rope():
     def triton_ref():
         q_emb, k_emb = TorchRef.apply_rotary_pos_emb_triton(q, k, cos, sin, unsqueeze_dim=2)
         return torch.cat((q_emb, k_emb), dim=-2)
-       
+
     def torch_ref():
         q_emb, k_emb = TorchRef.apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=2)
         return torch.cat((q_emb, k_emb), dim=-2)
-    
-    # kernel1 = rope_split_n1_v2(batch, groups, dim, BLOCK_HEADS=8)
-    # kernel_q = rope_split_n_v2(batch, seqlen, heads, dim, BLOCK_SEQ=1, BLOCK_HEADS=1)
-    # kernel_k = rope_split_n_v2(batch, seqlen, groups, dim, BLOCK_SEQ=8, BLOCK_HEADS=8)
-    # kernel = rope_qk_overlap(batch, seqlen, heads, groups, dim, BLOCK_SEQ=1, BLOCK_HEADS_Q=1, BLOCK_HEADS_K=1)
-    # kernel = rope_qk_parallel(batch, seqlen, heads, groups, dim, BLOCK_SEQ=1, BLOCK_HEADS_Q=1, BLOCK_HEADS_K=1)
-    # kernel = rope_fuse_qk_seq1_optimized(batch, heads, groups, dim, BLOCK_HEADS_Q=1, BLOCK_HEADS_K=1)
-    # kernel = rope_split_n1_v2(batch, groups, dim, 1, 8)
-    # kernel.export_sources(kernel_path="demo/gen/single_micro.cu")
-    
+
     def target_func():
         q_emb, k_emb = kernel(q, k, cos, sin)
         return torch.cat((q_emb, k_emb), dim=-2)
-    
-    # def target_func2():
-    #     return kernel2(k, cos, sin)    
-    # q_embed_torch, k_embed_torch = torch_ref()
-    # print("torch_ref", q_embed_torch, "\n", k_embed_torch)
-    
-    # print("tilelang", k_embed)
-    # rep = PerfReporter()
-    # rep.assert_similar(k_embed, k_embed_torch)    
+      
     profile(target_func, triton_ref)
-    
-    # print("shape", k_embed.size(), q_embed_torch.size(), k_embed_torch.size())
-    
+
 if __name__ == "__main__":
     # test_silu_mul()
     # test_rms_norm()
@@ -214,6 +196,6 @@ if __name__ == "__main__":
     # # # gen = MicroAutoGen(1, 2560, 9728)
     # gen = MicroAutoGen(batch_size=1, hidden_size=1024, intermediate_size=3072, 
     #                    kv_seqlen=8192, heads=16, groups=8, dim=128)
-    # gen.gen_qwen3_mlp(layer_id=99, mode=HparamSelectMode.TUNED) # HEURISTIC, TUNING, TUNED
+    # gen.gen_qwen3_ops(layer_id=99, mode=HparamSelectMode.TUNED) # HEURISTIC, TUNING, TUNED
     
-    print("Test single_micro completed.")
+    # print("Test single_micro completed.")

@@ -378,7 +378,38 @@ class PersistentKernel:
         tb_graph.new_input(output, (1, -1, -1), -1, True)
         self.kn_graph.customized([input, weight_norm, weight_linear, output], tb_graph)
         self.kn_graph.register_task(tb_graph, "rmsnorm_linear")
+
+    def rope_layer(
+        self,
+        q: DTensor,
+        k: DTensor, 
+        cos: DTensor,
+        sin: DTensor,
+        q_embed: DTensor,
+        k_embed: DTensor,
+        sync_mode: tuple,
+        layout: tuple,
+    ):
+        assert q.num_dims == 4
+        assert k.num_dims == 4
+        assert cos.num_dims == 3
+        assert sin.num_dims == 3
+        assert q_embed.num_dims == 4
+        assert k_embed.num_dims == 4
+    
+        grid_dim, tile_dim = layout
+        print(grid_dim, tile_dim, sync_mode)
+        tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128, 64))
+        tb_graph.new_input(q,       sync_mode, True)
+        tb_graph.new_input(k,       sync_mode, True)
+        tb_graph.new_input(cos,     sync_mode, True)
+        tb_graph.new_input(sin,     sync_mode, True)
+        tb_graph.new_input(q_embed, (-1, -1, -1), True)
+        tb_graph.new_input(k_embed, (-1, -1, -1), True)
         
+        self.kn_graph.customized([q, k, cos, sin, q_embed, k_embed], tb_graph)
+        self.kn_graph.register_task(tb_graph, "rope", [-1]) # TASK_ROPE
+                        
     def gqa_decode_layer(
         self,
         q: DTensor,
@@ -410,7 +441,7 @@ class PersistentKernel:
             if len(layout) == 2:
                 self.kn_graph.register_task(tb_graph, "gqa_decode", [-1])
             else:
-                self.kn_graph.register_task(tb_graph, "gqa_decode", [i//2])
+                self.kn_graph.register_task(tb_graph, "gqa_decode", [i//2]) # sub kernel id for combined kernel
         
         
     def attention_layer(

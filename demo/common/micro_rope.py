@@ -7,8 +7,8 @@ from common.micro_base import BaseMicroKernel, HparamSelectMode
     
 class _RopeStrategy:
     def __init__(self, batch, seq_len, num_heads_q, num_heads_k, head_dim, dtype, accum_dtype):
-        self.name_suffix = f"_{batch}_{seq_len}_{num_heads_q}_{num_heads_k}_{head_dim}"
-        self.name = "rope_tl"+self.name_suffix
+        self.name_suffix = f"{batch}_{seq_len}_{num_heads_q}_{num_heads_k}_{head_dim}"
+        self.name = "rope_tl_"+self.name_suffix
         self.batch = batch  
         self.seq_len = seq_len  
         self.num_heads_q = num_heads_q
@@ -22,26 +22,34 @@ class _RopeStrategy:
         print(len(self.hparam_space))
         
     def _get_hparam_space(self):
+        KERNEL_MODE=[0,1]
         BLOCK_SEQ=[1]
         BLOCK_HEADS_Q=[1]
         BLOCK_HEADS_K=[1]
         thread_nums=[128]
         
         res = []
-        for seq, head_q, head_k, thread_num in itertools.product(
-           BLOCK_SEQ, BLOCK_HEADS_Q, BLOCK_HEADS_K, thread_nums):
-            res.append([seq, head_q, head_k, thread_num])
+        for mode, seq, head_q, head_k, thread_num in itertools.product(
+           KERNEL_MODE, BLOCK_SEQ, BLOCK_HEADS_Q, BLOCK_HEADS_K, thread_nums):
+            res.append([mode, seq, head_q, head_k, thread_num])
         return res 
     
     def get_heuristic_hparams(self):
         # [BLOCK_SEQ, BLOCK_HEADS_Q, BLOCK_HEADS_K, thread_nums]
-        return [1,1,1,128]
+        return [0,1,1,1,128]
         
     def get_kernel(self, selected_hparams):
         print("selected_hparams: ", selected_hparams)
-        return self.rope_qk_parallel(self.batch, self.seq_len, 
-                                     self.num_heads_q, self.num_heads_k, self.head_dim,
-                                     *selected_hparams, self.dtype, self.accum_dtype) 
+        mode = selected_hparams[0]
+        kernel_hparam = selected_hparams[1:]
+        if mode == 0:
+            return self.rope_qk_parallel(self.batch, self.seq_len, 
+                                        self.num_heads_q, self.num_heads_k, self.head_dim,
+                                        *kernel_hparam, self.dtype, self.accum_dtype) 
+        else:
+            return self.rope_qk_overlap(self.batch, self.seq_len, 
+                                        self.num_heads_q, self.num_heads_k, self.head_dim,
+                                        *kernel_hparam, self.dtype, self.accum_dtype) 
 
     @tilelang.jit(out_idx=[-2, -1])
     def rope_qk_overlap(batch, seq_len, num_heads_q, num_heads_k, head_dim, 
@@ -294,9 +302,6 @@ class MicroRope(BaseMicroKernel):
 '''
 template <typename T,
           int THREAD_NUM,
-          int BLOCK_SEQ,
-          int BLOCK_HEADS_Q, 
-          int BLOCK_HEADS_K,
           int BATCH,
           int SEQLEN,
           int NUM_HEADS_Q,
@@ -305,26 +310,26 @@ template <typename T,
 __device__ __forceinline__ void rope_kernel_<name_suffix>(const int bx, const int by, const int bz,
                                                    const void* __restrict__ q, 
                                                    const void* __restrict__ k, 
-                                                   const void* __restrict__ cos,
-                                                   const void* __restrict__ sin, 
+                                                   const void* __restrict__ cos_ptr,
+                                                   const void* __restrict__ sin_ptr, 
                                                    void* __restrict__ q_embed_ptr,
                                                    void* __restrict__ k_embed_ptr) {
   static_assert(THREAD_NUM==<threads>);
-  static_assert(BLOCK_SEQ==<BLOCK_SEQ>); static_assert(BLOCK_HEADS_Q==<BLOCK_HEADS_Q>); static_assert(BLOCK_HEADS_K==<BLOCK_HEADS_K>);
   static_assert(BATCH==<BATCH>); static_assert(SEQLEN==<SEQLEN>); 
   static_assert(NUM_HEADS_Q==<NUM_HEADS_Q>); static_assert(NUM_HEADS_K==<NUM_HEADS_K>); static_assert(HEAD_DIM==<HEAD_DIM>);
   
-  const <dtype>* __restrict__ A = static_cast<const <dtype>*>(input_ptr);
-  <dtype>* __restrict__ C = static_cast<<dtype>*>(output_ptr);
+  const <dtype>* __restrict__ Q = static_cast<const <dtype>*>(q);
+  const <dtype>* __restrict__ K = static_cast<const <dtype>*>(k);
+  const <dtype>* __restrict__ cos = static_cast<const <dtype>*>(cos_ptr);
+  const <dtype>* __restrict__ sin = static_cast<const <dtype>*>(sin_ptr);
+  <dtype>* __restrict__ Q_embed = static_cast<<dtype>*>(q_embed_ptr);
+  <dtype>* __restrict__ K_embed = static_cast<<dtype>*>(k_embed_ptr);
   
 '''     
-        BLOCK_SEQ, BLOCK_HEADS_Q, BLOCK_HEADS_K, threads = selected_hparams
+        KERNEL_MODE, BLOCK_SEQ, BLOCK_HEADS_Q, BLOCK_HEADS_K, threads = selected_hparams
         BLOCK_K = 1
         
         head_str = head_str.replace('<threads>', str(threads))
-        head_str = head_str.replace('<BLOCK_SEQ>', str(BLOCK_SEQ))
-        head_str = head_str.replace('<BLOCK_HEADS_Q>', str(BLOCK_HEADS_Q)) 
-        head_str = head_str.replace('<BLOCK_HEADS_K>', str(BLOCK_HEADS_K)) 
         head_str = head_str.replace('<BATCH>', str(self.strategy.batch))
         head_str = head_str.replace('<SEQLEN>', str(self.strategy.seq_len))
         head_str = head_str.replace('<NUM_HEADS_Q>', str(self.strategy.num_heads_q)) 

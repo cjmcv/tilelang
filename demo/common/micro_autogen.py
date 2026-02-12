@@ -12,6 +12,7 @@ from .micro_linear import MicroLinearStrategy, MicroLinear
 from .micro_rmsnorm import MicroRmsNorm
 from .micro_silu_mul import MicroSiluMul
 from .micro_gqa_decode import MicroGqaDecode
+from common.micro_rope import MicroRope
 
 class MicroAutoGen:
     def __init__(self, batch_size, hidden_size, intermediate_size, kv_seqlen, heads, groups, dim):
@@ -33,7 +34,7 @@ class MicroAutoGen:
         shutil.copy2(file_name, code_dir)
         config_file.write(f"    {name} = {info}\n")
         
-    def gen_qwen3_mlp(self, layer_id: int, mode: HparamSelectMode):
+    def gen_qwen3_ops(self, layer_id: int, mode: HparamSelectMode):
         
         megakernel_home = os.getenv("MEGAKERNEL_HOME", default=None)
         if megakernel_home is None:
@@ -72,7 +73,10 @@ class MicroAutoGen:
                 kernel = MicroLinear(MicroLinearStrategy.GEMM_ADD, self.batch_size, self.hidden_size, self.intermediate_size, dtype=self.dtype, accum_dtype=self.accum_dtype)
                 self._save_target(kernel, mode, code_dir, config_file, "linear2_layout")
             if (layer_id == 4 or layer_id == 99):
-                kernel = MicroGqaDecode(self.batch_size, self.kv_seqlen, self.heads, self.groups, self.dim, dtype=self.dtype, accum_dtype=self.accum_dtype)
+                kernel = MicroGqaDecode(self.batch_size, self.kv_seqlen, self.heads, self.groups, self.dim, False, dtype=self.dtype, accum_dtype=self.accum_dtype)
                 self._save_target(kernel, mode, code_dir, config_file, "gqa_decode_layout")
+            if (layer_id == 5 or layer_id == 99):
+                kernel = MicroRope(self.batch_size, 1, self.heads, self.groups, self.dim, dtype=self.dtype, accum_dtype=self.accum_dtype)
+                self._save_target(kernel, mode, code_dir, config_file, "rope_layout")
             
         

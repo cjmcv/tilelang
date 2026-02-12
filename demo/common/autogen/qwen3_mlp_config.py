@@ -4,3 +4,4 @@ class Qwen3MlpConfig:
     silu_mul_layout = (48, 1, 1), (64, 16, 1)
     linear2_layout = (16, 1, 1), (64, 16, 128)
     gqa_decode_layout = (1, 8, 4), (64, 64, 4), (16, 1, 1), (64, 64, 4)
+    rope_layout = (24, 1, 1), (1, 1, 1)

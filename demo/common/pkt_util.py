@@ -341,21 +341,10 @@ class PerfReporter:
         for _ in range(iter):
             target_out.zero_()
             target_run()
-            # print("inner2: ", torch_out)
             torch.cuda.synchronize()
             
             target_result = target_out
             torch_result = torch_out
-            # print("inner3: ", torch_out)
-            if splitk != 1:
-                for i in range(1, splitk):
-                    target_out[0] += target_out[i]
-                    
-                target_result = target_out[0]
-                torch_result = torch_out[0]
-            else:
-                target_result = target_out
-                torch_result = torch_out
             
             total_num = torch_result.numel()
             if (torch.allclose(target_result, torch_result, rtol=1e-2, atol=0)):
