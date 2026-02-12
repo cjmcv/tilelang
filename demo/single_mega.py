@@ -40,11 +40,11 @@ def test_rms_norm(mpk, max_batch_size, batch_size, hidden_size):
                             allclose_iter=5, print_all=False)
 
 
-def test_mlp_linear1(mpk, max_batch_size, batch_size, hidden_size, intermediate_size):
-    x_torch = torch.randn((max_batch_size, hidden_size), dtype=torch.bfloat16, device="cuda")
+def test_linear(mpk, max_batch_size, batch_size, N, K, layout):
+    x_torch = torch.randn((max_batch_size, K), dtype=torch.bfloat16, device="cuda")
     # w_torch = w_gatedup_torch 
-    w_torch = torch.randn((intermediate_size*2, hidden_size), dtype=torch.bfloat16, device="cuda")
-    out_torch = torch.zeros((max_batch_size, intermediate_size*2), dtype=torch.bfloat16, device="cuda")
+    w_torch = torch.randn((N, K), dtype=torch.bfloat16, device="cuda")
+    out_torch = torch.zeros((max_batch_size, N), dtype=torch.bfloat16, device="cuda")
     print("x: ", x_torch.data_ptr(), "w: ", w_torch.data_ptr(), "o: ", out_torch.data_ptr())
     
     x = mpk.attach_input(torch_tensor=x_torch, name="in")
@@ -58,7 +58,7 @@ def test_mlp_linear1(mpk, max_batch_size, batch_size, hidden_size, intermediate_
         weight=w,
         output=linear_out,
         sync_mode=(0, 0, 0),
-        layout=Qwen3MegaConfig.linear1_layout,
+        layout=layout,
     )
     layers.compile_load(args.nc, args.output_dir)
     
@@ -135,7 +135,64 @@ def test_mlp_linear_residual2(mpk, max_batch_size, batch_size, hidden_size, inte
     reporter.generate_report(target_func, torch_ref, 
                             warnup_iter=100, test_iter=100, 
                             allclose_iter=5, print_all=False)
+   
+def test_rope(mpk, max_batch_size, batch, heads, groups, dim):
+    seqlen = 1
+    q_torch = torch.randn(batch, seqlen, heads, dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen=1, H=heads,  D=dim]
+    k_torch = torch.randn(batch, seqlen, groups, dim, device="cuda", dtype=torch.bfloat16)   # [B, N=seqlen=1, H=groups, D=dim]
+    cos_half = torch.randn(batch, seqlen, dim//2, device="cuda", dtype=torch.bfloat16)
+    sin_half = torch.randn(batch, seqlen, dim//2, device="cuda", dtype=torch.bfloat16)
+    cos_torch = torch.cat((cos_half, cos_half), dim=-1)
+    sin_torch = torch.cat((sin_half, sin_half), dim=-1)
+    q_out_torch = torch.empty(batch, seqlen, heads, dim, device="cuda", dtype=torch.bfloat16)
+    k_out_torch = torch.empty(batch, seqlen, groups, dim, device="cuda", dtype=torch.bfloat16)
     
+    # print("torch: ", q_torch.data_ptr(), k_torch.data_ptr(), v_torch.data_ptr(), mask_torch.data_ptr(), out_torch.data_ptr())
+    q = mpk.attach_input(torch_tensor=q_torch, name="q")
+    k = mpk.attach_input(torch_tensor=k_torch, name="k")
+    cos = mpk.attach_input(torch_tensor=cos_torch, name="cos")
+    sin = mpk.attach_input(torch_tensor=sin_torch, name="sin")
+    q_out = mpk.attach_input(torch_tensor=q_out_torch, name="q_out")
+    k_out = mpk.attach_input(torch_tensor=k_out_torch, name="k_out")
+
+    mpk.rope_layer(
+        q=q,
+        k=k,
+        cos=cos,
+        sin=sin,
+        q_embed=q_out,
+        k_embed=k_out,
+        sync_mode=(0, 0, 0),
+        layout=Qwen3MegaConfig.rope_layout,
+    )
+    layers.compile_load(args.nc, args.output_dir)
+    
+    def target_func():
+        mpk(batch_size)
+        return torch.cat((q_out_torch, k_out_torch), dim=-2)
+    
+    def torch_ref():
+        q_emb, k_emb = TorchRef.apply_rotary_pos_emb_triton(q_torch, k_torch, cos_torch, sin_torch, position_ids=None, unsqueeze_dim=2)
+        return torch.cat((q_emb, k_emb), dim=-2)
+    
+    target_output = target_func()    
+    ref_output = torch_ref()
+    print("target_output", target_output)
+    print("ref_output", ref_output)
+    
+    print("target_output", target_func())
+    print("ref_output", torch_ref())
+    # print("target_output", target_func())
+    # print("ref_output", torch_ref())
+    # print("target_output", target_func())
+    # print("ref_output", torch_ref())
+    # if (torch.allclose(out_torch, ref_output, rtol=1e-2, atol=0)):
+    #     print("allclose: True")
+    
+    reporter.generate_report(target_func, torch_ref, 
+                            warnup_iter=100, test_iter=100, 
+                            allclose_iter=5, print_all=False)
+     
 def test_gqa_decode(mpk, max_batch_size, batch, heads, groups, seqlen_kv, dim):
     split = 8 # TODO 自动配置
     glse_torch = torch.empty(batch, heads, split, device="cuda", dtype=torch.bfloat16)
@@ -176,63 +233,6 @@ def test_gqa_decode(mpk, max_batch_size, batch, heads, groups, seqlen_kv, dim):
     
     def torch_ref():
         return TorchRef.attention_sdpa(q_torch, k_torch, v_torch, False)
-    
-    target_output = target_func()    
-    ref_output = torch_ref()
-    print("target_output", target_output)
-    print("ref_output", ref_output)
-    
-    print("target_output", target_func())
-    print("ref_output", torch_ref())
-    # print("target_output", target_func())
-    # print("ref_output", torch_ref())
-    # print("target_output", target_func())
-    # print("ref_output", torch_ref())
-    # if (torch.allclose(out_torch, ref_output, rtol=1e-2, atol=0)):
-    #     print("allclose: True")
-    
-    reporter.generate_report(target_func, torch_ref, 
-                            warnup_iter=100, test_iter=100, 
-                            allclose_iter=5, print_all=False)
-
-def test_rope(mpk, max_batch_size, batch, heads, groups, dim):
-    seqlen = 1
-    q_torch = torch.randn(batch, seqlen, heads, dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen=1, H=heads,  D=dim]
-    k_torch = torch.randn(batch, seqlen, groups, dim, device="cuda", dtype=torch.bfloat16)   # [B, N=seqlen=1, H=groups, D=dim]
-    cos_half = torch.randn(batch, seqlen, dim//2, device="cuda", dtype=torch.bfloat16)
-    sin_half = torch.randn(batch, seqlen, dim//2, device="cuda", dtype=torch.bfloat16)
-    cos_torch = torch.cat((cos_half, cos_half), dim=-1)
-    sin_torch = torch.cat((sin_half, sin_half), dim=-1)
-    q_out_torch = torch.empty(batch, seqlen, heads, dim, device="cuda", dtype=torch.bfloat16)
-    k_out_torch = torch.empty(batch, seqlen, groups, dim, device="cuda", dtype=torch.bfloat16)
-    
-    # print("torch: ", q_torch.data_ptr(), k_torch.data_ptr(), v_torch.data_ptr(), mask_torch.data_ptr(), out_torch.data_ptr())
-    q = mpk.attach_input(torch_tensor=q_torch, name="q")
-    k = mpk.attach_input(torch_tensor=k_torch, name="k")
-    cos = mpk.attach_input(torch_tensor=cos_torch, name="cos")
-    sin = mpk.attach_input(torch_tensor=sin_torch, name="sin")
-    q_out = mpk.attach_input(torch_tensor=q_out_torch, name="q_out")
-    k_out = mpk.attach_input(torch_tensor=k_out_torch, name="k_out")
-
-    mpk.rope_layer(
-        q=q,
-        k=k,
-        cos=cos,
-        sin=sin,
-        q_embed=q_out,
-        k_embed=k_out,
-        sync_mode=(0, 0, 0),
-        layout=Qwen3MegaConfig.rope_layout,
-    )
-    layers.compile_load(args.nc, args.output_dir)
-    
-    def target_func():
-        mpk(batch_size)
-        return torch.cat((q_out_torch, k_out_torch), dim=-2)
-    
-    def torch_ref():
-        q_emb, k_emb = TorchRef.apply_rotary_pos_emb_triton(q_torch, k_torch, cos_torch, sin_torch, position_ids=None, unsqueeze_dim=2)
-        return torch.cat((q_emb, k_emb), dim=-2)
     
     target_output = target_func()    
     ref_output = torch_ref()
@@ -293,11 +293,18 @@ if __name__ == "__main__":
     intermediate_size = 3072
     
     # test_rms_norm(mpk, max_batch_size, batch_size, hidden_size)
-    # test_mlp_linear1(mpk, max_batch_size, batch_size, hidden_size, intermediate_size)
+    # test_linear(mpk, max_batch_size, batch_size, intermediate_size*2, hidden_size, Qwen3MegaConfig.linear1_layout)
     # test_silu_mul(mpk, max_batch_size, batch_size, intermediate_size) # 5us vs 2us，需要加速
     # test_mlp_linear_residual2(mpk, max_batch_size, batch_size, hidden_size, intermediate_size)
-    # test_gqa_decode(mpk, max_batch_size=1, batch=1, heads=16, groups=8, seqlen_kv=8192, dim=128)
-    test_rope(mpk, max_batch_size=1, batch=1, heads=16, groups=8, dim=128)
+    
+    heads=16
+    groups=8
+    dim=128
+    seqlen_kv=8192
+    test_linear(mpk, max_batch_size, batch_size, (heads+2*groups)*dim, hidden_size, Qwen3MegaConfig.qkv_proj_layout)
+    # test_rope(mpk, max_batch_size=1, batch=1, heads=heads, groups=groups, dim=dim)
+    # test_gqa_decode(mpk, max_batch_size=1, batch=1, heads=heads, groups=groups, seqlen_kv=seqlen_kv, dim=dim)
+    
         
     print("Test single_mega completed.")
     # ncu --set full --section "SpeedOfLight_RooflineChart" -k "kernel" -o my_profile python demo/single_linear.py --nc

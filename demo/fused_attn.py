@@ -46,7 +46,7 @@ if __name__ == "__main__":
     seqlen_q = 1
     seqlen_kv = 64
     x_torch = torch.randn((batch, hidden_size), dtype=torch.bfloat16, device="cuda")
-    w_layer_norm_torch = torch.randn((1, hidden_size), dtype=torch.bfloat16, device="cuda")
+    w_layernorm_torch = torch.randn((1, hidden_size), dtype=torch.bfloat16, device="cuda")
     
     w_qkv_proj_torch = torch.randn(((num_heads+2*num_kv_heads)*head_dim, hidden_size), dtype=torch.bfloat16, device="cuda")
     w_q_norm_torch = torch.randn((seqlen_q, head_dim), dtype=torch.bfloat16, device="cuda")
@@ -65,8 +65,9 @@ if __name__ == "__main__":
 
     ###
     def ref_run():
-        o1 = TorchRef.rms_norm(x_torch, w_layer_norm_torch)
+        o1 = TorchRef.rms_norm(x_torch, w_layernorm_torch)
         qkv_out = TorchRef.linear(o1, w_qkv_proj_torch)
+        print(x_torch.size(), w_qkv_proj_torch.size())
         
         q_dim = num_heads*head_dim
         kv_dim = num_kv_heads*head_dim
@@ -89,15 +90,30 @@ if __name__ == "__main__":
     # layers = MpkLayers(0, 1, world_size, rank, max_batch_size, args.trace_name, args.profiling)
     # mpk = layers.get_mpk()
 
-    # rms_out = mpk.new_tensor(dims=(max_batch_size, hidden_size), dtype=mi.bfloat16, name="rms_out", io_category="cuda_tensor")
+    # x = mpk.attach_input(torch_tensor=x_torch, name="in")
+    # w_layernorm = mpk.attach_input(torch_tensor=w_layernorm_torch, name="w_layernorm")
+    # w_qkv_proj = mpk.attach_input(torch_tensor=w_qkv_proj_torch, name="w_qkv_proj")
+    # # w_down_proj = mpk.attach_input(torch_tensor=w_down_proj_torch, name="w_down_proj")
+    # # mlp_out = mpk.attach_input(torch_tensor=out_torch, name="mlp_out")
+    
+    # layernorm_out = mpk.new_tensor(dims=(max_batch_size, hidden_size), dtype=mi.bfloat16, name="layernorm_out", io_category="cuda_tensor")
     # mpk.rmsnorm_layer(
     #     input=x,
-    #     weight=w_rms_norm,
-    #     output=rms_out,
+    #     weight=w_layernorm,
+    #     output=layernorm_out,
     #     sync_mode=(0, 0, 0),
     #     layout=Qwen3MegaConfig.rmsnorm_layout,
     # )
-    # x = rms_out
+    # # qkv_proj_out = mpk.new_tensor(dims=(max_batch_size, (num_heads+2*num_kv_heads)*head_dim), dtype=mi.bfloat16, name="qkv_proj_out", io_category="cuda_tensor")
+    # qkv_proj_out_torch = torch.zeros((max_batch_size, hidden_size), dtype=torch.bfloat16, device="cuda")
+    # qkv_proj_out = mpk.attach_input(torch_tensor=qkv_proj_out_torch, name="qkv_proj_out")
+    # mpk.linear_layer(
+    #     input=layernorm_out,
+    #     weight=w_qkv_proj,
+    #     output=qkv_proj_out,
+    #     sync_mode=(0, 0, 0),
+    #     layout=Qwen3MegaConfig.linear1_layout,
+    # )
     
     graph, ref_output = TorchRef.compile_capture(ref_run, is_compile=False)
     

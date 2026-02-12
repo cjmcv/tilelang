@@ -73,10 +73,14 @@ class MicroAutoGen:
                 kernel = MicroLinear(MicroLinearStrategy.GEMM_ADD, self.batch_size, self.hidden_size, self.intermediate_size, dtype=self.dtype, accum_dtype=self.accum_dtype)
                 self._save_target(kernel, mode, code_dir, config_file, "linear2_layout")
             if (layer_id == 4 or layer_id == 99):
-                kernel = MicroGqaDecode(self.batch_size, self.kv_seqlen, self.heads, self.groups, self.dim, False, dtype=self.dtype, accum_dtype=self.accum_dtype)
-                self._save_target(kernel, mode, code_dir, config_file, "gqa_decode_layout")
+                kernel = MicroLinear(MicroLinearStrategy.GEMM, self.batch_size, (self.heads+2*self.groups)*self.dim, self.hidden_size, dtype=self.dtype, accum_dtype=self.accum_dtype)
+                self._save_target(kernel, mode, code_dir, config_file, "qkv_proj_layout")
             if (layer_id == 5 or layer_id == 99):
                 kernel = MicroRope(self.batch_size, 1, self.heads, self.groups, self.dim, dtype=self.dtype, accum_dtype=self.accum_dtype)
                 self._save_target(kernel, mode, code_dir, config_file, "rope_layout")
+            if (layer_id == 6 or layer_id == 99):
+                kernel = MicroGqaDecode(self.batch_size, self.kv_seqlen, self.heads, self.groups, self.dim, False, dtype=self.dtype, accum_dtype=self.accum_dtype)
+                self._save_target(kernel, mode, code_dir, config_file, "gqa_decode_layout")
+            
             
         
