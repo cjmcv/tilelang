@@ -117,7 +117,7 @@ def test_gqa_decode():
     heads = 16
     groups = 8
     kv_seqlen = 8192
-    valid_kv_seqlen = 5
+    valid_kv_seqlen = 65
     dim = 128
     is_causal = False
     

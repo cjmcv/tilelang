@@ -50,8 +50,8 @@ class _GqaDecodeStrategy:
     
     def get_heuristic_hparams(self):
         # block_N=128, block_H=64, num_split=1, num_stages=0, threads=128
-        # return [64, 64, 1, 1, 128]
-        return [64, 64, 4, 1, 128] 
+        return [64, 64, 1, 1, 128]
+        # return [64, 64, 4, 1, 128] 
     
     def get_kernel(self, selected_hparams):
         print("selected_hparams: ", selected_hparams)
@@ -79,6 +79,7 @@ class _GqaDecodeStrategy:
             Q: T.Tensor(shape_q, dtype),
             K: T.Tensor(shape_k, dtype),
             V: T.Tensor(shape_v, dtype),
+            edge: T.Tensor([10], "int32"),
             mask: T.Tensor(shape_mask, "uint8"),
             Output: T.Tensor([batch, heads, dim], dtype),
         ):
@@ -113,7 +114,8 @@ class _GqaDecodeStrategy:
 
                 # ceildiv 向上取整，T.copy会自动校验并截断，超出范围部分会被赋0，
                 # 但输出是[batch, heads, dim]，即所有kv_seqlen都参与了计算，0会影响结果，正确做法是需要屏蔽掉超范围部分
-                loop_range = T.ceildiv((kv_seqlen), block_N) 
+                valid_kv_seqlen = edge[0]
+                loop_range = T.ceildiv((valid_kv_seqlen), block_N) 
                 for k in T.Pipelined(loop_range, num_stages=num_stages):
                     T.copy(K[bid, k * block_N : (k + 1) * block_N, cur_kv_head, :], K_shared)
                     if is_causal:
@@ -122,11 +124,11 @@ class _GqaDecodeStrategy:
                     T.gemm(Q_shared, K_shared, acc_s, transpose_B=True, policy=T.GemmWarpPolicy.FullRow)
                     if is_causal:
                         for i, j in T.Parallel(block_H, block_N):
-                            acc_s[i, j] = T.if_then_else((mask_local[j] != 0) & (k * block_N + j < kv_seqlen), acc_s[i, j], -T.infinity(accum_dtype))
+                            acc_s[i, j] = T.if_then_else((mask_local[j] != 0) & (k * block_N + j < valid_kv_seqlen), acc_s[i, j], -T.infinity(accum_dtype))
                     else:
                         # 超出范围部分，需要置为-inf，不能设置为0. softmax中0会参与贡献，-inf不会，因为exp(−inf)=0，exp(0)=1
                         for i, j in T.Parallel(block_H, block_N):
-                            acc_s[i, j] = T.if_then_else(k * block_N + j<kv_seqlen, acc_s[i, j], -T.infinity(accum_dtype))
+                            acc_s[i, j] = T.if_then_else(k * block_N + j<valid_kv_seqlen, acc_s[i, j], -T.infinity(accum_dtype))
                     T.copy(scores_max, scores_max_prev)
                     T.fill(scores_max, -T.infinity(accum_dtype))
                     T.reduce_max(acc_s, scores_max, dim=1, clear=False)
@@ -326,12 +328,13 @@ class _GqaDecodeStrategy:
             Q: T.Tensor(shape_q, dtype),
             K: T.Tensor(shape_k, dtype),
             V: T.Tensor(shape_v, dtype),
+            edge: T.Tensor([10], "int32"),
             mask: T.Tensor(shape_mask, "uint8"),
             glse: T.Tensor([batch, heads, num_split], dtype),
             Output_partial: T.Tensor(part_shape, dtype),
             Output: T.Tensor(shape_o, dtype),
         ):
-            flash_attn(Q, K, V, mask, Output)
+            flash_attn(Q, K, V, edge, mask, Output)
 
         if num_split > 1:
             return flashattn_gqa_decode_split
