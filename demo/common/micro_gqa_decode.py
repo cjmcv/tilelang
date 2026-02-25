@@ -60,7 +60,7 @@ class _GqaDecodeStrategy:
     def get_pass_configs():
         return {tilelang.PassConfigKey.TL_DISABLE_TMA_LOWER: True, tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True}
 
-    @tilelang.jit(out_idx=[6], pass_configs=get_pass_configs())
+    @tilelang.jit(out_idx=[-1], pass_configs=get_pass_configs())
     def kernel_main(batch, heads, groups, kv_seqlen, dim, is_causal, block_N, block_H, num_split, num_stages, threads, dtype="bfloat16", accum_dtype="float32"):
         scale = (1.0 / dim) ** 0.5 * 1.44269504  # log2(e)
         shape_q = [batch, heads, dim]           # [batch, seqlen_q, heads, dim]
@@ -71,8 +71,8 @@ class _GqaDecodeStrategy:
         kv_group_num = heads // groups  # kv_heads_num
 
         part_shape = [batch, heads, num_split, dim]
-        valid_block_H = min(block_H, kv_group_num)            # 如 kv_heads_num 凑不够 block_H 时，则缩减至实际值以处理边界，但不处理kv_group_num超过block_H时的边界问题。
-        valid_block_N = min(block_N, kv_seqlen // num_split)  # 如 kv_seqlen 凑不够 block_N 时，则缩减至实际值，但不处理kv_seqlen
+        valid_block_H = min(block_H, kv_group_num)            # 如 kv_heads_num 凑不够 block_H 时，则缩减至实际值以处理边界，但不处理kv_group_num超过block_H时的边界问题
+        valid_block_N = min(block_N, kv_seqlen // num_split)  # 如 kv_seqlen 凑不够 block_N 时，则缩减至实际值，但不处理kv_seqlen超过block_N时的边界问题
         
         @T.macro
         def flash_attn(
@@ -156,6 +156,7 @@ class _GqaDecodeStrategy:
             Q: T.Tensor(shape_q, dtype),
             K: T.Tensor(shape_k, dtype),
             V: T.Tensor(shape_v, dtype),
+            edge: T.Tensor([10], "int32"),
             mask: T.Tensor(shape_mask, "uint8"),
             glse: T.Tensor([batch, heads, num_split], dtype),
             Output_partial: T.Tensor(part_shape, dtype),
@@ -184,14 +185,26 @@ class _GqaDecodeStrategy:
                 T.fill(acc_o, 0)
                 T.fill(logsum, 0)
                 T.fill(scores_max, -T.infinity(accum_dtype))
-
-                loop_range = T.ceildiv((kv_seqlen // num_split), block_N)
+                
+                # valid_kv_seqlen = T.floordiv(edge[0], num_split)
+                actual_kv_seqlen = edge[0]
+                # 计算当前split的起始位置
+                base_len = actual_kv_seqlen // num_split
+                split_start = sid * base_len
+                # 最后一个split处理剩余的所有token
+                valid_kv_seqlen = T.if_then_else(
+                    sid == num_split - 1,
+                    actual_kv_seqlen - split_start,
+                    base_len
+                )
+                # valid_kv_seqlen = actual_kv_seqlen // num_split
+                loop_range = T.ceildiv(valid_kv_seqlen, block_N)
 
                 for k in T.Pipelined(loop_range, num_stages=num_stages):
                     T.copy(
                         K[
                             bid,
-                            (kv_seqlen // num_split) * sid + k * valid_block_N : (kv_seqlen // num_split) * sid + (k + 1) * valid_block_N,
+                            split_start + k * valid_block_N : split_start + (k + 1) * valid_block_N,
                             cur_kv_head,
                             :,
                         ],
@@ -201,7 +214,7 @@ class _GqaDecodeStrategy:
                         T.copy(
                             mask[
                                 bid,
-                                (kv_seqlen // num_split) * sid + k * valid_block_N : (kv_seqlen // num_split) * sid + (k + 1) * valid_block_N,
+                                split_start + k * valid_block_N : split_start + (k + 1) * valid_block_N,
                                 cur_kv_head,
                             ],
                             mask_local,
@@ -210,10 +223,10 @@ class _GqaDecodeStrategy:
                     T.gemm(Q_shared, K_shared, acc_s, transpose_B=True, policy=T.GemmWarpPolicy.FullRow)
                     if is_causal:
                         for i, j in T.Parallel(block_H, block_N):
-                            acc_s[i, j] = T.if_then_else((mask_local[j] != 0) & (k * block_N + j < kv_seqlen // num_split), acc_s[i, j], -T.infinity(accum_dtype))
+                            acc_s[i, j] = T.if_then_else((mask_local[j] != 0) & (k * block_N + j < valid_kv_seqlen), acc_s[i, j], -T.infinity(accum_dtype))
                     else:
                         for i, j in T.Parallel(block_H, block_N):
-                            acc_s[i, j] = T.if_then_else(k * block_N + j < kv_seqlen // num_split, acc_s[i, j], -T.infinity(accum_dtype))
+                            acc_s[i, j] = T.if_then_else(k * block_N + j < valid_kv_seqlen, acc_s[i, j], -T.infinity(accum_dtype))
                     T.copy(scores_max, scores_max_prev)
                     T.fill(scores_max, -T.infinity(accum_dtype))
                     T.reduce_max(acc_s, scores_max, dim=1, clear=False)
@@ -232,7 +245,7 @@ class _GqaDecodeStrategy:
                     T.copy(
                         V[
                             bid,
-                            (kv_seqlen // num_split) * sid + k * valid_block_N : (kv_seqlen // num_split) * sid + (k + 1) * valid_block_N,
+                            split_start + k * valid_block_N : split_start + (k + 1) * valid_block_N,
                             cur_kv_head,
                             :,
                         ],
@@ -299,12 +312,13 @@ class _GqaDecodeStrategy:
             Q: T.Tensor(shape_q, dtype),
             K: T.Tensor(shape_k, dtype),
             V: T.Tensor(shape_v, dtype),
+            edge: T.Tensor([10], "int32"),
             mask: T.Tensor(shape_mask, "uint8"),
             glse: T.Tensor([batch, heads, num_split], dtype),
             Output_partial: T.Tensor(part_shape, dtype),
             Output: T.Tensor(shape_o, dtype),
         ):
-            flash_attn_split(Q, K, V, mask, glse, Output_partial)
+            flash_attn_split(Q, K, V, edge, mask, glse, Output_partial)
             combine(glse, Output_partial, Output)
 
         @T.prim_func

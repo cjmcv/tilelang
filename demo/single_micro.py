@@ -116,7 +116,8 @@ def test_gqa_decode():
     batch = 1
     heads = 16
     groups = 8
-    kv_seqlen = 2000
+    kv_seqlen = 8192
+    valid_kv_seqlen = 5
     dim = 128
     is_causal = False
     
@@ -128,6 +129,8 @@ def test_gqa_decode():
     k = torch.randn(batch, kv_seqlen, groups, dim, device="cuda", dtype=torch.bfloat16)  # [B, N=kv_seqlen,  H=groups, D=dim]
     v = torch.randn(batch, kv_seqlen, groups, dim, device="cuda", dtype=torch.bfloat16)
     # mask = torch.randint(0, 2, (batch, kv_seqlen, groups), device="cuda", dtype=torch.uint8) # Only 0/1
+    edge = torch.empty(10, device="cuda", dtype=torch.int32)
+    edge[0].fill_(valid_kv_seqlen)
     mask = torch.ones(batch, kv_seqlen, groups, device="cuda", dtype=torch.uint8)      # no mask
     
     # 上面的mask(batch, kv_seqlen, groups)，维度其实是(batch, q_seqlen, kv_seqlen, groups),groups维度是广播出来的，mask只跟q_seqlen, kv_seqlen有关
@@ -142,10 +145,12 @@ def test_gqa_decode():
     Output_partial = torch.empty(batch, heads, split, dim, device="cuda", dtype=torch.bfloat16)
     
     def target_func():
-        return kernel(q, k, v, mask, glse, Output_partial)
+        return kernel(q, k, v, edge, mask, glse, Output_partial)
     
+    k_slice = k[:, :valid_kv_seqlen, :, :]
+    v_slice = v[:, :valid_kv_seqlen, :, :]
     def torch_ref():
-        return TorchRef.attention_sdpa(q, k, v, is_causal)
+        return TorchRef.attention_sdpa(q, k_slice, v_slice, is_causal)
         # return TorchRef.attention(q, k, v, mask, glse, Output_partial)
         # return TorchRef.attention_split(q, k, v, mask, glse, Output_partial)
         
@@ -189,12 +194,12 @@ if __name__ == "__main__":
     # test_gemm()
     ## test_silu_mul_gemm() # 逻辑有误，silu_mul被重复计算
     # test_gemm_add()
-    # test_gqa_decode()
+    test_gqa_decode()
     # test_rope()
 
     # # # gen = MicroAutoGen(1, 2560, 9728)
-    gen = MicroAutoGen(batch_size=1, hidden_size=1024, intermediate_size=3072, 
-                       kv_seqlen=8192, heads=16, groups=8, dim=128)
-    gen.gen_qwen3_ops(layer_id=99, mode=HparamSelectMode.TUNED) # HEURISTIC, TUNING, TUNED
+    # gen = MicroAutoGen(batch_size=1, hidden_size=1024, intermediate_size=3072, 
+    #                    kv_seqlen=8192, heads=16, groups=8, dim=128)
+    # gen.gen_qwen3_ops(layer_id=99, mode=HparamSelectMode.TUNED) # HEURISTIC, TUNING, TUNED
     
     # print("Test single_micro completed.")
