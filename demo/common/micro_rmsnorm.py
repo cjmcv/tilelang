@@ -32,6 +32,12 @@ class _RmsNormStrategy:
         # [threads]
         return [1,1,128]
         
+    def gen_test_data(self, selected_hparams):
+        import torch
+        a = torch.randn(self.M, self.N, dtype=torch.bfloat16, device="cuda")
+        b = torch.randn(1, self.N, dtype=torch.bfloat16, device="cuda")
+        return [a, b]
+    
     def get_kernel(self, selected_hparams):
         print("selected_hparams: ", selected_hparams)
         return self.kernel_main(self.M, self.N, *selected_hparams, 1e-12, self.dtype, self.accum_dtype) 
@@ -136,3 +142,6 @@ __device__ __forceinline__ void rms_norm_kernel_<name_suffix>(const int bx, cons
     def get_kernel(self, mode: HparamSelectMode):
         kernel, path = self.auto_get_kernel(self.get_source, self.strategy, mode)
         return kernel, path, self.layout
+    
+    def gen_test_data(self, selected_hparams):
+        return self.strategy.gen_test_data(selected_hparams)

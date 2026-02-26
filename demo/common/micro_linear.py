@@ -149,6 +149,16 @@ class _GemmStrategy:
             return [64, 128, 64, 1, 2, 128, 0, False]
         else:
             return [16, 64, 64, 1, 3, 128, 0, False]
+    
+    def gen_test_data(self, selected_hparams):
+        import torch
+        a = torch.randn((self.M, self.K), dtype=torch.bfloat16, device="cuda")
+        b = torch.randn((self.N, self.K), dtype=torch.bfloat16, device="cuda")
+        if self.strategy == MicroLinearStrategy.GEMM_ADD:
+            r = torch.randn((self.M, self.N), dtype=torch.bfloat16, device="cuda")
+            return [a, b, r]
+        else:
+            return [a, b]
         
     def get_kernel(self, selected_hparams):
         splitk = selected_hparams[3]
@@ -386,3 +396,6 @@ template <typename T,
     def get_kernel(self, mode: HparamSelectMode):
         kernel, path = self.auto_get_kernel(self.get_source, self.strategy, mode)
         return kernel, path, self.layout
+
+    def gen_test_data(self, selected_hparams):
+        return self.strategy.gen_test_data(selected_hparams)

@@ -142,4 +142,4 @@ if __name__ == "__main__":
     if not args.profiling:
         reporter.generate_report(target_func, target_func,
                                 warnup_iter=100, test_iter=200, 
-                                allclose_iter=5, print_all=False)
+                                allclose_iter=5, print_mode=1)

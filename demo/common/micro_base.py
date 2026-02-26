@@ -9,6 +9,7 @@ from tqdm.auto import tqdm
 
 from tilelang.jit.kernel import JITKernel
 from tilelang.language.v2 import PrimFunc
+from tilelang.utils.profiler import do_bench
 from tvm.target import Target
 
 import json
@@ -202,9 +203,19 @@ class BaseMicroKernel:
             
         return latency_hparams_list
 
-    def run_tuning(self, kernel_name, hparam_space, get_kernel_func, save_path):
+    def _run_profile(self, kernel, strategy, hparams):
+        test_data = strategy.gen_test_data(hparams)
+        def target_run():
+            return kernel(*test_data)
+            
+        warnup_iter = 100
+        test_iter = 50
+        latency = do_bench(lambda: target_run(), warmup=warnup_iter, rep=test_iter, backend="cupti")
+        return latency
+        
+    def run_tuning(self, strategy, save_path):
         tuned_file_path = save_path+f"_atuned.json"
-        print(f"Start tuning with a total of {len(hparam_space)} schemes.")
+        print(f"Start tuning with a total of {len(strategy.hparam_space)} schemes.")
 
         latency_hparams_list = []
         
@@ -215,8 +226,8 @@ class BaseMicroKernel:
             with concurrent.futures.ThreadPoolExecutor(num_workers, "tl-par-comp") as executor:
                 futures = []
                 future_map = {}
-                for idx, hparams in enumerate(hparam_space):
-                    future = executor.submit(get_kernel_func, selected_hparams=hparams)
+                for idx, hparams in enumerate(strategy.hparam_space):
+                    future = executor.submit(strategy.get_kernel, selected_hparams=hparams)
                     future_map[future] = idx
                     futures.append(future)
                 kernels = [... for _ in futures]
@@ -229,14 +240,16 @@ class BaseMicroKernel:
                     kernels[idx] = future.result()
     
         # profile
-        for idx, hparams in enumerate(hparam_space):
+        for idx, hparams in enumerate(strategy.hparam_space):
             try:
                 if (is_compile_parallel):
                     kernel = kernels[idx]
                 else:
-                    kernel = get_kernel_func(hparams)
-                profiler = kernel.get_profiler()
-                latency = round(profiler.do_bench(backend="cupti"), 5)
+                    kernel = strategy.get_kernel(hparams)
+
+                latency = self._run_profile(kernel, strategy, hparams)
+                # profiler = kernel.get_profiler()
+                # latency = round(profiler.do_bench(backend="cupti"), 5)
                 status = "success"
             except Exception as e:
                 latency = None, 
@@ -259,7 +272,7 @@ class BaseMicroKernel:
         os.makedirs(dir_path, exist_ok=True)
         
         if (mode == HparamSelectMode.TUNING):
-            latency_hparams_list = self.run_tuning(strategy.name, strategy.hparam_space, strategy.get_kernel, save_path)
+            latency_hparams_list = self.run_tuning(strategy, save_path)
             # Save all tuned kernels.
             for i in range(len(latency_hparams_list)):
                 latency, selected_hparams, idx = latency_hparams_list[i]
@@ -284,8 +297,7 @@ class BaseMicroKernel:
             
         kernel = strategy.get_kernel(selected_hparams)
         kernel.config = selected_hparams
-        profiler = kernel.get_profiler()
-        latency = round(profiler.do_bench(backend="cupti"), 5)
+        latency = self._run_profile(kernel, strategy, selected_hparams)
         # kernel.export_sources(kernel_path=save_path+f"_src.cuh")
         with open(save_path+f".cuh", "w", encoding="utf-8") as f:
             f.write(get_source_func(kernel, selected_hparams) + f"\n// latency: {latency}")

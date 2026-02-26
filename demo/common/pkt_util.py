@@ -328,12 +328,14 @@ class PerfReporter:
             print_red_warning(f"{name} Error: {diff}")
             if assert_:
                 raise AssertionError(f"{name} Error: {diff}")
+            return False
         else:
             if print_:
                 print(f"passed: {name} diff={diff}")
+            return True
                 
-    def check_allclose_ret(self, target_run, torch_run, iter, print_all):
-        if (print_all):
+    def check_allclose_ret(self, target_run, torch_run, iter, print_mode):
+        if (print_mode==2):
             torch.set_printoptions(threshold=float('inf'))
         torch.cuda.synchronize()
         
@@ -347,9 +349,10 @@ class PerfReporter:
             if (torch.allclose(target_result, torch_result, rtol=1e-2, atol=0)):
                 print("allclose: True")
             else:
-                print("target_out:", target_result.shape, "\n", target_result)
-                print("torch_out:", torch_result.shape, "\n", torch_result)
-                print("diff: ", target_result - torch_result)
+                if (print_mode >= 1):
+                    print("target_out:", target_result.shape, "\n", target_result)
+                    print("torch_out:", torch_result.shape, "\n", torch_result)
+                    print("diff: ", target_result - torch_result)
                 
                 radio = abs((target_result - torch_result)/torch_result)
                 
@@ -385,13 +388,9 @@ class PerfReporter:
         run_time = (end_time - start_time) * 1000
         print(name, "run time (ms): ", run_time / test_iter)
         
-    def generate_report(self, target_run, torch_run, warnup_iter, test_iter, allclose_iter, print_all):  
-        self.check_allclose_ret(target_run, torch_run, allclose_iter, print_all)
+    def generate_report(self, target_run, torch_run, warnup_iter, test_iter, allclose_iter, print_mode):  
+        self.check_allclose_ret(target_run, torch_run, allclose_iter, print_mode)
 
-        latency = do_bench(lambda: target_run(), warmup=warnup_iter, rep=test_iter, backend="cupti")
-        ref_latency = do_bench(lambda: torch_run(), warmup=warnup_iter, rep=test_iter, backend="cupti")
-        print(f"Latency: {latency:.4f}ms vs {ref_latency:.4f}(torch) ms")
-        
         # self.time_cuda_event_record("torch_ref", torch_run, test_iter)   
         # self.time_cuda_event_record("mpk", target_run, test_iter)
         # self.time_cpu_record("torch_ref", torch_run, test_iter)   
@@ -399,6 +398,11 @@ class PerfReporter:
         
         self.torch_profile(target_run)
         self.torch_profile(torch_run)
+        
+        latency = do_bench(lambda: target_run(), warmup=warnup_iter, rep=test_iter, backend="cupti")
+        ref_latency = do_bench(lambda: torch_run(), warmup=warnup_iter, rep=test_iter, backend="cupti")
+        print(f"Latency: {latency:.4f}ms vs {ref_latency:.4f}(torch) ms")
+        
 
 
     # pushd build && make -j8 && popd

@@ -32,6 +32,11 @@ class _SiluMulStrategy:
         # [BLOCK_M, BLOCK_N, threads]
         return [32,64,128]
         
+    def gen_test_data(self, selected_hparams):
+        import torch
+        a = torch.randn(self.M, self.N*2, dtype=torch.bfloat16, device="cuda")
+        return [a]
+    
     def get_kernel(self, selected_hparams):
         print("selected_hparams: ", selected_hparams)
         return self.kernel_main(self.M, self.N, *selected_hparams, self.dtype, self.accum_dtype) 
@@ -134,3 +139,6 @@ __device__ __forceinline__ void silu_mul_kernel_<name_suffix>(const int bx, cons
     def get_kernel(self, mode: HparamSelectMode):
         kernel, path = self.auto_get_kernel(self.get_source, self.strategy, mode)
         return kernel, path, self.layout
+    
+    def gen_test_data(self, selected_hparams):
+        return self.strategy.gen_test_data(selected_hparams)

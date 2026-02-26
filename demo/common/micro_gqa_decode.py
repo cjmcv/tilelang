@@ -19,14 +19,15 @@ from common.micro_base import BaseMicroKernel, HparamSelectMode
 # └───────────────────────────────────────────┘
 
 class _GqaDecodeStrategy:
-    def __init__(self, batch, kv_seqlen, heads, groups, dim, is_causal, dtype, accum_dtype):
-        self.name = "gqa_decode_tl"+f"_{batch}_{kv_seqlen}_{heads}_{groups}_{dim}"
+    def __init__(self, batch, max_kv_seqlen, target_kv_seqlen, heads, groups, dim, is_causal, dtype, accum_dtype):
+        self.name = "gqa_decode_tl"+f"_{batch}_{max_kv_seqlen}_{target_kv_seqlen}_{heads}_{groups}_{dim}"
             
         self.heads = heads
         self.groups = groups
         self.dim = dim
         self.batch = batch
-        self.kv_seqlen = kv_seqlen
+        self.target_kv_seqlen = target_kv_seqlen
+        self.max_kv_seqlen = max_kv_seqlen
         self.is_causal = is_causal
         
         self.dtype = dtype
@@ -50,12 +51,32 @@ class _GqaDecodeStrategy:
     
     def get_heuristic_hparams(self):
         # block_N=128, block_H=64, num_split=1, num_stages=0, threads=128
-        return [64, 64, 1, 1, 128]
-        # return [64, 64, 4, 1, 128] 
+        return [128, 64, 1, 3, 128]
+        # return [64, 64, 2, 1, 128] 
+    
+    def gen_test_data(self, selected_hparams):
+        import torch
+        q = torch.randn(self.batch, self.heads, self.dim, device="cuda", dtype=torch.bfloat16)              # [B, N=q_seqlen=1, H=heads,  D=dim]
+        k = torch.randn(self.batch, self.max_kv_seqlen, self.groups, self.dim, device="cuda", dtype=torch.bfloat16)  # [B, N=kv_seqlen,  H=groups, D=dim]
+        v = torch.randn(self.batch, self.max_kv_seqlen, self.groups, self.dim, device="cuda", dtype=torch.bfloat16)
+        # mask = torch.randint(0, 2, (batch, kv_seqlen, groups), device="cuda", dtype=torch.uint8) # Only 0/1
+        edge = torch.empty(10, device="cuda", dtype=torch.int32)
+        edge[0].fill_(self.target_kv_seqlen)
+        mask = torch.ones(self.batch, self.max_kv_seqlen, self.groups, device="cuda", dtype=torch.uint8)      # no mask, (batch, q_seqlen, kv_seqlen, groups), groups维度是广播出来的，mask只跟q_seqlen, kv_seqlen有关
+        # q_len = 4
+        # kv_seqlen = 16
+        # mask = torch.tril(torch.ones((q_len, kv_seqlen), device="cuda", dtype=torch.uint8)).unsqueeze(0).expand(batch, -1, -1) # (q_len, kv_seqlen)
+        # mask.unsqueeze(2).expand(-1, -1, groups, -1).transpose(1, 2)
+        # print(mask, mask.shape)
+        
+        split = selected_hparams[2]
+        glse = torch.empty(self.batch, self.heads, split, device="cuda", dtype=torch.bfloat16)
+        Output_partial = torch.empty(self.batch, self.heads, split, self.dim, device="cuda", dtype=torch.bfloat16)
+        return [q, k, v, edge, mask, glse, Output_partial]
     
     def get_kernel(self, selected_hparams):
         print("selected_hparams: ", selected_hparams)
-        return self.kernel_main(self.batch, self.heads, self.groups, self.kv_seqlen, self.dim, self.is_causal, *selected_hparams, self.dtype, self.accum_dtype) 
+        return self.kernel_main(self.batch, self.heads, self.groups, self.max_kv_seqlen, self.dim, self.is_causal, *selected_hparams, self.dtype, self.accum_dtype) 
 
     def get_pass_configs():
         return {tilelang.PassConfigKey.TL_DISABLE_TMA_LOWER: True, tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True}
@@ -63,7 +84,7 @@ class _GqaDecodeStrategy:
     @tilelang.jit(out_idx=[-1], pass_configs=get_pass_configs())
     def kernel_main(batch, heads, groups, kv_seqlen, dim, is_causal, block_N, block_H, num_split, num_stages, threads, dtype="bfloat16", accum_dtype="float32"):
         scale = (1.0 / dim) ** 0.5 * 1.44269504  # log2(e)
-        shape_q = [batch, heads, dim]           # [batch, seqlen_q, heads, dim]
+        shape_q = [batch, heads, dim]            # [batch, seqlen_q, heads, dim]
         shape_k = [batch, kv_seqlen, groups, dim]
         shape_v = [batch, kv_seqlen, groups, dim]
         shape_o = [batch, heads, dim]
@@ -342,21 +363,22 @@ class _GqaDecodeStrategy:
             return flashattn_gqa_decode_no_split
     
 class MicroGqaDecode(BaseMicroKernel):
-    def __init__(self, batch, kv_seqlen, heads, groups, dim, is_causal, dtype=T.bfloat16, accum_dtype=T.float32):
+    def __init__(self, batch, max_kv_seqlen, target_kv_seqlen, heads, groups, dim, is_causal, dtype=T.bfloat16, accum_dtype=T.float32):
         super().__init__()
         
         self.heads = heads
         self.groups = groups
         self.dim = dim
         self.batch = batch
-        self.kv_seqlen = kv_seqlen
+        self.max_kv_seqlen = max_kv_seqlen
+        self.target_kv_seqlen = target_kv_seqlen
         self.is_causal = is_causal
         
         self.dtype = dtype
         self.accum_dtype = accum_dtype
-        self.strategy = _GqaDecodeStrategy(batch, kv_seqlen, heads, groups, dim, is_causal, dtype, accum_dtype)
+        self.strategy = _GqaDecodeStrategy(batch, max_kv_seqlen, target_kv_seqlen, heads, groups, dim, is_causal, dtype, accum_dtype)
         
-    def get_source(self, kernel, selected_hparams):
+    def _get_source(self, kernel, selected_hparams):
         # self.layout = "11111"
         # return kernel.get_kernel_source()
         head_str = \
@@ -397,9 +419,9 @@ __device__ __forceinline__ void flashattn_kernel_<name_suffix>(const int bx, con
         head_str = head_str.replace('<GROUPS>', str(self.groups))
         head_str = head_str.replace('<DIM>', str(self.dim))
         if num_split > 1:
-            head_str = head_str.replace('<name_suffix>', f"{self.batch}_{self.kv_seqlen}_{self.heads}_{self.groups}_{self.dim}__<kernel_id>")
+            head_str = head_str.replace('<name_suffix>', f"{self.batch}_{self.max_kv_seqlen}_{self.target_kv_seqlen}_{self.heads}_{self.groups}_{self.dim}__<kernel_id>")
         else:
-            head_str = head_str.replace('<name_suffix>', f"{self.batch}_{self.kv_seqlen}_{self.heads}_{self.groups}_{self.dim}")
+            head_str = head_str.replace('<name_suffix>', f"{self.batch}_{self.max_kv_seqlen}_{self.target_kv_seqlen}_{self.heads}_{self.groups}_{self.dim}")
         if self.dtype == T.bfloat16:
             dtype = "bfloat16_t"
         else:
@@ -429,5 +451,8 @@ __device__ __forceinline__ void flashattn_kernel_<name_suffix>(const int bx, con
         return source
     
     def get_kernel(self, mode: HparamSelectMode):
-        kernel, path = self.auto_get_kernel(self.get_source, self.strategy, mode)
+        kernel, path = self.auto_get_kernel(self._get_source, self.strategy, mode)
         return kernel, path, self.layout
+
+    def gen_test_data(self, selected_hparams):
+        return self.strategy.gen_test_data(selected_hparams)

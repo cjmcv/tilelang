@@ -37,7 +37,7 @@ def test_rms_norm(mpk, max_batch_size, batch_size, hidden_size):
     
     reporter.generate_report(target_func, torch_ref,
                             warnup_iter=100, test_iter=100, 
-                            allclose_iter=5, print_all=False)
+                            allclose_iter=5, print_mode=1)
 
 
 def test_linear(mpk, max_batch_size, batch_size, N, K, layout):
@@ -73,7 +73,7 @@ def test_linear(mpk, max_batch_size, batch_size, N, K, layout):
     # ref_output = torch_ref()
     reporter.generate_report(target_func, torch_ref, 
                             warnup_iter=100, test_iter=100, 
-                            allclose_iter=5, print_all=False)
+                            allclose_iter=5, print_mode=1)
 
 def test_silu_mul(mpk, max_batch_size, batch_size, intermediate_size):
     x_torch = torch.randn((max_batch_size, intermediate_size*2), dtype=torch.bfloat16, device="cuda")
@@ -100,7 +100,7 @@ def test_silu_mul(mpk, max_batch_size, batch_size, intermediate_size):
     # ref_output = torch_ref()
     reporter.generate_report(target_func, torch_ref, 
                             warnup_iter=100, test_iter=100, 
-                            allclose_iter=5, print_all=False)
+                            allclose_iter=5, print_mode=1)
     
 def test_linear_residual(mpk, max_batch_size, batch_size, N, K, layout):
     x_residual_torch = torch.randn((max_batch_size, N), dtype=torch.bfloat16, device="cuda")
@@ -134,7 +134,7 @@ def test_linear_residual(mpk, max_batch_size, batch_size, N, K, layout):
     ref_output = torch_ref()
     reporter.generate_report(target_func, torch_ref, 
                             warnup_iter=100, test_iter=100, 
-                            allclose_iter=5, print_all=False)
+                            allclose_iter=5, print_mode=1)
    
 def test_rope(mpk, max_batch_size, batch, heads, groups, dim):
     seqlen = 1
@@ -191,7 +191,7 @@ def test_rope(mpk, max_batch_size, batch, heads, groups, dim):
     
     reporter.generate_report(target_func, torch_ref, 
                             warnup_iter=100, test_iter=100, 
-                            allclose_iter=5, print_all=False)
+                            allclose_iter=5, print_mode=1)
      
 def test_gqa_decode(mpk, max_batch_size, batch, heads, groups, seqlen_kv, dim):
     split = 8 # TODO 自动配置
@@ -250,7 +250,7 @@ def test_gqa_decode(mpk, max_batch_size, batch, heads, groups, seqlen_kv, dim):
     
     reporter.generate_report(target_func, torch_ref, 
                             warnup_iter=100, test_iter=100, 
-                            allclose_iter=5, print_all=False)
+                            allclose_iter=5, print_mode=1)
 
 
 if __name__ == "__main__":
@@ -303,8 +303,8 @@ if __name__ == "__main__":
     seqlen_kv=8192
     # test_linear(mpk, max_batch_size, batch_size, (heads+2*groups)*dim, hidden_size, Qwen3MegaConfig.qkv_proj_layout)
     # test_rope(mpk, max_batch_size=1, batch=1, heads=heads, groups=groups, dim=dim)
-    # test_gqa_decode(mpk, max_batch_size=1, batch=1, heads=heads, groups=groups, seqlen_kv=seqlen_kv, dim=dim)
-    test_linear_residual(mpk, max_batch_size, batch_size, hidden_size, heads*dim, Qwen3MegaConfig.o_proj_layout)
+    test_gqa_decode(mpk, max_batch_size=1, batch=1, heads=heads, groups=groups, seqlen_kv=seqlen_kv, dim=dim)
+    # test_linear_residual(mpk, max_batch_size, batch_size, hidden_size, heads*dim, Qwen3MegaConfig.o_proj_layout)
         
     print("Test single_mega completed.")
     # ncu --set full --section "SpeedOfLight_RooflineChart" -k "kernel" -o my_profile python demo/single_linear.py --nc
