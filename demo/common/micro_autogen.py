@@ -28,7 +28,7 @@ class MicroAutoGen:
         self.dtype = T.bfloat16
         self.accum_dtype = T.float32
         
-    def _save_target(self, micro, mode: HparamSelectMode, code_dir, config_file, name):
+    def _save_target_info(self, micro, mode: HparamSelectMode, code_dir, config_file, name):
         kernel, file_name, info = micro.get_kernel(mode)
         print(file_name, info)
         shutil.copy2(file_name, code_dir)
@@ -62,35 +62,36 @@ class MicroAutoGen:
             config_file.write(f"class Qwen3MegaConfig:\n")
             if (layer_id == 0 or layer_id == 99):
                 kernel = MicroRmsNorm(self.batch_size, self.hidden_size, dtype=self.dtype, accum_dtype=self.accum_dtype)
-                self._save_target(kernel, mode, code_dir, config_file, "rmsnorm_layout")
+                self._save_target_info(kernel, mode, code_dir, config_file, "rmsnorm_layout")
             if (layer_id == 1 or layer_id == 99):
                 kernel = MicroLinear(MicroLinearStrategy.GEMM, self.batch_size, self.intermediate_size*2, self.hidden_size, dtype=self.dtype, accum_dtype=self.accum_dtype)
-                self._save_target(kernel, mode, code_dir, config_file, "linear1_layout")
+                self._save_target_info(kernel, mode, code_dir, config_file, "linear1_layout")
             if (layer_id == 2 or layer_id == 99):   
                 kernel = MicroSiluMul(self.batch_size, self.intermediate_size, dtype=T.bfloat16, accum_dtype=T.float32)
-                self._save_target(kernel, mode, code_dir, config_file, "silu_mul_layout")
+                self._save_target_info(kernel, mode, code_dir, config_file, "silu_mul_layout")
             if (layer_id == 3 or layer_id == 99):
                 kernel = MicroLinear(MicroLinearStrategy.GEMM_ADD, self.batch_size, self.hidden_size, self.intermediate_size, dtype=self.dtype, accum_dtype=self.accum_dtype)
-                self._save_target(kernel, mode, code_dir, config_file, "linear2_layout")
+                self._save_target_info(kernel, mode, code_dir, config_file, "linear2_layout")
             if (layer_id == 4 or layer_id == 99):
                 kernel = MicroLinear(MicroLinearStrategy.GEMM, self.batch_size, (self.heads+2*self.groups)*self.dim, self.hidden_size, dtype=self.dtype, accum_dtype=self.accum_dtype)
-                self._save_target(kernel, mode, code_dir, config_file, "qkv_proj_layout")
+                self._save_target_info(kernel, mode, code_dir, config_file, "qkv_proj_layout")
             if (layer_id == 5 or layer_id == 99):
                 kernel = MicroRmsNorm(self.batch_size*self.heads, self.dim, dtype=self.dtype, accum_dtype=self.accum_dtype)
-                self._save_target(kernel, mode, code_dir, config_file, "q_norm_layout")
+                self._save_target_info(kernel, mode, code_dir, config_file, "q_norm_layout")
             if (layer_id == 6 or layer_id == 99):
                 kernel = MicroRmsNorm(self.batch_size*self.groups, self.dim, dtype=self.dtype, accum_dtype=self.accum_dtype)
-                self._save_target(kernel, mode, code_dir, config_file, "k_norm_layout")
+                self._save_target_info(kernel, mode, code_dir, config_file, "k_norm_layout")
             if (layer_id == 7 or layer_id == 99):
                 kernel = MicroRope(self.batch_size, 1, self.heads, self.groups, self.dim, dtype=self.dtype, accum_dtype=self.accum_dtype)
-                self._save_target(kernel, mode, code_dir, config_file, "rope_layout")
+                self._save_target_info(kernel, mode, code_dir, config_file, "rope_layout")
             if (layer_id == 8 or layer_id == 99):
-                for target_kv_seqlen in [8, 16, 32]: # , 64, 128, 256, 512, 1024, 2048
+                # for target_kv_seqlen in list(range(1, 17)) + [32, 64, 128, 256, 512, 1024, 2048]: # 
+                for target_kv_seqlen in [1]: # 
                     kernel = MicroGqaDecode(self.batch_size, self.max_kv_seqlen, target_kv_seqlen, self.heads, self.groups, self.dim, False, dtype=self.dtype, accum_dtype=self.accum_dtype)
-                    self._save_target(kernel, mode, code_dir, config_file, "gqa_decode_layout_"+str(target_kv_seqlen))
-            if (layer_id == 9 or layer_id == 99):
+                    self._save_target_info(kernel, mode, code_dir, config_file, "gqa_decode_layout_"+str(target_kv_seqlen))
+            if (layer_id == 9 or layer_id == 99):   
                 kernel = MicroLinear(MicroLinearStrategy.GEMM_ADD, self.batch_size, self.hidden_size, self.heads*self.dim, dtype=self.dtype, accum_dtype=self.accum_dtype)
-                self._save_target(kernel, mode, code_dir, config_file, "o_proj_layout")
+                self._save_target_info(kernel, mode, code_dir, config_file, "o_proj_layout")
             
             
         

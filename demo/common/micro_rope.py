@@ -48,6 +48,14 @@ class _RopeStrategy:
         sin = torch.cat((sin_half, sin_half), dim=-1)
         return [q, k, cos, sin]
     
+    def get_torch_ref(self):
+        import torch
+        from common.pkt_util import TorchRef
+        def torch_ref(q, k, cos, sin):
+            q_emb, k_emb = TorchRef.apply_rotary_pos_emb_triton(q, k, cos, sin, unsqueeze_dim=2)
+            return q_emb, k_emb
+        return torch_ref
+    
     def get_kernel(self, selected_hparams):
         print("selected_hparams: ", selected_hparams)
         mode = selected_hparams[0]

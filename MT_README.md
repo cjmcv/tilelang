@@ -59,7 +59,8 @@ rm -rf .git/modules/3rdparty/tvm/
 git submodule add https://github.com/apache/tvm.git 3rdparty/tvm
 
 # TODO
-0. 实现fused_attn.py
+0. 实现fused_attn.py: mpk(batch, step), 添加step参数用于控制推理步数。gqa kernel动态选择时的布局兼容问题，如何处理？
+1. 可以先完成固定step的推理集成。
 1. block_dim: PersistentKernel中“TBGraph(CyTBGraph(grid_dim, block_dim”中的block_dim疑似没用，仅仅用于kernel模板参数的确认与校验。是否真的需要校验？
 2. 考虑tilelang端只生成代码而不编译，看能否减少耗时；
 3. 考虑新增megakernel的并行编译；

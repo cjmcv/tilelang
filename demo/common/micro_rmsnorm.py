@@ -38,6 +38,12 @@ class _RmsNormStrategy:
         b = torch.randn(1, self.N, dtype=torch.bfloat16, device="cuda")
         return [a, b]
     
+    def get_torch_ref(self):
+        from common.pkt_util import TorchRef
+        def torch_ref(a, b):
+            return TorchRef.rms_norm(a, b) 
+        return torch_ref
+        
     def get_kernel(self, selected_hparams):
         print("selected_hparams: ", selected_hparams)
         return self.kernel_main(self.M, self.N, *selected_hparams, 1e-12, self.dtype, self.accum_dtype) 

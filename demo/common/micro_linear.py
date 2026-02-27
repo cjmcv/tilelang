@@ -160,6 +160,18 @@ class _GemmStrategy:
         else:
             return [a, b]
         
+    def get_torch_ref(self):
+        from common.pkt_util import TorchRef
+        def torch_ref(a, b):
+            return TorchRef.linear(a, b) 
+        def torch_add_ref(a, b, r):
+            return TorchRef.linear(a, b) + r
+        
+        if self.strategy == MicroLinearStrategy.GEMM_ADD:
+            return torch_add_ref
+        else:
+            return torch_ref
+    
     def get_kernel(self, selected_hparams):
         splitk = selected_hparams[3]
         if splitk == 1:

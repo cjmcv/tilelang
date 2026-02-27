@@ -37,21 +37,23 @@ class _GqaDecodeStrategy:
         print(len(self.hparam_space))
         
     def _get_hparam_space(self):
-        BLOCK_N = [64, 128]
+        BLOCK_N = [16, 32, 64, 128]
         BLOCK_H = [64]
         num_split = [1, 2, 4, 8]
         num_stages = [1, 2, 3]
         thread_nums = [128]
         
         res = []
-        for m, n, spilt, stage, thread_num in itertools.product(
+        for n, h, spilt, stage, thread_num in itertools.product(
            BLOCK_N, BLOCK_H, num_split, num_stages, thread_nums):
-            res.append([m, n, spilt, stage, thread_num])
+            # if (n == 16 and (spilt != 1 or stage != 1)):
+            #     continue
+            res.append([n, h, spilt, stage, thread_num])
         return res 
     
     def get_heuristic_hparams(self):
         # block_N=128, block_H=64, num_split=1, num_stages=0, threads=128
-        return [128, 64, 1, 3, 128]
+        return [16, 64, 1, 2, 128]
         # return [64, 64, 2, 1, 128] 
     
     def gen_test_data(self, selected_hparams):
@@ -69,17 +71,120 @@ class _GqaDecodeStrategy:
         # mask.unsqueeze(2).expand(-1, -1, groups, -1).transpose(1, 2)
         # print(mask, mask.shape)
         
-        split = selected_hparams[2]
-        glse = torch.empty(self.batch, self.heads, split, device="cuda", dtype=torch.bfloat16)
-        Output_partial = torch.empty(self.batch, self.heads, split, self.dim, device="cuda", dtype=torch.bfloat16)
+        _, _, num_split, _, _ = selected_hparams
+        glse = torch.empty(self.batch, self.heads, num_split, device="cuda", dtype=torch.bfloat16)
+        Output_partial = torch.empty(self.batch, self.heads, num_split, self.dim, device="cuda", dtype=torch.bfloat16)
         return [q, k, v, edge, mask, glse, Output_partial]
     
+    def get_torch_ref(self):
+        from common.pkt_util import TorchRef
+        def torch_ref(q, k, v, edge, mask, glse, Output_partial):
+            k_slice = k[:, :self.target_kv_seqlen, :, :]
+            v_slice = v[:, :self.target_kv_seqlen, :, :]
+            return TorchRef.attention_sdpa(q, k_slice, v_slice, self.is_causal)
+        return torch_ref
+        
     def get_kernel(self, selected_hparams):
         print("selected_hparams: ", selected_hparams)
-        return self.kernel_main(self.batch, self.heads, self.groups, self.max_kv_seqlen, self.dim, self.is_causal, *selected_hparams, self.dtype, self.accum_dtype) 
+        _, _, num_split, _, _ = selected_hparams
+        if (self.target_kv_seqlen < 16 and num_split == 1):
+            print("self.target_kv_seqlen < 16")
+            return self.kernel_main_m64(self.batch, self.heads, self.groups, self.max_kv_seqlen, self.target_kv_seqlen, self.dim, self.is_causal, *selected_hparams, self.dtype, self.accum_dtype) 
+        else:
+            return self.kernel_main(self.batch, self.heads, self.groups, self.max_kv_seqlen, self.dim, self.is_causal, *selected_hparams, self.dtype, self.accum_dtype) 
 
     def get_pass_configs():
         return {tilelang.PassConfigKey.TL_DISABLE_TMA_LOWER: True, tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True}
+
+    @tilelang.jit(out_idx=[-1], pass_configs=get_pass_configs())
+    def kernel_main_m64(batch, heads, groups, kv_seqlen, target_kv_seqlen, dim, is_causal, block_N, block_H, num_split, num_stages, threads, dtype="bfloat16", accum_dtype="float32"):
+        scale = (1.0 / dim) ** 0.5 * 1.44269504  # log2(e)
+        shape_q = [batch, heads, dim]            # [batch, seqlen_q, heads, dim]
+        shape_k = [batch, kv_seqlen, groups, dim]
+        shape_v = [batch, kv_seqlen, groups, dim]
+        shape_o = [batch, heads, dim]
+        shape_mask = [batch, kv_seqlen, groups] # [batch, seqlen_q, kv_seqlen, groups], 因果掩码是 query 和 key 之间的关系，表示当前q能看到哪些kv，而group维度是广播出来的
+        kv_group_num = heads // groups  # kv_heads_num
+
+        part_shape = [batch, heads, num_split, dim]
+        valid_block_H = min(block_H, kv_group_num)            # 如 kv_heads_num 凑不够 block_H 时，则缩减至实际值以处理边界，但不处理kv_group_num超过block_H时的边界问题
+        valid_kv_seqlen = target_kv_seqlen
+        # valid_block_N = min(block_N, kv_seqlen)  # 如 kv_seqlen 凑不够 block_N 时，则缩减至实际值，但不处理kv_seqlen超过block_N时的边界问题
+        
+        @T.prim_func
+        def flash_attn_m64(
+            Q: T.Tensor(shape_q, dtype),
+            K: T.Tensor(shape_k, dtype),
+            V: T.Tensor(shape_v, dtype),
+            edge: T.Tensor([10], "int32"),
+            mask: T.Tensor(shape_mask, "uint8"),
+            glse: T.Tensor([batch, heads, num_split], dtype),
+            Output_partial: T.Tensor(part_shape, dtype),
+            Output: T.Tensor(shape_o, dtype),
+        ):
+            with T.Kernel(batch, heads // valid_block_H, threads=threads) as (bx, by):
+                Q_shared = T.alloc_shared([block_H, dim], dtype)
+                K_shared = T.alloc_shared([block_N, dim], dtype)
+                V_shared = T.alloc_shared([block_N, dim], dtype)
+                O_shared = T.alloc_shared([valid_block_H, dim], dtype)
+                acc_s = T.alloc_fragment([block_H, block_N], accum_dtype)
+                acc_s_cast = T.alloc_fragment([block_H, block_N], dtype)
+                mask_local = T.alloc_fragment([block_N], "uint8")
+                acc_o = T.alloc_fragment([block_H, dim], accum_dtype)
+                scores_max = T.alloc_fragment([block_H], accum_dtype)
+                scores_max_prev = T.alloc_fragment([block_H], accum_dtype)
+                scores_scale = T.alloc_fragment([block_H], accum_dtype)
+                scores_sum = T.alloc_fragment([block_H], accum_dtype)
+                logsum = T.alloc_fragment([block_H], accum_dtype)
+
+                bid = bx
+                hid = by
+                cur_kv_head = hid // (kv_group_num // valid_block_H)
+
+                T.copy(Q[bid, hid * valid_block_H : hid * valid_block_H + block_H, :], Q_shared)
+                T.fill(acc_o, 0)
+                T.fill(logsum, 0)
+                T.fill(scores_max, -T.infinity(accum_dtype))
+
+                # valid_kv_seqlen = edge[0]
+                # valid_block_N = min(block_N, valid_kv_seqlen)
+                
+                T.copy(K[bid, 0:valid_kv_seqlen, cur_kv_head, :], K_shared[:valid_kv_seqlen, :])
+                if is_causal:
+                    T.copy(mask[bid, 0:block_N, cur_kv_head], mask_local)
+                T.clear(acc_s)
+                T.gemm(Q_shared, K_shared, acc_s, transpose_B=True, policy=T.GemmWarpPolicy.FullRow)
+                if is_causal:
+                    for i, j in T.Parallel(block_H, block_N):
+                        acc_s[i, j] = T.if_then_else((mask_local[j] != 0) & (j < valid_kv_seqlen), acc_s[i, j], -T.infinity(accum_dtype))
+                else:
+                    for i, j in T.Parallel(block_H, block_N):
+                        acc_s[i, j] = T.if_then_else(j < valid_kv_seqlen, acc_s[i, j], -T.infinity(accum_dtype))
+                T.copy(scores_max, scores_max_prev)
+                T.fill(scores_max, -T.infinity(accum_dtype))
+                T.reduce_max(acc_s, scores_max, dim=1, clear=False)
+                for i in T.Parallel(block_H):
+                    scores_max[i] = T.max(scores_max[i], scores_max_prev[i])
+                for i in T.Parallel(block_H):
+                    scores_scale[i] = T.exp2(scores_max_prev[i] * scale - scores_max[i] * scale)
+                for i, j in T.Parallel(block_H, block_N):
+                    acc_s[i, j] = T.exp2(acc_s[i, j] * scale - scores_max[i] * scale)
+                T.reduce_sum(acc_s, scores_sum, dim=1)
+                for i in T.Parallel(block_H):
+                    logsum[i] = logsum[i] * scores_scale[i] + scores_sum[i]
+                T.copy(acc_s, acc_s_cast)
+                for i, j in T.Parallel(block_H, dim):
+                    acc_o[i, j] *= scores_scale[i]
+                T.copy(V[bid, 0:valid_kv_seqlen, cur_kv_head, :], V_shared[:valid_kv_seqlen, :])
+                T.gemm(acc_s_cast, V_shared, acc_o, policy=T.GemmWarpPolicy.FullRow)
+                
+                for i, j in T.Parallel(block_H, dim):
+                    acc_o[i, j] /= logsum[i]
+                for i in T.Parallel(block_H):
+                    logsum[i] = T.log2(logsum[i]) + scores_max[i] * scale
+                T.copy(acc_o[:valid_block_H, :], O_shared)
+                T.copy(O_shared, Output[bid, hid * valid_block_H : (hid + 1) * valid_block_H, :])
+        return flash_attn_m64
 
     @tilelang.jit(out_idx=[-1], pass_configs=get_pass_configs())
     def kernel_main(batch, heads, groups, kv_seqlen, dim, is_causal, block_N, block_H, num_split, num_stages, threads, dtype="bfloat16", accum_dtype="float32"):
@@ -362,6 +467,9 @@ class _GqaDecodeStrategy:
         else:
             return flashattn_gqa_decode_no_split
     
+# max_kv_seqlen: 最大kv_seqlen, 每次调用该kernel所提供的kvcache的长度固定为max_kv_seqlen
+# target_kv_seqlen: 表示该kernel是根据target_kv_seqlen进行tuning生成的，tuning时，会从max_kv_seqlen大小的cache里计算target_kv_seqlen的部分。
+# valid_kv_seqlen: 部署推理时的实际长度，如 valid_kv_seqlen==31，会选择使用target_kv_seqlen==32的kernel，kernel内会自动处理边界到31。
 class MicroGqaDecode(BaseMicroKernel):
     def __init__(self, batch, max_kv_seqlen, target_kv_seqlen, heads, groups, dim, is_causal, dtype=T.bfloat16, accum_dtype=T.float32):
         super().__init__()

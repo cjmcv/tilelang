@@ -37,6 +37,12 @@ class _SiluMulStrategy:
         a = torch.randn(self.M, self.N*2, dtype=torch.bfloat16, device="cuda")
         return [a]
     
+    def get_torch_ref(self):
+        from common.pkt_util import TorchRef
+        def torch_ref(a):
+            return TorchRef.silu_and_mul(a)
+        return torch_ref
+    
     def get_kernel(self, selected_hparams):
         print("selected_hparams: ", selected_hparams)
         return self.kernel_main(self.M, self.N, *selected_hparams, self.dtype, self.accum_dtype) 

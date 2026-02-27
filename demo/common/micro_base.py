@@ -171,9 +171,11 @@ class BaseMicroKernel:
 
     def write_tuned_hparams_to_json(self, latency_hparams_list, file_path):
         with open(file_path, "w", encoding="utf-8") as f:
-            for latency, hparams, idx in latency_hparams_list:
+            for latency, latency_ref, similarity, hparams, idx in latency_hparams_list:
                 single_config = {
                     "latency": latency,
+                    "latency_ref": latency_ref,
+                    "similarity": similarity,
                     "hparams": hparams,
                     "idx": idx,
                 }
@@ -203,15 +205,35 @@ class BaseMicroKernel:
             
         return latency_hparams_list
 
+    def _calc_sim(self, x, y):
+        x, y = x.data.double(), y.data.double()
+        denominator = (x * x + y * y).sum()
+        if denominator == 0:
+            return -1
+        sim = 2 * (x * y).sum() / denominator
+        return sim
+        
     def _run_profile(self, kernel, strategy, hparams):
         test_data = strategy.gen_test_data(hparams)
+        ref_func = strategy.get_torch_ref()
+        
         def target_run():
             return kernel(*test_data)
-            
+        def ref_run():
+            return ref_func(*test_data)
+        
+        target_result = target_run()
+        ref_result = ref_run()
+        if isinstance(target_result, list):
+            sim = self._calc_sim(target_result[0], ref_result[0])
+        else:
+            sim = self._calc_sim(target_result, ref_result)
+        
         warnup_iter = 100
         test_iter = 50
         latency = do_bench(lambda: target_run(), warmup=warnup_iter, rep=test_iter, backend="cupti")
-        return latency
+        latency_ref = do_bench(lambda: ref_run(), warmup=warnup_iter, rep=test_iter, backend="cupti")
+        return float(f"{latency:.5f}"), float(f"{latency_ref:.5f}"), float(f"{sim:.5f}")
         
     def run_tuning(self, strategy, save_path):
         tuned_file_path = save_path+f"_atuned.json"
@@ -241,28 +263,32 @@ class BaseMicroKernel:
     
         # profile
         for idx, hparams in enumerate(strategy.hparam_space):
+            latency = None
+            latency_ref = -1
+            similarity = -1
             try:
                 if (is_compile_parallel):
                     kernel = kernels[idx]
                 else:
                     kernel = strategy.get_kernel(hparams)
 
-                latency = self._run_profile(kernel, strategy, hparams)
+                latency, latency_ref, similarity = self._run_profile(kernel, strategy, hparams)
                 # profiler = kernel.get_profiler()
                 # latency = round(profiler.do_bench(backend="cupti"), 5)
                 status = "success"
+                if (latency == 0):
+                    status = "sth wrong with the latency"
             except Exception as e:
-                latency = None, 
-                status = f"{e}"   
-        
+                status = f"{e}"
+                
             if status == "success":
-                latency_hparams_list.append((latency, hparams, idx))
-            print(f">>>>> tuning({idx}-{status}): {latency} -> {hparams}")
+                latency_hparams_list.append((latency, latency_ref, similarity, hparams, idx))
+            print(f">>>>> tuning({idx}-{status}): {latency} vs ref-{latency_ref} -> {hparams} // similarity: {similarity}")
             
         latency_hparams_list.sort(key=lambda x: x[0])
         self.write_tuned_hparams_to_json(latency_hparams_list, tuned_file_path)
-        best_latency, selected_hparams, idx = latency_hparams_list[0]
-        print(f"[Tuning], the best result: {best_latency} ms -> {selected_hparams}")
+        best_latency, _, _, selected_hparams, idx = latency_hparams_list[0]
+        print(f"[Tuning] the best result: {best_latency} ms -> {selected_hparams}")
         
         return latency_hparams_list
     
@@ -275,33 +301,35 @@ class BaseMicroKernel:
             latency_hparams_list = self.run_tuning(strategy, save_path)
             # Save all tuned kernels.
             for i in range(len(latency_hparams_list)):
-                latency, selected_hparams, idx = latency_hparams_list[i]
+                latency, latency_ref, similarity, selected_hparams, idx = latency_hparams_list[i]
                 kernel = strategy.get_kernel(selected_hparams)
                 file_name = save_path+f"_top{i}.cuh"
                 with open(file_name, "w", encoding="utf-8") as f:
-                    f.write(get_source_func(kernel, selected_hparams) + f"\n// latency: {latency}, idx: {idx}")
-            best_latency, selected_hparams, idx = latency_hparams_list[0]
+                    f.write(get_source_func(kernel, selected_hparams) + f"\n// latency: {latency} ms vs [ref-{latency_ref} sim-{similarity}], idx: {idx}")
+            _, _, _, selected_hparams, selected_idx = latency_hparams_list[0]
         elif (mode == HparamSelectMode.TUNED):
             latency_hparams_list = self.read_tuned_hparams_from_json(save_path)
-            best_latency, selected_hparams = latency_hparams_list[0]["latency"], latency_hparams_list[0]["hparams"]
+            _, _, _, selected_hparams, selected_idx = latency_hparams_list[0]
             print("[Tuned] selected_hparams: ", selected_hparams)
         elif (mode == HparamSelectMode.HEURISTIC):
+            selected_idx = -1
             selected_hparams = strategy.get_heuristic_hparams()
             print("[Heuristic] selected_hparams: ", selected_hparams)
         elif (mode >= HparamSelectMode.SPECIFY):
-            id = mode - HparamSelectMode.SPECIFY
+            specified_idx = mode - HparamSelectMode.SPECIFY
             latency_hparams_list = self.read_tuned_hparams_from_json(save_path)
-            latency, selected_hparams = latency_hparams_list[id]["latency"], latency_hparams_list[id]["hparams"]
+            _, _, _, selected_hparams, selected_idx = latency_hparams_list[specified_idx]
             # selected_hparams = strategy.hparam_space[id]
-            print(f"[SPECIFY] selected_hparams[{id}]({latency}ms): {selected_hparams}")
+            print(f"[SPECIFY] selected_hparams[{specified_idx}]({latency}ms): {selected_hparams}")
             
         kernel = strategy.get_kernel(selected_hparams)
         kernel.config = selected_hparams
-        latency = self._run_profile(kernel, strategy, selected_hparams)
+        latency, latency_ref, similarity = self._run_profile(kernel, strategy, selected_hparams)
         # kernel.export_sources(kernel_path=save_path+f"_src.cuh")
+        msg_suffix = f"latency: {latency} ms vs [ref-{latency_ref} sim-{similarity}], idx: {selected_idx}"
         with open(save_path+f".cuh", "w", encoding="utf-8") as f:
-            f.write(get_source_func(kernel, selected_hparams) + f"\n// latency: {latency}")
-        print(f"selected: {selected_hparams}; latency: {latency}ms")    
+            f.write(get_source_func(kernel, selected_hparams) + f"\n// " + msg_suffix)
+        print(f"selected: {selected_hparams}, " + msg_suffix)
         # print("0:", kernel.prim_func.attrs)
         # print("1:", kernel.adapter.params)
         # print("2:", kernel.adapter.func)
