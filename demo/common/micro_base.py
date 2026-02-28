@@ -195,7 +195,14 @@ class BaseMicroKernel:
                         continue
                     try:
                         json_data = json.loads(line)
-                        latency_hparams_list.append(json_data)
+                        tuple_item = (
+                            json_data['latency'],
+                            json_data['latency_ref'],
+                            json_data['similarity'],
+                            json_data['hparams'],
+                            json_data['idx']
+                        )
+                        latency_hparams_list.append(tuple_item)
                     except json.JSONDecodeError as e:
                         print(f"Line {line_num}: Failed to parse JSON: {e}, content: {line}")
         except FileNotFoundError:
@@ -203,6 +210,7 @@ class BaseMicroKernel:
         except Exception as e:
             print(f"Unknown error during file reading: {e}")
             
+        # print(latency_hparams_list)
         return latency_hparams_list
 
     def _calc_sim(self, x, y):
@@ -229,8 +237,9 @@ class BaseMicroKernel:
         else:
             sim = self._calc_sim(target_result, ref_result)
         
-        warnup_iter = 100
-        test_iter = 50
+        warnup_iter = 500
+        test_iter = 100
+        do_bench(lambda: ref_run(), warmup=warnup_iter*2, rep=test_iter*2, backend="cupti") # extra warnup
         latency = do_bench(lambda: target_run(), warmup=warnup_iter, rep=test_iter, backend="cupti")
         latency_ref = do_bench(lambda: ref_run(), warmup=warnup_iter, rep=test_iter, backend="cupti")
         return float(f"{latency:.5f}"), float(f"{latency_ref:.5f}"), float(f"{sim:.5f}")

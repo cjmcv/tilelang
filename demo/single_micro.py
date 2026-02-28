@@ -113,8 +113,8 @@ def test_gqa_decode():
     heads = 16
     groups = 8
     max_kv_seqlen = 8192
-    target_kv_seqlen = 1
-    valid_kv_seqlen = 1
+    target_kv_seqlen = 5
+    valid_kv_seqlen = 5
     dim = 128
     is_causal = False
     
@@ -171,12 +171,12 @@ if __name__ == "__main__":
     # test_gemm()
     ## test_silu_mul_gemm() # 逻辑有误，silu_mul被重复计算
     # test_gemm_add()
-    test_gqa_decode()
+    # test_gqa_decode()
     # test_rope()
 
     # # # # gen = MicroAutoGen(1, 2560, 9728)
-    # gen = MicroAutoGen(batch_size=1, hidden_size=1024, intermediate_size=3072, 
-    #                    max_kv_seqlen=8192, heads=16, groups=8, dim=128)
-    # gen.gen_qwen3_ops(layer_id=8, mode=HparamSelectMode.TUNING) # HEURISTIC, TUNING, TUNED
-    
+    gen = MicroAutoGen(batch_size=1, hidden_size=1024, intermediate_size=3072, 
+                       max_kv_seqlen=8192, heads=16, groups=8, dim=128)
+    gen.gen_qwen3_ops(layer_id=99, mode=HparamSelectMode.TUNING) # HEURISTIC, TUNING, TUNED
+    print(">> Finish gen_qwen3_ops.")
     # print("Test single_micro completed.")

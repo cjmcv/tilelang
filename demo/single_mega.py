@@ -303,7 +303,7 @@ if __name__ == "__main__":
     seqlen_kv=8192
     # test_linear(mpk, max_batch_size, batch_size, (heads+2*groups)*dim, hidden_size, Qwen3MegaConfig.qkv_proj_layout)
     # test_rope(mpk, max_batch_size=1, batch=1, heads=heads, groups=groups, dim=dim)
-    test_gqa_decode(mpk, max_batch_size=1, batch=1, heads=heads, groups=groups, seqlen_kv=seqlen_kv, dim=dim)
+    # test_gqa_decode(mpk, max_batch_size=1, batch=1, heads=heads, groups=groups, seqlen_kv=seqlen_kv, dim=dim)
     # test_linear_residual(mpk, max_batch_size, batch_size, hidden_size, heads*dim, Qwen3MegaConfig.o_proj_layout)
         
     print("Test single_mega completed.")

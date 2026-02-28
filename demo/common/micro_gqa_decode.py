@@ -46,14 +46,14 @@ class _GqaDecodeStrategy:
         res = []
         for n, h, spilt, stage, thread_num in itertools.product(
            BLOCK_N, BLOCK_H, num_split, num_stages, thread_nums):
-            # if (n == 16 and (spilt != 1 or stage != 1)):
-            #     continue
+            if (n == 16 and spilt != 1):
+                continue
             res.append([n, h, spilt, stage, thread_num])
         return res 
     
     def get_heuristic_hparams(self):
         # block_N=128, block_H=64, num_split=1, num_stages=0, threads=128
-        return [16, 64, 1, 2, 128]
+        return [16, 64, 1, 1, 128]
         # return [64, 64, 2, 1, 128] 
     
     def gen_test_data(self, selected_hparams):
