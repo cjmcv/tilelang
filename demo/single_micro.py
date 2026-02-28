@@ -113,14 +113,14 @@ def test_gqa_decode():
     heads = 16
     groups = 8
     max_kv_seqlen = 8192
-    target_kv_seqlen = 5
-    valid_kv_seqlen = 5
+    target_kv_seqlen = 2048
+    valid_kv_seqlen = 2048
     dim = 128
     is_causal = False
     
     # config = [64,64,64,2,128,0,true]
     micro = MicroGqaDecode(batch, max_kv_seqlen, target_kv_seqlen, heads, groups, dim, is_causal, dtype=T.bfloat16, accum_dtype=T.float32)
-    kernel, name, info  = micro.get_kernel(HparamSelectMode.HEURISTIC) # HEURISTIC, TUNING, TUNED
+    kernel, name, info  = micro.get_kernel(HparamSelectMode.TUNED) # HEURISTIC, TUNING, TUNED
     
     test_data = micro.gen_test_data(kernel.config)
     q, k, v, edge, mask, glse, Output_partial = test_data
@@ -171,12 +171,12 @@ if __name__ == "__main__":
     # test_gemm()
     ## test_silu_mul_gemm() # 逻辑有误，silu_mul被重复计算
     # test_gemm_add()
-    # test_gqa_decode()
+    test_gqa_decode()
     # test_rope()
 
     # # # # gen = MicroAutoGen(1, 2560, 9728)
     gen = MicroAutoGen(batch_size=1, hidden_size=1024, intermediate_size=3072, 
                        max_kv_seqlen=8192, heads=16, groups=8, dim=128)
-    gen.gen_qwen3_ops(layer_id=99, mode=HparamSelectMode.TUNING) # HEURISTIC, TUNING, TUNED
-    print(">> Finish gen_qwen3_ops.")
+    gen.gen_qwen3_ops(layer_id=8, mode=HparamSelectMode.TUNED) # HEURISTIC, TUNING, TUNED
+    # print(">> Finish gen_qwen3_ops.")
     # print("Test single_micro completed.")

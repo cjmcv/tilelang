@@ -58,12 +58,12 @@ static PyObject *init_func(PyObject *self, PyObject *args) {
 }
 
 static PyObject *launch_func(PyObject *self, PyObject *args) {
-  int kernel_id = 0, batch_size = 0;
-  if (!PyArg_ParseTuple(args, "ii", &kernel_id, &batch_size)) {
+  int kernel_id = 0, batch_size = 0, step = 0;
+  if (!PyArg_ParseTuple(args, "iii", &kernel_id, &batch_size, &step)) {
     PyErr_SetString(PyExc_TypeError, "Invalid parameters");
     return NULL;
   }
-  launch_persistent_kernel(kernel_id, batch_size);
+  launch_persistent_kernel(kernel_id, batch_size, step);
 
   Py_RETURN_NONE;
 }
@@ -415,6 +415,7 @@ class PersistentKernel:
         q: DTensor,
         k_cache: DTensor, 
         v_cache: DTensor,
+        edge: DTensor,
         mask: DTensor,
         glse: DTensor,
         out_partial: DTensor,
@@ -432,12 +433,13 @@ class PersistentKernel:
             tb_graph.new_input(q,       sync_mode, True)
             tb_graph.new_input(k_cache, sync_mode, True)
             tb_graph.new_input(v_cache, sync_mode, True)
+            tb_graph.new_input(edge,    sync_mode, True)
             tb_graph.new_input(mask,    sync_mode, True)
             tb_graph.new_input(output, (-1, -1, -1), True)
             tb_graph.new_input(glse,    (-1, -1, -1), True)
             tb_graph.new_input(out_partial, (-1, -1, -1), True)
             
-            self.kn_graph.customized([q, k_cache, v_cache, mask, output, glse, out_partial], tb_graph)
+            self.kn_graph.customized([q, k_cache, v_cache, edge, mask, output, glse, out_partial], tb_graph)
             if len(layout) == 2:
                 self.kn_graph.register_task(tb_graph, "gqa_decode", [-1])
             else:
@@ -1448,11 +1450,11 @@ class PersistentKernel:
         print("Finished megakernel Loading...")
         # self.call_func = getattr(mod, "call_func")
         
-    def __call__(self, batch_size, kernel_id=0):
+    def __call__(self, batch_size, step=0, kernel_id=0):
         # stream = kwargs.get("stream", None)
         # if stream is None:
         #    stream = torch.cuda.default_stream()
-        self.launch_func(self.instance_id*self.max_kernel_num_per_instance + kernel_id, batch_size)
+        self.launch_func(self.instance_id*self.max_kernel_num_per_instance + kernel_id, batch_size, step)
         if self.profiler_tensor is not None:
             from .profiler_persistent import export_to_perfetto_trace
             

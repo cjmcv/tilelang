@@ -23,6 +23,7 @@ __device__ __forceinline__ void flashattn_kernel_1_8192_2048_16_8_128__0(const i
                                                    const void* __restrict__ q, 
                                                    const void* __restrict__ k, 
                                                    const void* __restrict__ v,
+                                                   const void* __restrict__ edge_ptr, 
                                                    const void* __restrict__ mask_ptr, 
                                                    void* __restrict__ output_ptr,
                                                    void* __restrict__ glse_ptr,
@@ -33,6 +34,7 @@ __device__ __forceinline__ void flashattn_kernel_1_8192_2048_16_8_128__0(const i
   const bfloat16_t* __restrict__ Q = static_cast<const bfloat16_t*>(q);
   const bfloat16_t* __restrict__ K = static_cast<const bfloat16_t*>(k);
   const bfloat16_t* __restrict__ V = static_cast<const bfloat16_t*>(v);
+  const int* __restrict__ edge = static_cast<const int*>(edge_ptr);
   const uchar* __restrict__ mask = static_cast<const uchar*>(mask_ptr);
   bfloat16_t* __restrict__ Output = static_cast<bfloat16_t*>(output_ptr);
   bfloat16_t* __restrict__ glse = static_cast<bfloat16_t*>(glse_ptr);
@@ -508,6 +510,7 @@ __device__ __forceinline__ void flashattn_kernel_1_8192_2048_16_8_128__1(const i
                                                    const void* __restrict__ q, 
                                                    const void* __restrict__ k, 
                                                    const void* __restrict__ v,
+                                                   const void* __restrict__ edge_ptr, 
                                                    const void* __restrict__ mask_ptr, 
                                                    void* __restrict__ output_ptr,
                                                    void* __restrict__ glse_ptr,
@@ -518,6 +521,7 @@ __device__ __forceinline__ void flashattn_kernel_1_8192_2048_16_8_128__1(const i
   const bfloat16_t* __restrict__ Q = static_cast<const bfloat16_t*>(q);
   const bfloat16_t* __restrict__ K = static_cast<const bfloat16_t*>(k);
   const bfloat16_t* __restrict__ V = static_cast<const bfloat16_t*>(v);
+  const int* __restrict__ edge = static_cast<const int*>(edge_ptr);
   const uchar* __restrict__ mask = static_cast<const uchar*>(mask_ptr);
   bfloat16_t* __restrict__ Output = static_cast<bfloat16_t*>(output_ptr);
   bfloat16_t* __restrict__ glse = static_cast<bfloat16_t*>(glse_ptr);
@@ -560,4 +564,4 @@ __device__ __forceinline__ void flashattn_kernel_1_8192_2048_16_8_128__1(const i
 // use_cooperative_groups: 0.
 // layout: (1, 8, 2), (64, 64, 2), (16, 1, 1), (64, 64, 2)
 // block_dim=(128, 1, 1).
-// latency: 0.0935 ms vs [ref-0.09507 sim-0.99994], idx: 19
+// latency: 0.09267 ms vs [ref-0.09312 sim-0.99997], idx: 19

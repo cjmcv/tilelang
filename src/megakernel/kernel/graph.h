@@ -376,7 +376,7 @@ public:
       task_config[op] = std::make_tuple(4, 2, TASK_ROPE, variant_id);
     } else if (name == "gqa_decode") {
       int variant_id = task_register->register_gqa_decode_task(customized->bgraph, params);
-      task_config[op] = std::make_tuple(4, 3, TASK_GQA_DECODE, variant_id);
+      task_config[op] = std::make_tuple(5, 3, TASK_GQA_DECODE, variant_id);
     } else if (name == "embedding") {
       int variant_id = task_register->register_embedding_task(customized->bgraph, params);
       task_config[op] = std::make_tuple(2, 1, TASK_EMBEDDING, variant_id);

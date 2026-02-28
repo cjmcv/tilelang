@@ -85,7 +85,7 @@ public:
     int sub_kernel_id = params[0];
     std::vector<tb::TBInputOp *> input_ops;
     std::vector<tb::TBInputOp *> output_ops;
-    int num_inputs = 4;
+    int num_inputs = 5;
     int num_outputs = 3;
     assert(bgraph.operators.size() == (size_t)num_inputs + num_outputs);
     for (auto const &op : bgraph.operators) {
@@ -116,6 +116,7 @@ public:
     code.e("    task_desc->input_ptrs[1],");
     code.e("    task_desc->input_ptrs[2],");
     code.e("    task_desc->input_ptrs[3],");
+    code.e("    task_desc->input_ptrs[4],");
     code.e("    task_desc->output_ptrs[0],");
     code.e("    task_desc->output_ptrs[1],");
     code.e("    task_desc->output_ptrs[2]);");

@@ -502,6 +502,7 @@ __device__ __forceinline__ void flashattn_kernel_<name_suffix>(const int bx, con
                                                    const void* __restrict__ q, 
                                                    const void* __restrict__ k, 
                                                    const void* __restrict__ v,
+                                                   const void* __restrict__ edge_ptr, 
                                                    const void* __restrict__ mask_ptr, 
                                                    void* __restrict__ output_ptr,
                                                    void* __restrict__ glse_ptr,
@@ -512,6 +513,7 @@ __device__ __forceinline__ void flashattn_kernel_<name_suffix>(const int bx, con
   const <dtype>* __restrict__ Q = static_cast<const <dtype>*>(q);
   const <dtype>* __restrict__ K = static_cast<const <dtype>*>(k);
   const <dtype>* __restrict__ V = static_cast<const <dtype>*>(v);
+  const int* __restrict__ edge = static_cast<const int*>(edge_ptr);
   const uchar* __restrict__ mask = static_cast<const uchar*>(mask_ptr);
   <dtype>* __restrict__ Output = static_cast<<dtype>*>(output_ptr);
   <dtype>* __restrict__ glse = static_cast<<dtype>*>(glse_ptr);

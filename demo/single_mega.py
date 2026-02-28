@@ -193,14 +193,25 @@ def test_rope(mpk, max_batch_size, batch, heads, groups, dim):
                             warnup_iter=100, test_iter=100, 
                             allclose_iter=5, print_mode=1)
      
+# def mpk_tensor(mpk):
+#     return mpk
+
 def test_gqa_decode(mpk, max_batch_size, batch, heads, groups, seqlen_kv, dim):
+    # 1）两个图切换，以适配两个gqa配置？
+    # 2）两个gqa布局，按多的配置，部分block可空跑。！！优先尝试
+    #    生成代码时，添加优先主动退出条件(如有生成的时split的kernel则进入，不split的blockz直接退出。)
+    # 封装attach_input.
+    # 3) 添加step
     split = 8 # TODO 自动配置
     glse_torch = torch.empty(batch, heads, split, device="cuda", dtype=torch.bfloat16)
     out_partial_torch = torch.empty(batch, heads, split, dim, device="cuda", dtype=torch.bfloat16)
     
+    target_kv_seqlen = 2048
     q_torch = torch.randn(batch, heads, dim, device="cuda", dtype=torch.bfloat16)              # [B, N=seqlen_q=1, H=heads,  D=dim]
     k_torch = torch.randn(batch, seqlen_kv, groups, dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
     v_torch = torch.randn(batch, seqlen_kv, groups, dim, device="cuda", dtype=torch.bfloat16)
+    edge_torch = torch.empty(10, device="cuda", dtype=torch.int32)
+    edge_torch[0].fill_(target_kv_seqlen)
     mask_torch = torch.ones(batch, seqlen_kv, groups, device="cuda", dtype=torch.uint8)
     out_torch = torch.empty(batch, heads, dim, device="cuda", dtype=torch.bfloat16)
     
@@ -208,6 +219,7 @@ def test_gqa_decode(mpk, max_batch_size, batch, heads, groups, seqlen_kv, dim):
     q = mpk.attach_input(torch_tensor=q_torch, name="q")
     k = mpk.attach_input(torch_tensor=k_torch, name="k")
     v = mpk.attach_input(torch_tensor=v_torch, name="v")
+    edge = mpk.attach_input(torch_tensor=edge_torch, name="edge")
     mask = mpk.attach_input(torch_tensor=mask_torch, name="mask")
     glse = mpk.attach_input(torch_tensor=glse_torch, name="glse")
     out_partial = mpk.attach_input(torch_tensor=out_partial_torch, name="out_partial")
@@ -217,12 +229,13 @@ def test_gqa_decode(mpk, max_batch_size, batch, heads, groups, seqlen_kv, dim):
         q=q,
         k_cache=k,
         v_cache=v,
+        edge=edge,
         mask=mask,
         glse=glse,
         out_partial=out_partial,
         output=attn_out,
         sync_mode=(0, 0, 0),
-        layout=Qwen3MegaConfig.gqa_decode_layout,
+        layout=Qwen3MegaConfig.gqa_decode_layout_2048,
         # layout=((1, 8, 8), (64, 64, 8), (16, 1, 1), (64, 64, 8))
     )
     layers.compile_load(args.nc, args.output_dir)
@@ -300,10 +313,10 @@ if __name__ == "__main__":
     heads=16
     groups=8
     dim=128
-    seqlen_kv=8192
+    seqlen_kv=2048
     # test_linear(mpk, max_batch_size, batch_size, (heads+2*groups)*dim, hidden_size, Qwen3MegaConfig.qkv_proj_layout)
     # test_rope(mpk, max_batch_size=1, batch=1, heads=heads, groups=groups, dim=dim)
-    # test_gqa_decode(mpk, max_batch_size=1, batch=1, heads=heads, groups=groups, seqlen_kv=seqlen_kv, dim=dim)
+    test_gqa_decode(mpk, max_batch_size=1, batch=1, heads=heads, groups=groups, seqlen_kv=seqlen_kv, dim=dim)
     # test_linear_residual(mpk, max_batch_size, batch_size, hidden_size, heads*dim, Qwen3MegaConfig.o_proj_layout)
         
     print("Test single_mega completed.")
