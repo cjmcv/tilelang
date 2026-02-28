@@ -19,7 +19,7 @@ template <typename T,
           int HEAD,
           int GROUPS,
           int DIM>
-__device__ __forceinline__ void flashattn_kernel_1_8192_8_16_8_128(const int bx, const int by, const int bz,
+__device__ __forceinline__ void flashattn_kernel_1_8192_7_16_8_128(const int bx, const int by, const int bz,
                                                    const void* __restrict__ q, 
                                                    const void* __restrict__ k, 
                                                    const void* __restrict__ v,
@@ -72,10 +72,13 @@ __device__ __forceinline__ void flashattn_kernel_1_8192_8_16_8_128(const int bx,
   for (int i_3 = 0; i_3 < 2; ++i_3) {
     scores_max[i_3] = -CUDART_INF_F;
   }
-  *(uint4*)(((bfloat16_t*)buf_dyn_shmem) + ((((((((((int)threadIdx.x) & 15) >> 3) * 1024) + ((((int)threadIdx.x) >> 4) * 64)) + ((((((int)threadIdx.x) >> 6) + ((((int)threadIdx.x) & 7) >> 2)) & 1) * 32)) + (((((((int)threadIdx.x) & 63) >> 5) + ((((int)threadIdx.x) & 3) >> 1)) & 1) * 16)) + (((((((int)threadIdx.x) & 31) >> 4) + (((int)threadIdx.x) & 1)) & 1) * 8)) + 8192)) = *(uint4*)(K + ((((((int)threadIdx.x) >> 4) * 1024) + (((int)by) * 128)) + ((((int)threadIdx.x) & 15) * 8)));
   #pragma unroll
-  for (int i_4 = 0; i_4 < 4; ++i_4) {
-    *(float2*)(acc_s + (i_4 * 2)) = make_float2(0x0p+0f/*0.000000e+00*/, 0x0p+0f/*0.000000e+00*/);
+  for (int i_4 = 0; i_4 < 7; ++i_4) {
+    ((bfloat16_t*)buf_dyn_shmem)[((((((((((int)threadIdx.x) >> 6) * 1024) + (i_4 * 64)) + (((((((int)threadIdx.x) & 63) >> 5) + (i_4 >> 2)) & 1) * 32)) + (((((((int)threadIdx.x) & 31) >> 4) + ((i_4 & 3) >> 1)) & 1) * 16)) + (((((((int)threadIdx.x) & 15) >> 3) + (i_4 & 1)) & 1) * 8)) + (((int)threadIdx.x) & 7)) + 8192)] = K[(((i_4 * 1024) + (((int)by) * 128)) + ((int)threadIdx.x))];
+  }
+  #pragma unroll
+  for (int i_5 = 0; i_5 < 4; ++i_5) {
+    *(float2*)(acc_s + (i_5 * 2)) = make_float2(0x0p+0f/*0.000000e+00*/, 0x0p+0f/*0.000000e+00*/);
   }
   __syncthreads();
   for (int ki = 0; ki < 8; ++ki) {
@@ -85,93 +88,96 @@ __device__ __forceinline__ void flashattn_kernel_1_8192_8_16_8_128(const int bx,
     tl::mma_sync<tl::DataType::kBFloat16, tl::DataType::kBFloat16, tl::DataType::kFloat32, 16, 8, 16, false, true>(reinterpret_cast<float*>(acc_s + 4), reinterpret_cast<const unsigned*>(A_local + 0), reinterpret_cast<const unsigned*>(B_local + 4));
   }
   #pragma unroll
-  for (int i_5 = 0; i_5 < 8; ++i_5) {
+  for (int i_6 = 0; i_6 < 8; ++i_6) {
     float condval_1;
-    if ((i_5 < 4)) {
-      condval_1 = acc_s[i_5];
+    if ((((((i_6 >> 2) * 8) + ((((int)threadIdx.x) & 3) * 2)) + (i_6 & 1)) < 7)) {
+      condval_1 = acc_s[i_6];
     } else {
       condval_1 = -CUDART_INF_F;
     }
-    acc_s[i_5] = condval_1;
-  }
-  #pragma unroll
-  for (int i_6 = 0; i_6 < 2; ++i_6) {
-    scores_max_prev[i_6] = scores_max[i_6];
+    acc_s[i_6] = condval_1;
   }
   #pragma unroll
   for (int i_7 = 0; i_7 < 2; ++i_7) {
-    scores_max[i_7] = -CUDART_INF_F;
+    scores_max_prev[i_7] = scores_max[i_7];
   }
   #pragma unroll
   for (int i_8 = 0; i_8 < 2; ++i_8) {
-    #pragma unroll
-    for (int rv = 0; rv < 4; ++rv) {
-      scores_max[i_8] = max(scores_max[i_8], acc_s[((((rv & 1) * 4) + (i_8 * 2)) + (rv >> 1))]);
-    }
-    scores_max[i_8] = tl::AllReduce<tl::MaxOp, 4, 1, 0>::run(scores_max[i_8]);
+    scores_max[i_8] = -CUDART_INF_F;
   }
   #pragma unroll
   for (int i_9 = 0; i_9 < 2; ++i_9) {
-    scores_max[i_9] = max(scores_max[i_9], scores_max_prev[i_9]);
+    #pragma unroll
+    for (int rv = 0; rv < 4; ++rv) {
+      scores_max[i_9] = max(scores_max[i_9], acc_s[((((rv & 1) * 4) + (i_9 * 2)) + (rv >> 1))]);
+    }
+    scores_max[i_9] = tl::AllReduce<tl::MaxOp, 4, 1, 0>::run(scores_max[i_9]);
   }
   #pragma unroll
   for (int i_10 = 0; i_10 < 2; ++i_10) {
-    scores_scale[i_10] = exp2f(((scores_max_prev[i_10] * 0x1.0527dbd5cafffp-3f/*1.275174e-01*/) - (scores_max[i_10] * 0x1.0527dbd5cafffp-3f/*1.275174e-01*/)));
+    scores_max[i_10] = max(scores_max[i_10], scores_max_prev[i_10]);
   }
   #pragma unroll
-  for (int i_11 = 0; i_11 < 8; ++i_11) {
-    acc_s[i_11] = exp2f(((acc_s[i_11] * 0x1.0527dbd5cafffp-3f/*1.275174e-01*/) - (scores_max[((i_11 & 3) >> 1)] * 0x1.0527dbd5cafffp-3f/*1.275174e-01*/)));
+  for (int i_11 = 0; i_11 < 2; ++i_11) {
+    scores_scale[i_11] = exp2f(((scores_max_prev[i_11] * 0x1.0527dbd5cafffp-3f/*1.275174e-01*/) - (scores_max[i_11] * 0x1.0527dbd5cafffp-3f/*1.275174e-01*/)));
   }
   #pragma unroll
-  for (int i_12 = 0; i_12 < 2; ++i_12) {
-    scores_sum[i_12] = 0x0p+0f/*0.000000e+00*/;
-    #pragma unroll
-    for (int rv_1 = 0; rv_1 < 4; ++rv_1) {
-      scores_sum[i_12] = (scores_sum[i_12] + acc_s[((((rv_1 & 1) * 4) + (i_12 * 2)) + (rv_1 >> 1))]);
-    }
-    scores_sum[i_12] = tl::AllReduce<tl::SumOp, 4, 1, 0>::run(scores_sum[i_12]);
+  for (int i_12 = 0; i_12 < 8; ++i_12) {
+    acc_s[i_12] = exp2f(((acc_s[i_12] * 0x1.0527dbd5cafffp-3f/*1.275174e-01*/) - (scores_max[((i_12 & 3) >> 1)] * 0x1.0527dbd5cafffp-3f/*1.275174e-01*/)));
   }
   #pragma unroll
   for (int i_13 = 0; i_13 < 2; ++i_13) {
-    logsum[i_13] = ((logsum[i_13] * scores_scale[i_13]) + scores_sum[i_13]);
+    scores_sum[i_13] = 0x0p+0f/*0.000000e+00*/;
+    #pragma unroll
+    for (int rv_1 = 0; rv_1 < 4; ++rv_1) {
+      scores_sum[i_13] = (scores_sum[i_13] + acc_s[((((rv_1 & 1) * 4) + (i_13 * 2)) + (rv_1 >> 1))]);
+    }
+    scores_sum[i_13] = tl::AllReduce<tl::SumOp, 4, 1, 0>::run(scores_sum[i_13]);
   }
   #pragma unroll
-  for (int i_14 = 0; i_14 < 4; ++i_14) {
+  for (int i_14 = 0; i_14 < 2; ++i_14) {
+    logsum[i_14] = ((logsum[i_14] * scores_scale[i_14]) + scores_sum[i_14]);
+  }
+  #pragma unroll
+  for (int i_15 = 0; i_15 < 4; ++i_15) {
     uint1 __1;
-    float2 v_ = *(float2*)(acc_s + (i_14 * 2));
+    float2 v_ = *(float2*)(acc_s + (i_15 * 2));
     *reinterpret_cast<__nv_bfloat162*>(&(__1)) = __float22bfloat162_rn(*(float2*)(&(v_)));
-    *(uint1*)(acc_s_cast + (i_14 * 2)) = __1;
+    *(uint1*)(acc_s_cast + (i_15 * 2)) = __1;
   }
   #pragma unroll
-  for (int i_15 = 0; i_15 < 64; ++i_15) {
-    acc_o[i_15] = (acc_o[i_15] * scores_scale[((i_15 & 3) >> 1)]);
+  for (int i_16 = 0; i_16 < 64; ++i_16) {
+    acc_o[i_16] = (acc_o[i_16] * scores_scale[((i_16 & 3) >> 1)]);
   }
   __syncthreads();
-  *(uint4*)(((bfloat16_t*)buf_dyn_shmem) + (((((((((int)threadIdx.x) & 15) >> 3) * 1024) + ((((int)threadIdx.x) >> 4) * 64)) + ((((((int)threadIdx.x) >> 6) + ((((int)threadIdx.x) & 7) >> 2)) & 1) * 32)) + (((((((int)threadIdx.x) & 63) >> 5) + ((((int)threadIdx.x) & 3) >> 1)) & 1) * 16)) + (((((((int)threadIdx.x) & 31) >> 4) + (((int)threadIdx.x) & 1)) & 1) * 8))) = *(uint4*)(V + ((((((int)threadIdx.x) >> 4) * 1024) + (((int)by) * 128)) + ((((int)threadIdx.x) & 15) * 8)));
+  #pragma unroll
+  for (int i_17 = 0; i_17 < 7; ++i_17) {
+    ((bfloat16_t*)buf_dyn_shmem)[(((((((((int)threadIdx.x) >> 6) * 1024) + (i_17 * 64)) + (((((((int)threadIdx.x) & 63) >> 5) + (i_17 >> 2)) & 1) * 32)) + (((((((int)threadIdx.x) & 31) >> 4) + ((i_17 & 3) >> 1)) & 1) * 16)) + (((((((int)threadIdx.x) & 15) >> 3) + (i_17 & 1)) & 1) * 8)) + (((int)threadIdx.x) & 7))] = V[(((i_17 * 1024) + (((int)by) * 128)) + ((int)threadIdx.x))];
+  }
   __syncthreads();
-  for (int i_16 = 0; i_16 < 8; ++i_16) {
-    tl::ptx_ldmatrix_x4_trans((&(((bfloat16_t*)buf_dyn_shmem)[((((i_16 >> 2) * 1024) + (((((int)threadIdx.x) & 15) >> 3) * 512)) + ((((((((int)threadIdx.x) & 15) * 64) + (((((((int)threadIdx.x) & 7) >> 2) + ((i_16 & 3) >> 1)) & 1) * 32)) + (((((((int)threadIdx.x) & 3) >> 1) + (i_16 & 1)) & 1) * 16)) + (((((((int)threadIdx.x) & 31) >> 4) + (((int)threadIdx.x) & 1)) & 1) * 8)) & 511))])) + 0, B_local_1 + (i_16 * 8));
+  for (int i_18 = 0; i_18 < 8; ++i_18) {
+    tl::ptx_ldmatrix_x4_trans((&(((bfloat16_t*)buf_dyn_shmem)[((((i_18 >> 2) * 1024) + (((((int)threadIdx.x) & 15) >> 3) * 512)) + ((((((((int)threadIdx.x) & 15) * 64) + (((((((int)threadIdx.x) & 7) >> 2) + ((i_18 & 3) >> 1)) & 1) * 32)) + (((((((int)threadIdx.x) & 3) >> 1) + (i_18 & 1)) & 1) * 16)) + (((((((int)threadIdx.x) & 31) >> 4) + (((int)threadIdx.x) & 1)) & 1) * 8)) & 511))])) + 0, B_local_1 + (i_18 * 8));
   }
   for (int j = 0; j < 8; ++j) {
     tl::mma_sync<tl::DataType::kBFloat16, tl::DataType::kBFloat16, tl::DataType::kFloat32, 16, 8, 16, false, true>(reinterpret_cast<float*>(acc_o + (j * 8)), reinterpret_cast<const unsigned*>(acc_s_cast + 0), reinterpret_cast<const unsigned*>(B_local_1 + (j * 8)));
     tl::mma_sync<tl::DataType::kBFloat16, tl::DataType::kBFloat16, tl::DataType::kFloat32, 16, 8, 16, false, true>(reinterpret_cast<float*>(acc_o + ((j * 8) + 4)), reinterpret_cast<const unsigned*>(acc_s_cast + 0), reinterpret_cast<const unsigned*>(B_local_1 + ((j * 8) + 4)));
   }
   #pragma unroll
-  for (int i_17 = 0; i_17 < 64; ++i_17) {
-    acc_o[i_17] = (acc_o[i_17] / logsum[((i_17 & 3) >> 1)]);
+  for (int i_19 = 0; i_19 < 64; ++i_19) {
+    acc_o[i_19] = (acc_o[i_19] / logsum[((i_19 & 3) >> 1)]);
   }
   #pragma unroll
-  for (int i_18 = 0; i_18 < 2; ++i_18) {
-    logsum[i_18] = (log2f(logsum[i_18]) + (scores_max[i_18] * 0x1.0527dbd5cafffp-3f/*1.275174e-01*/));
+  for (int i_20 = 0; i_20 < 2; ++i_20) {
+    logsum[i_20] = (log2f(logsum[i_20]) + (scores_max[i_20] * 0x1.0527dbd5cafffp-3f/*1.275174e-01*/));
   }
   __syncthreads();
   #pragma unroll
-  for (int i_19 = 0; i_19 < 32; ++i_19) {
-    if ((((((((int)threadIdx.x) >> 5) * 8) + ((i_19 & 1) * 4)) + ((((int)threadIdx.x) & 31) >> 3)) < 1) && (((((((int)threadIdx.x) >> 5) * 8) + ((i_19 & 1) * 4)) + ((((int)threadIdx.x) & 31) >> 3)) < 1)) {
+  for (int i_21 = 0; i_21 < 32; ++i_21) {
+    if ((((((((int)threadIdx.x) >> 5) * 8) + ((i_21 & 1) * 4)) + ((((int)threadIdx.x) & 31) >> 3)) < 1) && (((((((int)threadIdx.x) >> 5) * 8) + ((i_21 & 1) * 4)) + ((((int)threadIdx.x) & 31) >> 3)) < 1)) {
       uint1 __2;
-      float2 v__1 = *(float2*)(acc_o + (i_19 * 2));
+      float2 v__1 = *(float2*)(acc_o + (i_21 * 2));
       *reinterpret_cast<__nv_bfloat162*>(&(__2)) = __float22bfloat162_rn(*(float2*)(&(v__1)));
-      *(uint1*)(((bfloat16_t*)buf_dyn_shmem) + ((((((((int)threadIdx.x) >> 5) * 2048) + ((i_19 & 1) * 1024)) + (((((int)threadIdx.x) & 31) >> 2) * 128)) + ((i_19 >> 1) * 8)) + ((((int)threadIdx.x) & 3) * 2))) = __2;
+      *(uint1*)(((bfloat16_t*)buf_dyn_shmem) + ((((((((int)threadIdx.x) >> 5) * 2048) + ((i_21 & 1) * 1024)) + (((((int)threadIdx.x) & 31) >> 2) * 128)) + ((i_21 >> 1) * 8)) + ((((int)threadIdx.x) & 3) * 2))) = __2;
     }
   }
   __syncthreads();
@@ -180,10 +186,10 @@ __device__ __forceinline__ void flashattn_kernel_1_8192_8_16_8_128(const int bx,
 
 
 } // kernel
-// Strategy: gqa_decode_tl_1_8192_8_16_8_128
+// Strategy: gqa_decode_tl_1_8192_7_16_8_128
 // selected_hparams: [16, 64, 1, 1, 128].
 // smem: 20480 bytes.
 // use_cooperative_groups: 0.
 // layout: (1, 8, 1), (16, 64, 1)
 // block_dim=(128, 1, 1).
-// latency: 0.00845 ms vs [ref-0.00836 sim-1.0], idx: -1
+// latency: 0.00834 ms vs [ref-0.00825 sim-1.0], idx: -1

@@ -19,7 +19,7 @@ template <typename T,
           int HEAD,
           int GROUPS,
           int DIM>
-__device__ __forceinline__ void flashattn_kernel_1_8192_8_16_8_128(const int bx, const int by, const int bz,
+__device__ __forceinline__ void flashattn_kernel_1_8192_1_16_8_128(const int bx, const int by, const int bz,
                                                    const void* __restrict__ q, 
                                                    const void* __restrict__ k, 
                                                    const void* __restrict__ v,
@@ -72,7 +72,7 @@ __device__ __forceinline__ void flashattn_kernel_1_8192_8_16_8_128(const int bx,
   for (int i_3 = 0; i_3 < 2; ++i_3) {
     scores_max[i_3] = -CUDART_INF_F;
   }
-  *(uint4*)(((bfloat16_t*)buf_dyn_shmem) + ((((((((((int)threadIdx.x) & 15) >> 3) * 1024) + ((((int)threadIdx.x) >> 4) * 64)) + ((((((int)threadIdx.x) >> 6) + ((((int)threadIdx.x) & 7) >> 2)) & 1) * 32)) + (((((((int)threadIdx.x) & 63) >> 5) + ((((int)threadIdx.x) & 3) >> 1)) & 1) * 16)) + (((((((int)threadIdx.x) & 31) >> 4) + (((int)threadIdx.x) & 1)) & 1) * 8)) + 8192)) = *(uint4*)(K + ((((((int)threadIdx.x) >> 4) * 1024) + (((int)by) * 128)) + ((((int)threadIdx.x) & 15) * 8)));
+  ((bfloat16_t*)buf_dyn_shmem)[((((((int)threadIdx.x) >> 6) * 1024) + (((int)threadIdx.x) & 63)) + 8192)] = K[((((int)by) * 128) + ((int)threadIdx.x))];
   #pragma unroll
   for (int i_4 = 0; i_4 < 4; ++i_4) {
     *(float2*)(acc_s + (i_4 * 2)) = make_float2(0x0p+0f/*0.000000e+00*/, 0x0p+0f/*0.000000e+00*/);
@@ -87,7 +87,7 @@ __device__ __forceinline__ void flashattn_kernel_1_8192_8_16_8_128(const int bx,
   #pragma unroll
   for (int i_5 = 0; i_5 < 8; ++i_5) {
     float condval_1;
-    if ((i_5 < 4)) {
+    if ((((((i_5 >> 2) * 8) + ((((int)threadIdx.x) & 3) * 2)) + (i_5 & 1)) < 1)) {
       condval_1 = acc_s[i_5];
     } else {
       condval_1 = -CUDART_INF_F;
@@ -147,7 +147,7 @@ __device__ __forceinline__ void flashattn_kernel_1_8192_8_16_8_128(const int bx,
     acc_o[i_15] = (acc_o[i_15] * scores_scale[((i_15 & 3) >> 1)]);
   }
   __syncthreads();
-  *(uint4*)(((bfloat16_t*)buf_dyn_shmem) + (((((((((int)threadIdx.x) & 15) >> 3) * 1024) + ((((int)threadIdx.x) >> 4) * 64)) + ((((((int)threadIdx.x) >> 6) + ((((int)threadIdx.x) & 7) >> 2)) & 1) * 32)) + (((((((int)threadIdx.x) & 63) >> 5) + ((((int)threadIdx.x) & 3) >> 1)) & 1) * 16)) + (((((((int)threadIdx.x) & 31) >> 4) + (((int)threadIdx.x) & 1)) & 1) * 8))) = *(uint4*)(V + ((((((int)threadIdx.x) >> 4) * 1024) + (((int)by) * 128)) + ((((int)threadIdx.x) & 15) * 8)));
+  ((bfloat16_t*)buf_dyn_shmem)[(((((int)threadIdx.x) >> 6) * 1024) + (((int)threadIdx.x) & 63))] = V[((((int)by) * 128) + ((int)threadIdx.x))];
   __syncthreads();
   for (int i_16 = 0; i_16 < 8; ++i_16) {
     tl::ptx_ldmatrix_x4_trans((&(((bfloat16_t*)buf_dyn_shmem)[((((i_16 >> 2) * 1024) + (((((int)threadIdx.x) & 15) >> 3) * 512)) + ((((((((int)threadIdx.x) & 15) * 64) + (((((((int)threadIdx.x) & 7) >> 2) + ((i_16 & 3) >> 1)) & 1) * 32)) + (((((((int)threadIdx.x) & 3) >> 1) + (i_16 & 1)) & 1) * 16)) + (((((((int)threadIdx.x) & 31) >> 4) + (((int)threadIdx.x) & 1)) & 1) * 8)) & 511))])) + 0, B_local_1 + (i_16 * 8));
@@ -180,10 +180,10 @@ __device__ __forceinline__ void flashattn_kernel_1_8192_8_16_8_128(const int bx,
 
 
 } // kernel
-// Strategy: gqa_decode_tl_1_8192_8_16_8_128
+// Strategy: gqa_decode_tl_1_8192_1_16_8_128
 // selected_hparams: [16, 64, 1, 1, 128].
 // smem: 20480 bytes.
 // use_cooperative_groups: 0.
 // layout: (1, 8, 1), (16, 64, 1)
 // block_dim=(128, 1, 1).
-// latency: 0.00845 ms vs [ref-0.00836 sim-1.0], idx: -1
+// latency: 0.00816 ms vs [ref-0.00783 sim-1.0], idx: -1

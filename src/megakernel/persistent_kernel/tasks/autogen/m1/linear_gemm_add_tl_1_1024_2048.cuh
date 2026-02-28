@@ -42,6 +42,7 @@ template <typename T,
   float C_local[8];
   bfloat16_t A_local[8];
   bfloat16_t B_local[8];
+  const dim3 blockIdx = tl::rasterization2DRow<10>();
   #pragma unroll
   for (int i = 0; i < 4; ++i) {
     *(float2*)(C_local + (i * 2)) = make_float2(0x0p+0f/*0.000000e+00*/, 0x0p+0f/*0.000000e+00*/);
@@ -132,9 +133,9 @@ template <typename T,
 
 } // kernel
 // Strategy: linear_gemm_add_tl_1_1024_2048
-// selected_hparams: [16, 64, 128, 1, 3, 128, 1, False].
+// selected_hparams: [16, 64, 128, 1, 3, 128, <GemmWarpPolicy.FullRow: 1>, True].
 // smem: 61440 bytes.
 // use_cooperative_groups: 0.
 // layout: (16, 1, 1), (64, 16, 128)
 // block_dim=(128, 1, 1).
-// latency: 0.0506
+// latency: 0.04755 ms vs [ref-0.04979 sim-1.0], idx: 46
