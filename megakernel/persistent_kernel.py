@@ -221,8 +221,8 @@ def get_compile_command(
 class PersistentKernel:
     def __init__(
         self,
-        instance_id: int,
-        kernel_num: int,
+        instance_id: int,  # 多实例，用于graph切换
+        kernel_num: int,   # 多kernel共享，用于一个kernel切换多份权重，实现多kernel效果。
         mode: str,
         world_size: int,
         mpi_rank: int,

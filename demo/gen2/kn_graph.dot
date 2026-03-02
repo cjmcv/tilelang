@@ -1,0 +1,160 @@
+digraph "Kernel Graph" {
+	bgcolor="#ffffff" compound=true fontcolor=black fontname="sans-serif" fontsize=16 nodesep=1.6 rankdir=LR ranksep=0.3 splines=ortho
+	subgraph "clusterBlock graph 2" {
+		bgcolor="#dbe8f5" fontcolor=black fontname="sans-serif" fontsize=32 label="Block graph 2; grid size: [x=16, y=1, z=1]; forloop: [i=128]" labeldistance=1.5 labeljust=l labelloc=t penwidth=0 rankdir=LR splines=ortho style=filled
+		"A'_input" [label="A'
+[1, 16, 128]
+imap: {x↔0, y↔0, z↔0}" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		tb_input_op_133304520124928 [label="Input
+fmap: [i↔∅]" color="#5a8fcb" fontcolor=white fontname="sans-serif" fontsize=30 margin="0.4,0.4" penwidth=0 shape=box style="rounded,filled"]
+		"A'_input" -> tb_input_op_133304520124928 [color="#4273b1" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+		"B'_input" [label="B'
+[1, 8192, 8, 128]
+imap: {x↔0, y↔0, z↔0}" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		tb_input_op_133304521037056 [label="Input
+fmap: [i↔∅]" color="#5a8fcb" fontcolor=white fontname="sans-serif" fontsize=30 margin="0.4,0.4" penwidth=0 shape=box style="rounded,filled"]
+		"B'_input" -> tb_input_op_133304521037056 [color="#4273b1" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+		"C'_input" [label="C'
+[1, 8192, 8, 128]
+imap: {x↔0, y↔0, z↔0}" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		tb_input_op_133304521039360 [label="Input
+fmap: [i↔∅]" color="#5a8fcb" fontcolor=white fontname="sans-serif" fontsize=30 margin="0.4,0.4" penwidth=0 shape=box style="rounded,filled"]
+		"C'_input" -> tb_input_op_133304521039360 [color="#4273b1" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+		"D'_input" [label="D'
+[10]
+imap: {x↔0, y↔0, z↔0}" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		tb_input_op_133304521044480 [label="Input
+fmap: [i↔∅]" color="#5a8fcb" fontcolor=white fontname="sans-serif" fontsize=30 margin="0.4,0.4" penwidth=0 shape=box style="rounded,filled"]
+		"D'_input" -> tb_input_op_133304521044480 [color="#4273b1" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+		"E'_input" [label="E'
+[1, 8192, 8]
+imap: {x↔0, y↔0, z↔0}" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		tb_input_op_133304521044160 [label="Input
+fmap: [i↔∅]" color="#5a8fcb" fontcolor=white fontname="sans-serif" fontsize=30 margin="0.4,0.4" penwidth=0 shape=box style="rounded,filled"]
+		"E'_input" -> tb_input_op_133304521044160 [color="#4273b1" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+		"F'_input" [label="F'
+[1, 16, 128]
+imap: {x↔∅, y↔∅, z↔∅}" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		tb_input_op_133304521035456 [label="Input
+fmap: [i↔∅]" color="#5a8fcb" fontcolor=white fontname="sans-serif" fontsize=30 margin="0.4,0.4" penwidth=0 shape=box style="rounded,filled"]
+		"F'_input" -> tb_input_op_133304521035456 [color="#4273b1" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+		"G'_input" [label="G'
+[1, 16, 8]
+imap: {x↔∅, y↔∅, z↔∅}" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		tb_input_op_133304521036096 [label="Input
+fmap: [i↔∅]" color="#5a8fcb" fontcolor=white fontname="sans-serif" fontsize=30 margin="0.4,0.4" penwidth=0 shape=box style="rounded,filled"]
+		"G'_input" -> tb_input_op_133304521036096 [color="#4273b1" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+		"H'_input" [label="H'
+[1, 16, 8, 128]
+imap: {x↔∅, y↔∅, z↔∅}" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		tb_input_op_133304521042432 [label="Input
+fmap: [i↔∅]" color="#5a8fcb" fontcolor=white fontname="sans-serif" fontsize=30 margin="0.4,0.4" penwidth=0 shape=box style="rounded,filled"]
+		"H'_input" -> tb_input_op_133304521042432 [color="#4273b1" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+	}
+	subgraph "clusterBlock graph 1" {
+		bgcolor="#dbe8f5" fontcolor=black fontname="sans-serif" fontsize=32 label="Block graph 1; grid size: [x=1, y=8, z=2]; forloop: [i=128]" labeldistance=1.5 labeljust=l labelloc=t penwidth=0 rankdir=LR splines=ortho style=filled
+		"A'_input" [label="A'
+[1, 16, 128]
+imap: {x↔0, y↔0, z↔0}" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		tb_input_op_133304383740480 [label="Input
+fmap: [i↔∅]" color="#5a8fcb" fontcolor=white fontname="sans-serif" fontsize=30 margin="0.4,0.4" penwidth=0 shape=box style="rounded,filled"]
+		"A'_input" -> tb_input_op_133304383740480 [color="#4273b1" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+		"B'_input" [label="B'
+[1, 8192, 8, 128]
+imap: {x↔0, y↔0, z↔0}" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		tb_input_op_133304383749568 [label="Input
+fmap: [i↔∅]" color="#5a8fcb" fontcolor=white fontname="sans-serif" fontsize=30 margin="0.4,0.4" penwidth=0 shape=box style="rounded,filled"]
+		"B'_input" -> tb_input_op_133304383749568 [color="#4273b1" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+		"C'_input" [label="C'
+[1, 8192, 8, 128]
+imap: {x↔0, y↔0, z↔0}" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		tb_input_op_133304383738432 [label="Input
+fmap: [i↔∅]" color="#5a8fcb" fontcolor=white fontname="sans-serif" fontsize=30 margin="0.4,0.4" penwidth=0 shape=box style="rounded,filled"]
+		"C'_input" -> tb_input_op_133304383738432 [color="#4273b1" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+		"D'_input" [label="D'
+[10]
+imap: {x↔0, y↔0, z↔0}" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		tb_input_op_133304383744576 [label="Input
+fmap: [i↔∅]" color="#5a8fcb" fontcolor=white fontname="sans-serif" fontsize=30 margin="0.4,0.4" penwidth=0 shape=box style="rounded,filled"]
+		"D'_input" -> tb_input_op_133304383744576 [color="#4273b1" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+		"E'_input" [label="E'
+[1, 8192, 8]
+imap: {x↔0, y↔0, z↔0}" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		tb_input_op_133304383745728 [label="Input
+fmap: [i↔∅]" color="#5a8fcb" fontcolor=white fontname="sans-serif" fontsize=30 margin="0.4,0.4" penwidth=0 shape=box style="rounded,filled"]
+		"E'_input" -> tb_input_op_133304383745728 [color="#4273b1" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+		"F'_input" [label="F'
+[1, 16, 128]
+imap: {x↔∅, y↔∅, z↔∅}" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		tb_input_op_133304383749312 [label="Input
+fmap: [i↔∅]" color="#5a8fcb" fontcolor=white fontname="sans-serif" fontsize=30 margin="0.4,0.4" penwidth=0 shape=box style="rounded,filled"]
+		"F'_input" -> tb_input_op_133304383749312 [color="#4273b1" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+		"G'_input" [label="G'
+[1, 16, 8]
+imap: {x↔∅, y↔∅, z↔∅}" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		tb_input_op_133304383748416 [label="Input
+fmap: [i↔∅]" color="#5a8fcb" fontcolor=white fontname="sans-serif" fontsize=30 margin="0.4,0.4" penwidth=0 shape=box style="rounded,filled"]
+		"G'_input" -> tb_input_op_133304383748416 [color="#4273b1" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+		"H'_input" [label="H'
+[1, 16, 8, 128]
+imap: {x↔∅, y↔∅, z↔∅}" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		tb_input_op_133304383743616 [label="Input
+fmap: [i↔∅]" color="#5a8fcb" fontcolor=white fontname="sans-serif" fontsize=30 margin="0.4,0.4" penwidth=0 shape=box style="rounded,filled"]
+		"H'_input" -> tb_input_op_133304383743616 [color="#4273b1" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+	}
+	subgraph "clusterKernel Graph" {
+		bgcolor="#e0edd5" fontcolor=black fontname="sans-serif" fontsize=32 label="Kernel Graph" labeldistance=1.5 labeljust=l labelloc=t penwidth=0 rankdir=LR splines=ortho style=filled
+		kn_customized_op_133304520281344 [label="Customized
+Op  1" color="#70a148" fontcolor=white fontname="sans-serif" fontsize=30 margin="0.4,0.4" penwidth=0 shape=box style="rounded,filled"]
+		kn_customized_op_133304540152384 [label="Customized
+Op  2" color="#70a148" fontcolor=white fontname="sans-serif" fontsize=30 margin="0.4,0.4" penwidth=0 shape=box style="rounded,filled"]
+		A [label="A
+[1, 16, 128]" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		A -> kn_customized_op_133304520281344 [color="#527536" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+		A [label="A
+[1, 16, 128]" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		A -> kn_customized_op_133304540152384 [color="#527536" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+		B [label="B
+[1, 8192, 8, 128]" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		B -> kn_customized_op_133304520281344 [color="#527536" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+		B [label="B
+[1, 8192, 8, 128]" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		B -> kn_customized_op_133304540152384 [color="#527536" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+		C [label="C
+[1, 8192, 8, 128]" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		C -> kn_customized_op_133304520281344 [color="#527536" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+		C [label="C
+[1, 8192, 8, 128]" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		C -> kn_customized_op_133304540152384 [color="#527536" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+		D [label="D
+[10]" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		D -> kn_customized_op_133304520281344 [color="#527536" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+		D [label="D
+[10]" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		D -> kn_customized_op_133304540152384 [color="#527536" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+		E [label="E
+[1, 8192, 8]" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		E -> kn_customized_op_133304520281344 [color="#527536" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+		E [label="E
+[1, 8192, 8]" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		E -> kn_customized_op_133304540152384 [color="#527536" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+		G [label="G
+[1, 16, 8]" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		G -> kn_customized_op_133304520281344 [color="#527536" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+		G [label="G
+[1, 16, 8]" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		G -> kn_customized_op_133304540152384 [color="#527536" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+		H [label="H
+[1, 16, 8, 128]" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		H -> kn_customized_op_133304520281344 [color="#527536" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+		H [label="H
+[1, 16, 8, 128]" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		H -> kn_customized_op_133304540152384 [color="#527536" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+		F [label="F
+[1, 16, 128]" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		F -> kn_customized_op_133304520281344 [color="#527536" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+		F [label="F
+[1, 16, 128]" color="#527536" fontcolor=white fontname="sans-serif" fontsize=23 penwidth=0 shape=box style=filled]
+		F -> kn_customized_op_133304540152384 [color="#527536" fontcolor=black fontname="sans-serif" fontsize=30 penwidth=6]
+	}
+}
