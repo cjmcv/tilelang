@@ -57,4 +57,4 @@ __device__ __forceinline__ void rms_norm_kernel_16_128(const int bx, const int b
 // use_cooperative_groups: 0.
 // layout: (16, 1, 1), (1, 1, 1)
 // block_dim=(128, 1, 1).
-// latency: 0.00408 ms vs [ref-0.00565 sim-0.99999], idx: 0
+// latency: 0.00344 ms vs [ref-0.00503 sim-0.99999], idx: 0

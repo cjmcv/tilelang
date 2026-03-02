@@ -58,6 +58,7 @@ if __name__ == "__main__":
     w_cos_torch = torch.cat((cos_half, cos_half), dim=-1)
     w_sin_torch = torch.cat((sin_half, sin_half), dim=-1)
     
+    edge_torch = torch.empty(10, device="cuda", dtype=torch.int32)
     key_cache_torch = torch.randn(batch, seqlen_kv, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
     value_cache_torch = torch.randn(batch, seqlen_kv, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)
     w_o_proj_torch = torch.randn((hidden_size, num_heads*head_dim), dtype=torch.bfloat16, device="cuda")
@@ -65,7 +66,7 @@ if __name__ == "__main__":
     out_torch = torch.zeros((max_batch_size, hidden_size), dtype=torch.bfloat16, device="cuda")
 
     ###
-    def ref_run():
+    def ref_run(step):
         o1 = TorchRef.rms_norm(x_torch, w_layernorm_torch)
         qkv_out = TorchRef.linear(o1, w_qkv_proj_torch)
         # print("qkv_out", qkv_out)
@@ -83,11 +84,13 @@ if __name__ == "__main__":
         
         key_cache_torch[0, step, :, :] = key_states
         value_cache_torch[0, step, :, :] = value_states
-        attn_output = TorchRef.attention_sdpa(query_states, key_cache_torch, value_cache_torch, False)
+        k_slice = key_cache_torch[:, :step, :, :]
+        v_slice = value_cache_torch[:, :step, :, :]
+        attn_output = TorchRef.attention_sdpa(query_states, k_slice, v_slice, False)
         attn_output = attn_output.reshape(batch*seqlen_q, q_dim)
         final_output = TorchRef.linear(attn_output, w_o_proj_torch) + x_torch # res
-        print("torch:", query_states, "\n", key_states, "\n", value_states, "\n", attn_output, "\n", final_output)
-        print("o_proj", attn_output.size(), w_o_proj_torch.size()) # o_proj torch.Size([1, 1024]) torch.Size([1024, 2048])
+        # print("torch:", query_states, "\n", key_states, "\n", value_states, "\n", attn_output, "\n", final_output)
+        # print("o_proj", attn_output.size(), w_o_proj_torch.size()) # o_proj torch.Size([1, 1024]) torch.Size([1024, 2048])
         return final_output
     
     layers = MpkLayers(0, 1, world_size, rank, max_batch_size, args.trace_name, args.profiling)
@@ -177,6 +180,7 @@ if __name__ == "__main__":
     
     k_cache = mpk.attach_input(torch_tensor=key_cache_torch, name="k_cache")
     v_cache = mpk.attach_input(torch_tensor=value_cache_torch, name="v_cache")
+    edge = mpk.attach_input(torch_tensor=edge_torch, name="edge")
     mask = mpk.attach_input(torch_tensor=mask_torch, name="mask")
     glse = mpk.attach_input(torch_tensor=glse_torch, name="glse")
     out_partial = mpk.attach_input(torch_tensor=out_partial_torch, name="out_partial")
@@ -187,12 +191,13 @@ if __name__ == "__main__":
         q=q_3dim,
         k_cache=k_cache,
         v_cache=v_cache,
+        edge=edge,
         mask=mask,
         glse=glse,
         out_partial=out_partial,
         output=attn_out,
         sync_mode=(0, 0, 0),
-        layout=Qwen3MegaConfig.gqa_decode_layout,
+        layout=Qwen3MegaConfig.gqa_decode_layout_64,
     )
     attn_out_2d_torch = attn_out_torch.view(batch*seqlen_q, q_dim)
     attn_out_2d = mpk.attach_input(torch_tensor=attn_out_2d_torch, name="attn_out_2d")
@@ -207,28 +212,27 @@ if __name__ == "__main__":
     )
     # final_output = TorchRef.linear(attn_output, w_o_proj_torch) + x_torch
     
-    layers.compile_load(args.nc, args.output_dir)
-    ref_run()
+    layers.compile_load(meta_tensors=[edge_torch], is_no_compile=args.nc, output_dir=args.output_dir)
+    
+    step = 64
+    ref_run(step)
+    edge_torch[0].fill_(step)
     mpk(batch)
-    print("mpk:", q_4dim_torch, "\n", k_4dim_torch, "\n", value_states_torch, "\n", attn_out_torch, "\n", out_torch)
+    # print("mpk:", q_4dim_torch, "\n", k_4dim_torch, "\n", value_states_torch, "\n", attn_out_torch, "\n", out_torch)
 
-    # graph, ref_output = TorchRef.compile_capture(ref_run, is_compile=False)
+    def torch_fix_param():
+        return ref_run(step)
+    graph, ref_output = TorchRef.compile_capture(torch_fix_param, is_compile=True)
     
-    # # def mpk_run():
-    # #     mpk(batch_size)
-        
-    # ref_output = ref_run()
-    # print(ref_output)
-    # # mpk_output = out_torch[:batch_size]
-
-    # for _ in range(100):
-    #     graph.replay()
-    #     # ref_run()
-        
-    # mpk_run()
-    ##
+    edge_torch[0].fill_(step)
+    def mpk_run():
+        mpk(batch)
+        return out_torch
+    def torch_ref():
+        graph.replay()
+        return ref_output
     
-    # if not args.profiling:
-    #     reporter.generate_report(mpk_run, graph.replay, 
-    #                             warnup_iter=100, test_iter=200, 
-    #                             allclose_iter=5, print_all=False)
+    if not args.profiling:
+        reporter.generate_report(mpk_run, torch_ref, 
+                                warnup_iter=100, test_iter=200, 
+                                allclose_iter=5, print_mode=0)

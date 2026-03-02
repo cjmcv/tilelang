@@ -26,7 +26,7 @@ def test_rms_norm(mpk, max_batch_size, batch_size, hidden_size):
         sync_mode=(0, 0, 0),
         layout=Qwen3MegaConfig.rmsnorm_layout,
     )
-    layers.compile_load(args.nc, args.output_dir)
+    layers.compile_load(is_no_compile=args.nc, output_dir=args.output_dir)
 
     def torch_ref():
         return TorchRef.rms_norm(x_torch[:batch_size], w_rms_norm_torch)
@@ -60,7 +60,7 @@ def test_linear(mpk, max_batch_size, batch_size, N, K, layout):
         sync_mode=(0, 0, 0),
         layout=layout,
     )
-    layers.compile_load(args.nc, args.output_dir)
+    layers.compile_load(is_no_compile=args.nc, output_dir=args.output_dir)
     
     def torch_ref():
         return TorchRef.linear(x_torch[:batch_size], w_torch)
@@ -87,7 +87,7 @@ def test_silu_mul(mpk, max_batch_size, batch_size, intermediate_size):
         sync_mode=(0, 0, 0), # (2, 0, 0)
         layout=Qwen3MegaConfig.silu_mul_layout,
     )
-    layers.compile_load(args.nc, args.output_dir)
+    layers.compile_load(is_no_compile=args.nc, output_dir=args.output_dir)
 
     def torch_ref():
         return TorchRef.silu_and_mul(x_torch[:batch_size])
@@ -121,7 +121,7 @@ def test_linear_residual(mpk, max_batch_size, batch_size, N, K, layout):
         sync_mode=(0, 0, 0),
         layout=layout,
     )
-    layers.compile_load(args.nc, args.output_dir)
+    layers.compile_load(is_no_compile=args.nc, output_dir=args.output_dir)
     
     def torch_ref():
         return TorchRef.linear(x_torch[:batch_size], w_down_proj_torch) + x_residual_torch
@@ -165,7 +165,7 @@ def test_rope(mpk, max_batch_size, batch, heads, groups, dim):
         sync_mode=(0, 0, 0),
         layout=Qwen3MegaConfig.rope_layout,
     )
-    layers.compile_load(args.nc, args.output_dir)
+    layers.compile_load(is_no_compile=args.nc, output_dir=args.output_dir)
     
     def target_func():
         mpk(batch_size)

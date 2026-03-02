@@ -23,16 +23,19 @@ __device__ __forceinline__ void flashattn_kernel_1_8192_1024_16_8_128__0(const i
                                                    const void* __restrict__ q, 
                                                    const void* __restrict__ k, 
                                                    const void* __restrict__ v,
+                                                   const void* __restrict__ edge_ptr, 
                                                    const void* __restrict__ mask_ptr, 
                                                    void* __restrict__ output_ptr,
                                                    void* __restrict__ glse_ptr,
                                                    void* __restrict__ output_partial_ptr) {
   static_assert(THREAD_NUM==128);
   static_assert(M==1); static_assert(HEAD==16); static_assert(GROUPS==8); static_assert(DIM==128);
-  
+  if constexpr (SUB_KERNEL_ID == 0) { if (bx >= 1 || by >= 8 || bz >= 2) { return; } }
+  if constexpr (SUB_KERNEL_ID == 1) { if (bx >= 16 || by >= 1 || bz >= 1) { return; } }
   const bfloat16_t* __restrict__ Q = static_cast<const bfloat16_t*>(q);
   const bfloat16_t* __restrict__ K = static_cast<const bfloat16_t*>(k);
   const bfloat16_t* __restrict__ V = static_cast<const bfloat16_t*>(v);
+  const int* __restrict__ edge = static_cast<const int*>(edge_ptr);
   const uchar* __restrict__ mask = static_cast<const uchar*>(mask_ptr);
   bfloat16_t* __restrict__ Output = static_cast<bfloat16_t*>(output_ptr);
   bfloat16_t* __restrict__ glse = static_cast<bfloat16_t*>(glse_ptr);
@@ -647,16 +650,19 @@ __device__ __forceinline__ void flashattn_kernel_1_8192_1024_16_8_128__1(const i
                                                    const void* __restrict__ q, 
                                                    const void* __restrict__ k, 
                                                    const void* __restrict__ v,
+                                                   const void* __restrict__ edge_ptr, 
                                                    const void* __restrict__ mask_ptr, 
                                                    void* __restrict__ output_ptr,
                                                    void* __restrict__ glse_ptr,
                                                    void* __restrict__ output_partial_ptr) {
   static_assert(THREAD_NUM==128);
   static_assert(M==1); static_assert(HEAD==16); static_assert(GROUPS==8); static_assert(DIM==128);
-  
+  if constexpr (SUB_KERNEL_ID == 0) { if (bx >= 1 || by >= 8 || bz >= 2) { return; } }
+  if constexpr (SUB_KERNEL_ID == 1) { if (bx >= 16 || by >= 1 || bz >= 1) { return; } }
   const bfloat16_t* __restrict__ Q = static_cast<const bfloat16_t*>(q);
   const bfloat16_t* __restrict__ K = static_cast<const bfloat16_t*>(k);
   const bfloat16_t* __restrict__ V = static_cast<const bfloat16_t*>(v);
+  const int* __restrict__ edge = static_cast<const int*>(edge_ptr);
   const uchar* __restrict__ mask = static_cast<const uchar*>(mask_ptr);
   bfloat16_t* __restrict__ Output = static_cast<bfloat16_t*>(output_ptr);
   bfloat16_t* __restrict__ glse = static_cast<bfloat16_t*>(glse_ptr);
@@ -699,4 +705,4 @@ __device__ __forceinline__ void flashattn_kernel_1_8192_1024_16_8_128__1(const i
 // use_cooperative_groups: 0.
 // layout: (1, 8, 2), (32, 64, 2), (16, 1, 1), (32, 64, 2)
 // block_dim=(128, 1, 1).
-// latency: 0.05054 ms vs [ref-0.0522 sim-0.99995], idx: 8
+// latency: 0.04016 ms vs [ref-0.04109 sim-0.99996], idx: 8

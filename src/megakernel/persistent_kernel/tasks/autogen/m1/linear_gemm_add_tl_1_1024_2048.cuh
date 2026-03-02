@@ -133,9 +133,9 @@ template <typename T,
 
 } // kernel
 // Strategy: linear_gemm_add_tl_1_1024_2048
-// selected_hparams: [16, 64, 128, 1, 3, 128, <GemmWarpPolicy.FullRow: 1>, True].
+// selected_hparams: [16, 64, 128, 1, 3, 128, 1, True].
 // smem: 61440 bytes.
 // use_cooperative_groups: 0.
 // layout: (16, 1, 1), (64, 16, 128)
 // block_dim=(128, 1, 1).
-// latency: 0.04755 ms vs [ref-0.04979 sim-1.0], idx: 46
+// latency: 0.03598 ms vs [ref-0.03627 sim-1.0], idx: 46
