@@ -32,14 +32,14 @@ class MpkLayers:
     def get_mpk(self):
         return self.mpk
 
-    def compile_load(self, is_no_compile, output_dir):
+    def compile_load(self, meta_tensors=list(), is_no_compile=False, output_dir="./gen"):
         if is_no_compile is True:
             module_path = output_dir + "/test.cpython-38-x86_64-linux-gnu.so"
-            self.mpk.load_module(module_path)
+            self.mpk.load_module(module_path, meta_tensors)
         else:
             module_path = self.mpk.compile(output_dir=output_dir)
             print("module_path: ", module_path)
-            self.mpk.load_module(module_path)
+            self.mpk.load_module(module_path, meta_tensors)
                 
     def create_qwen3_oproj_norm_mlp(self, gridsize, total_head_dims, hidden_size, intermediate_size, 
                                     w_o_proj_torch, w_rms_torch, w_gatedup_torch, w_down_proj_torch):

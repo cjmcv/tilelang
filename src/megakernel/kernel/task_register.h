@@ -116,7 +116,7 @@ public:
     code.e("    task_desc->input_ptrs[1],");
     code.e("    task_desc->input_ptrs[2],");
     code.e("    task_desc->input_ptrs[3],");
-    code.e("    task_desc->input_ptrs[4],");
+    code.e("    runtime_config.step, // task_desc->input_ptrs[4],");
     code.e("    task_desc->output_ptrs[0],");
     code.e("    task_desc->output_ptrs[1],");
     code.e("    task_desc->output_ptrs[2]);");

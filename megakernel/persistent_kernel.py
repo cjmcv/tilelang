@@ -441,7 +441,7 @@ class PersistentKernel:
             
             self.kn_graph.customized([q, k_cache, v_cache, edge, mask, output, glse, out_partial], tb_graph)
             if len(layout) == 2:
-                self.kn_graph.register_task(tb_graph, "gqa_decode", [-1])
+                self.kn_graph.register_task(tb_graph, "gqa_decode", [0])
             else:
                 self.kn_graph.register_task(tb_graph, "gqa_decode", [i//2]) # sub kernel id for combined kernel
         
@@ -1420,7 +1420,7 @@ class PersistentKernel:
         print("Finished megakernel compilation...")
         return so_path
 
-    def load_module(self, so_path):
+    def load_module(self, so_path, meta_tensors=list()):
         import importlib.util
         spec = importlib.util.spec_from_file_location("__megakernel_launcher", so_path)
         mod = importlib.util.module_from_spec(spec)
@@ -1429,12 +1429,11 @@ class PersistentKernel:
         self.launch_func = getattr(mod, "launch_func")
         self.finalize_func = getattr(mod, "finalize_func")
 
-        meta_tensors = list()
         meta_tensors_ptr = [tensor.data_ptr() for tensor in meta_tensors]
         profiler_buffer_ptr = (
             self.profiler_tensor.data_ptr() if self.profiler_tensor is not None else 0
         )
-        
+        # print("meta_tensors_ptr ", len(meta_tensors), len(meta_tensors_ptr))
         for kernel_id in range(self.kernel_num):
             self.init_func(
                 self.instance_id*self.max_kernel_num_per_instance + kernel_id,

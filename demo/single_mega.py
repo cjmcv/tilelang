@@ -201,17 +201,20 @@ def test_gqa_decode(mpk, max_batch_size, batch, heads, groups, seqlen_kv, dim):
     # 2）两个gqa布局，按多的配置，部分block可空跑。！！优先尝试
     #    生成代码时，添加优先主动退出条件(如有生成的时split的kernel则进入，不split的blockz直接退出。)
     # 封装attach_input.
-    # 3) 添加step
+    # 3) (暂停，一轮推理内，step不用改，可以两次推理间在外面修改) 
+    #    添加 step, 搜 RuntimeConfig的int *step， 将该指针指向 edge 的内存，搜 kernel::gqa_decode_kernel，将input转为 写死的RuntimeConfig的step。
+    #    对应 global_runtime_config[kernel_id].infer_cnt 和 global_runtime_config[kernel_id].batch_size
+    #    可以在调用mpk推理后，外面打印edge的内容来检查step的递增情况。step的递增在static_persistent_kernel里进行，在等待前置信号时确定
     split = 8 # TODO 自动配置
     glse_torch = torch.empty(batch, heads, split, device="cuda", dtype=torch.bfloat16)
     out_partial_torch = torch.empty(batch, heads, split, dim, device="cuda", dtype=torch.bfloat16)
     
-    target_kv_seqlen = 2048
+    valid_kv_seqlen = 64
     q_torch = torch.randn(batch, heads, dim, device="cuda", dtype=torch.bfloat16)              # [B, N=seqlen_q=1, H=heads,  D=dim]
     k_torch = torch.randn(batch, seqlen_kv, groups, dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
     v_torch = torch.randn(batch, seqlen_kv, groups, dim, device="cuda", dtype=torch.bfloat16)
     edge_torch = torch.empty(10, device="cuda", dtype=torch.int32)
-    edge_torch[0].fill_(target_kv_seqlen)
+    edge_torch[0].fill_(valid_kv_seqlen)
     mask_torch = torch.ones(batch, seqlen_kv, groups, device="cuda", dtype=torch.uint8)
     out_torch = torch.empty(batch, heads, dim, device="cuda", dtype=torch.bfloat16)
     
@@ -235,25 +238,28 @@ def test_gqa_decode(mpk, max_batch_size, batch, heads, groups, seqlen_kv, dim):
         out_partial=out_partial,
         output=attn_out,
         sync_mode=(0, 0, 0),
-        layout=Qwen3MegaConfig.gqa_decode_layout_2048,
+        layout=Qwen3MegaConfig.gqa_decode_layout_test,
         # layout=((1, 8, 8), (64, 64, 8), (16, 1, 1), (64, 64, 8))
     )
-    layers.compile_load(args.nc, args.output_dir)
+    layers.compile_load(meta_tensors=[edge_torch], is_no_compile=args.nc, output_dir=args.output_dir)
     
     def target_func():
         mpk(batch_size)
         return out_torch
     
+    k_slice = k_torch[:, :valid_kv_seqlen, :, :]
+    v_slice = v_torch[:, :valid_kv_seqlen, :, :]
     def torch_ref():
-        return TorchRef.attention_sdpa(q_torch, k_torch, v_torch, False)
+        return TorchRef.attention_sdpa(q_torch, k_slice, v_slice, False)
     
-    target_output = target_func()    
-    ref_output = torch_ref()
-    print("target_output", target_output)
-    print("ref_output", ref_output)
+    # target_output = target_func()
+    # ref_output = torch_ref()
+    # print("target_output", target_output)
+    # print("ref_output", ref_output)
     
-    print("target_output", target_func())
-    print("ref_output", torch_ref())
+    # print("target_output", target_func())
+    # print("ref_output", torch_ref())
+    print("step", edge_torch[0])
     # print("target_output", target_func())
     # print("ref_output", torch_ref())
     # print("target_output", target_func())
@@ -263,7 +269,7 @@ def test_gqa_decode(mpk, max_batch_size, batch, heads, groups, seqlen_kv, dim):
     
     reporter.generate_report(target_func, torch_ref, 
                             warnup_iter=100, test_iter=100, 
-                            allclose_iter=5, print_mode=1)
+                            allclose_iter=5, print_mode=0)
 
 
 if __name__ == "__main__":
@@ -313,7 +319,7 @@ if __name__ == "__main__":
     heads=16
     groups=8
     dim=128
-    seqlen_kv=2048
+    seqlen_kv=8192
     # test_linear(mpk, max_batch_size, batch_size, (heads+2*groups)*dim, hidden_size, Qwen3MegaConfig.qkv_proj_layout)
     # test_rope(mpk, max_batch_size=1, batch=1, heads=heads, groups=groups, dim=dim)
     test_gqa_decode(mpk, max_batch_size=1, batch=1, heads=heads, groups=groups, seqlen_kv=seqlen_kv, dim=dim)

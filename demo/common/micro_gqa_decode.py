@@ -87,11 +87,11 @@ class _GqaDecodeStrategy:
     def get_kernel(self, selected_hparams):
         print("selected_hparams: ", selected_hparams)
         _, _, num_split, _, _ = selected_hparams
-        if (self.target_kv_seqlen < 16 and num_split == 1):
-            print("self.target_kv_seqlen < 16")
-            return self.kernel_main_m64(self.batch, self.heads, self.groups, self.max_kv_seqlen, self.target_kv_seqlen, self.dim, self.is_causal, *selected_hparams, self.dtype, self.accum_dtype) 
-        else:
-            return self.kernel_main(self.batch, self.heads, self.groups, self.max_kv_seqlen, self.dim, self.is_causal, *selected_hparams, self.dtype, self.accum_dtype) 
+        # if (self.target_kv_seqlen < 16 and num_split == 1):
+        #     print("self.target_kv_seqlen < 16")
+        #     return self.kernel_main_m64(self.batch, self.heads, self.groups, self.max_kv_seqlen, self.target_kv_seqlen, self.dim, self.is_causal, *selected_hparams, self.dtype, self.accum_dtype) 
+        # else:
+        return self.kernel_main(self.batch, self.heads, self.groups, self.max_kv_seqlen, self.dim, self.is_causal, *selected_hparams, self.dtype, self.accum_dtype) 
 
     def get_pass_configs():
         return {tilelang.PassConfigKey.TL_DISABLE_TMA_LOWER: True, tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True}
@@ -509,7 +509,8 @@ __device__ __forceinline__ void flashattn_kernel_<name_suffix>(const int bx, con
                                                    void* __restrict__ output_partial_ptr) {
   static_assert(THREAD_NUM==<threads>);
   static_assert(M==<BATCH>); static_assert(HEAD==<HEAD>); static_assert(GROUPS==<GROUPS>); static_assert(DIM==<DIM>);
-  
+  if constexpr (SUB_KERNEL_ID == 0) { if (bx >= <gridx_0> || by >= <gridy_0> || bz >= <gridz_0>) { return; } }
+  if constexpr (SUB_KERNEL_ID == 1) { if (bx >= <gridx_1> || by >= <gridy_1> || bz >= <gridz_1>) { return; } }
   const <dtype>* __restrict__ Q = static_cast<const <dtype>*>(q);
   const <dtype>* __restrict__ K = static_cast<const <dtype>*>(k);
   const <dtype>* __restrict__ V = static_cast<const <dtype>*>(v);
@@ -547,9 +548,19 @@ __device__ __forceinline__ void flashattn_kernel_<name_suffix>(const int bx, con
         infos = kernel.get_launch_info()
         grid_dim, block_dim, dynamic_smem_buf, use_cooperative_groups = infos[0]
         self.layout = f"({grid_dim['blockIdx.x']}, {grid_dim['blockIdx.y']}, {grid_dim['blockIdx.z']}), ({BLOCK_N}, {BLOCK_H}, {num_split})"
+        source = source.replace("<gridx_0>", str(grid_dim['blockIdx.x']))
+        source = source.replace("<gridy_0>", str(grid_dim['blockIdx.y']))
+        source = source.replace("<gridz_0>", str(grid_dim['blockIdx.z']))
         if (num_split > 1):
             grid_dim, block_dim, dynamic_smem_buf, use_cooperative_groups = infos[1]
             self.layout += f", ({grid_dim['blockIdx.x']}, {grid_dim['blockIdx.y']}, {grid_dim['blockIdx.z']}), ({BLOCK_N}, {BLOCK_H}, {num_split})"
+            source = source.replace("<gridx_1>", str(grid_dim['blockIdx.x']))
+            source = source.replace("<gridy_1>", str(grid_dim['blockIdx.y']))
+            source = source.replace("<gridz_1>", str(grid_dim['blockIdx.z']))
+        else:
+            source = source.replace("<gridx_1>", str(0))
+            source = source.replace("<gridy_1>", str(0))
+            source = source.replace("<gridz_1>", str(0))
         extra_attr = f"\n// Strategy: {self.strategy.name}"
         extra_attr += f"\n// selected_hparams: {selected_hparams}."
         extra_attr += f"\n// smem: {dynamic_smem_buf} bytes."

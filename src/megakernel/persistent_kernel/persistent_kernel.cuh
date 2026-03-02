@@ -330,7 +330,7 @@ void static_persistent_kernel(RuntimeConfig config) {
   PROFILER_INIT(static_cast<uint64_t *>(config.profiler_buffer),
                 0, 1, (threadIdx.x % WORKER_NUM_THREADS == 0));
   #endif
-
+  // int step = *config.step;
   const int worker_id = blockIdx.x;
   int task_num = config.static_worker_tasks_index[worker_id][0];
   int *task_ids = &config.static_worker_tasks_index[worker_id][1];
@@ -341,6 +341,7 @@ void static_persistent_kernel(RuntimeConfig config) {
     size_t event_index = get_event_position_index(task_desc->dependent_event);
     EventDesc *dep_event_desc = &config.all_events[event_index];
     if (threadIdx.x == 0) {
+      // printf("step: %d.\n", *config.step);
       if (task_desc->dependent_event != EVENT_INVALID_ID) {
         // Wait until the event has been triggered enough times
         EventId event_id = task_desc->dependent_event;
@@ -793,7 +794,8 @@ extern "C" void init_persistent_kernel(int kernel_id,
                                        int num_workers,
                                        int num_local_schedulers,
                                        int num_remote_schedulers) {
-
+  // printf("meta_tensors_size: %d.\n", meta_tensors.size());
+  global_runtime_config[kernel_id].step = (int*)meta_tensors[0];
   global_runtime_config[kernel_id].num_workers = num_workers;
   global_runtime_config[kernel_id].num_local_schedulers = num_local_schedulers;
   global_runtime_config[kernel_id].num_remote_schedulers = num_remote_schedulers;

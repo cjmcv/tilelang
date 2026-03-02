@@ -85,10 +85,10 @@ class MicroAutoGen:
                 kernel = MicroRope(self.batch_size, 1, self.heads, self.groups, self.dim, dtype=self.dtype, accum_dtype=self.accum_dtype)
                 self._save_target_info(kernel, mode, code_dir, config_file, "rope_layout")
             if (layer_id == 8 or layer_id == 99):
-                for target_kv_seqlen in list(range(1, 17)): # 
-                    kernel = MicroGqaDecode(self.batch_size, self.max_kv_seqlen, target_kv_seqlen, self.heads, self.groups, self.dim, False, dtype=self.dtype, accum_dtype=self.accum_dtype)
-                    self._save_target_info(kernel, HparamSelectMode.HEURISTIC, code_dir, config_file, "gqa_decode_layout_"+str(target_kv_seqlen))
-                for target_kv_seqlen in [32, 64, 128, 256, 512, 1024, 2048]: # 
+                # for target_kv_seqlen in list(range(1, 17)): # 
+                #     kernel = MicroGqaDecode(self.batch_size, self.max_kv_seqlen, target_kv_seqlen, self.heads, self.groups, self.dim, False, dtype=self.dtype, accum_dtype=self.accum_dtype)
+                #     self._save_target_info(kernel, HparamSelectMode.HEURISTIC, code_dir, config_file, "gqa_decode_layout_"+str(target_kv_seqlen))
+                for target_kv_seqlen in [16, 32, 64, 128, 256, 512, 1024, 2048]: # 
                     kernel = MicroGqaDecode(self.batch_size, self.max_kv_seqlen, target_kv_seqlen, self.heads, self.groups, self.dim, False, dtype=self.dtype, accum_dtype=self.accum_dtype)
                     self._save_target_info(kernel, mode, code_dir, config_file, "gqa_decode_layout_"+str(target_kv_seqlen))
             if (layer_id == 9 or layer_id == 99):
