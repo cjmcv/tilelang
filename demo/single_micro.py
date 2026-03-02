@@ -9,7 +9,7 @@ import tilelang.language as T
 import tvm
 from tvm.tir.stmt_functor import ir_transform
 
-from common.pkt_util import TorchRef, PerfReporter
+from common.pkt_util import TorchRef, PerfReporter, Qwen3Info
 from common.micro_base import HparamSelectMode
 from common.micro_linear import MicroLinearStrategy, MicroLinear
 from common.micro_rmsnorm import MicroRmsNorm
@@ -113,8 +113,8 @@ def test_gqa_decode():
     heads = 16
     groups = 8
     max_kv_seqlen = 8192
-    target_kv_seqlen = 2048
-    valid_kv_seqlen = 2048
+    target_kv_seqlen = 128
+    valid_kv_seqlen = 128
     dim = 128
     is_causal = False
     
@@ -131,6 +131,19 @@ def test_gqa_decode():
     
     k_slice = k[:, :valid_kv_seqlen, :, :]
     v_slice = v[:, :valid_kv_seqlen, :, :]
+        
+    # if q.ndim == 3:
+    #     q_for_sdpa = q.unsqueeze(2)         # [batch, heads, seqlen_q=1, dim]
+    # else:
+    #     q_for_sdpa = q.permute(0, 2, 1, 3)
+    # k_for_sdpa = k_slice.permute(0, 2, 1, 3)    # [batch, groups, seqlen_kv, dim]  groups即是num_kv_heads
+    # v_for_sdpa = v_slice.permute(0, 2, 1, 3)  # [batch, groups, seqlen_kv, dim]
+    
+    # def torch_ref():
+    #     return torch.nn.functional.scaled_dot_product_attention(
+    #         q_for_sdpa, k_for_sdpa, v_for_sdpa, is_causal=is_causal, enable_gqa=True
+    #     )
+        
     def torch_ref():
         return TorchRef.attention_sdpa(q, k_slice, v_slice, is_causal)
         # return TorchRef.attention(q, k, v, mask, glse, Output_partial)
@@ -171,12 +184,12 @@ if __name__ == "__main__":
     # test_gemm()
     ## test_silu_mul_gemm() # 逻辑有误，silu_mul被重复计算
     # test_gemm_add()
-    # test_gqa_decode()
+    test_gqa_decode()
     # test_rope()
 
     # gen = MicroAutoGen(1, 2560, 9728)
-    gen = MicroAutoGen(batch_size=1, hidden_size=1024, intermediate_size=3072, 
-                       max_kv_seqlen=8192, heads=16, groups=8, dim=128)
-    gen.gen_qwen3_ops(layer_id=99, mode=HparamSelectMode.TUNED) # HEURISTIC, TUNING, TUNED
+    # gen = MicroAutoGen(batch_size=1, hidden_size=1024, intermediate_size=3072, 
+    #                    max_kv_seqlen=8192, heads=16, groups=8, dim=128)
+    # gen.gen_qwen3_ops(layer_id=99, mode=HparamSelectMode.TUNED) # HEURISTIC, TUNING, TUNED
     # print(">> Finish gen_qwen3_ops.")
     # print("Test single_micro completed.")

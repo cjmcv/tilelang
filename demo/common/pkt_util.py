@@ -259,7 +259,33 @@ class TorchRef:
         from models.rope import apply_rotary_pos_emb_triton
         q_embed, k_embed = apply_rotary_pos_emb_triton(q, k, cos, sin, unsqueeze_dim=2)
         return q_embed, k_embed
-    
+  
+class Qwen3Info:
+    @staticmethod
+    def get_basic_params(model_size):
+        if (model_size == 8):
+            # https://huggingface.co/Qwen/Qwen3-8B/blob/main/config.json
+            hidden_size         = 4096        # K
+            intermediate_size   = 12288 # torch.randn / ones / TestUtil.create_matrix_arange_col /
+            num_attention_heads = 32
+            num_key_value_heads = 8
+            head_dim            = 128
+        elif (model_size == 4):
+            # https://huggingface.co/Qwen/Qwen3-4B/blob/main/config.json
+            hidden_size         = 2560        
+            intermediate_size   = 9728 
+            num_attention_heads = 32
+            num_key_value_heads = 8
+            head_dim            = 128
+        else:
+            # https://huggingface.co/Qwen/Qwen3-0.6B/blob/main/config.json
+            hidden_size         = 1024
+            intermediate_size   = 3072
+            num_attention_heads = 16
+            num_key_value_heads = 8
+            head_dim            = 128
+        return [hidden_size, intermediate_size, num_attention_heads, num_key_value_heads, head_dim]
+        
     def load_model(rank):
         torch.cuda.set_device(rank)
         with torch.device("cuda"):
@@ -268,7 +294,6 @@ class TorchRef:
             tokenizer = AutoTokenizer.from_pretrained(model_name) 
         return model, tokenizer
     
-class PerfReporter:
     def get_weight_qwen3_mlp(self, model, layer_id):
         layer = model.model.layers[layer_id]
         w_rms = layer.post_attention_layernorm.weight
@@ -290,7 +315,8 @@ class PerfReporter:
         k_cache = model.model.kv_cache[0][layer_id]
         v_cache = model.model.kv_cache[1][layer_id]
         return num_q_heads, num_kv_heads, w_q_norm, w_k_norm, w_q, w_k, w_v, k_cache, v_cache
-    
+class PerfReporter:
+
     def torch_profile(self, func):
         from torch.profiler import profile, ProfilerActivity
         with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA]) as prof:
