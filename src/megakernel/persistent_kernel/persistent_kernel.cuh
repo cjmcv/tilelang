@@ -795,7 +795,8 @@ extern "C" void init_persistent_kernel(int kernel_id,
                                        int num_local_schedulers,
                                        int num_remote_schedulers) {
   // printf("meta_tensors_size: %d.\n", meta_tensors.size());
-  global_runtime_config[kernel_id].step = (int*)meta_tensors[0];
+  global_runtime_config[kernel_id].step = nullptr;
+  if (meta_tensors.size() > 0) { global_runtime_config[kernel_id].step = (int*)meta_tensors[0]; }
   global_runtime_config[kernel_id].num_workers = num_workers;
   global_runtime_config[kernel_id].num_local_schedulers = num_local_schedulers;
   global_runtime_config[kernel_id].num_remote_schedulers = num_remote_schedulers;
@@ -1086,7 +1087,7 @@ void print_smem_size() {
 
 // Entry point for C/C++
 // TODO: change launch config
-extern "C" void launch_persistent_kernel(int kernel_id, int batch_size, int step) {
+extern "C" void launch_persistent_kernel(int kernel_id, int batch_size) {
   // int device;
   // cudaGetDevice(&device);
   // int sm_count;

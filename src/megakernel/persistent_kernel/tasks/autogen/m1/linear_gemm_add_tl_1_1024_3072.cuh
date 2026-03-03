@@ -137,4 +137,4 @@ template <typename T,
 // use_cooperative_groups: 0.
 // layout: (16, 1, 1), (64, 16, 128)
 // block_dim=(128, 1, 1).
-// latency: 0.05109 ms vs [ref-0.05314 sim-1.0], idx: 47
+// latency: 0.06963 ms vs [ref-0.07444 sim-1.0], idx: 47

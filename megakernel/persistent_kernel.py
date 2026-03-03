@@ -58,12 +58,12 @@ static PyObject *init_func(PyObject *self, PyObject *args) {
 }
 
 static PyObject *launch_func(PyObject *self, PyObject *args) {
-  int kernel_id = 0, batch_size = 0, step = 0;
-  if (!PyArg_ParseTuple(args, "iii", &kernel_id, &batch_size, &step)) {
+  int kernel_id = 0, batch_size = 0;
+  if (!PyArg_ParseTuple(args, "ii", &kernel_id, &batch_size)) {
     PyErr_SetString(PyExc_TypeError, "Invalid parameters");
     return NULL;
   }
-  launch_persistent_kernel(kernel_id, batch_size, step);
+  launch_persistent_kernel(kernel_id, batch_size);
 
   Py_RETURN_NONE;
 }
@@ -352,6 +352,7 @@ class PersistentKernel:
         assert input.num_dims == 2
         assert output.num_dims == 2
         tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128, 64))
+        print("sync_mode", sync_mode)
         tb_graph.new_input(input, sync_mode, True)
         tb_graph.new_input(weight, sync_mode, True)
         tb_graph.new_input(output, (-1, -1, -1), True)
@@ -1449,11 +1450,11 @@ class PersistentKernel:
         print("Finished megakernel Loading...")
         # self.call_func = getattr(mod, "call_func")
         
-    def __call__(self, batch_size, step=0, kernel_id=0):
+    def __call__(self, batch_size, kernel_id=0):
         # stream = kwargs.get("stream", None)
         # if stream is None:
         #    stream = torch.cuda.default_stream()
-        self.launch_func(self.instance_id*self.max_kernel_num_per_instance + kernel_id, batch_size, step)
+        self.launch_func(self.instance_id*self.max_kernel_num_per_instance + kernel_id, batch_size)
         if self.profiler_tensor is not None:
             from .profiler_persistent import export_to_perfetto_trace
             

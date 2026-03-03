@@ -6,13 +6,13 @@ import tilelang.language as T
 from common.micro_base import BaseMicroKernel, HparamSelectMode
     
 class _RopeStrategy:
-    def __init__(self, batch, seqlen, num_heads_q, num_heads_k, head_dim, dtype, accum_dtype):
-        self.name_suffix = f"{batch}_{seqlen}_{num_heads_q}_{num_heads_k}_{head_dim}"
+    def __init__(self, batch, seqlen, num_heads, num_kv_heads, head_dim, dtype, accum_dtype):
+        self.name_suffix = f"{batch}_{seqlen}_{num_heads}_{num_kv_heads}_{head_dim}"
         self.name = "rope_tl_"+self.name_suffix
         self.batch = batch  
         self.seqlen = seqlen  
-        self.num_heads_q = num_heads_q
-        self.num_heads_k = num_heads_k
+        self.num_heads = num_heads
+        self.num_kv_heads = num_kv_heads
         self.head_dim = head_dim
         
         self.dtype = dtype
@@ -40,8 +40,8 @@ class _RopeStrategy:
         
     def gen_test_data(self, selected_hparams):
         import torch
-        q = torch.randn(self.batch, self.seqlen, self.num_heads_q, self.head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen=1, H=heads,  D=dim]
-        k = torch.randn(self.batch, self.seqlen, self.num_heads_k, self.head_dim, device="cuda", dtype=torch.bfloat16)   # [B, N=seqlen=1, H=groups, D=dim]
+        q = torch.randn(self.batch, self.seqlen, self.num_heads, self.head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen=1, H=num_heads,  D=dim]
+        k = torch.randn(self.batch, self.seqlen, self.num_kv_heads, self.head_dim, device="cuda", dtype=torch.bfloat16)   # [B, N=seqlen=1, H=num_kv_heads, D=dim]
         cos_half = torch.randn(self.batch, self.seqlen, self.head_dim//2, device="cuda", dtype=torch.bfloat16)
         sin_half = torch.randn(self.batch, self.seqlen, self.head_dim//2, device="cuda", dtype=torch.bfloat16)
         cos = torch.cat((cos_half, cos_half), dim=-1)
@@ -62,15 +62,15 @@ class _RopeStrategy:
         kernel_hparam = selected_hparams[1:]
         if mode == 0:
             return self.rope_qk_parallel(self.batch, self.seqlen, 
-                                        self.num_heads_q, self.num_heads_k, self.head_dim,
+                                        self.num_heads, self.num_kv_heads, self.head_dim,
                                         *kernel_hparam, self.dtype, self.accum_dtype) 
         else:
             return self.rope_qk_overlap(self.batch, self.seqlen, 
-                                        self.num_heads_q, self.num_heads_k, self.head_dim,
+                                        self.num_heads, self.num_kv_heads, self.head_dim,
                                         *kernel_hparam, self.dtype, self.accum_dtype) 
 
     @tilelang.jit(out_idx=[-2, -1])
-    def rope_qk_overlap(batch, seqlen, num_heads_q, num_heads_k, head_dim, 
+    def rope_qk_overlap(batch, seqlen, num_heads, num_kv_heads, head_dim, 
                                 BLOCK_SEQ, BLOCK_HEADS_Q, BLOCK_HEADS_K, threads=128,
                                 dtype="bfloat16", accum_dtype="float32"):
         """
@@ -81,12 +81,12 @@ class _RopeStrategy:
         """
         @T.prim_func
         def rope(
-            Q: T.Tensor((batch, seqlen, num_heads_q, head_dim), dtype),
-            K: T.Tensor((batch, seqlen, num_heads_k, head_dim), dtype),
+            Q: T.Tensor((batch, seqlen, num_heads, head_dim), dtype),
+            K: T.Tensor((batch, seqlen, num_kv_heads, head_dim), dtype),
             cos: T.Tensor((batch, seqlen, head_dim), dtype),
             sin: T.Tensor((batch, seqlen, head_dim), dtype),
-            Q_embed: T.Tensor((batch, seqlen, num_heads_q, head_dim), dtype),
-            K_embed: T.Tensor((batch, seqlen, num_heads_k, head_dim), dtype),
+            Q_embed: T.Tensor((batch, seqlen, num_heads, head_dim), dtype),
+            K_embed: T.Tensor((batch, seqlen, num_kv_heads, head_dim), dtype),
         ):
             half_dim = head_dim // 2
             
@@ -96,8 +96,8 @@ class _RopeStrategy:
             # T.Assert(T.all(sin[..., :half_dim] == sin[..., half_dim:]), "sin前后一半应该相同")
             
             max_head_blocks = T.max(
-                T.ceildiv(num_heads_q, BLOCK_HEADS_Q),
-                T.ceildiv(num_heads_k, BLOCK_HEADS_K)
+                T.ceildiv(num_heads, BLOCK_HEADS_Q),
+                T.ceildiv(num_kv_heads, BLOCK_HEADS_K)
             )
             
             with T.Kernel(batch, 
@@ -121,7 +121,7 @@ class _RopeStrategy:
                 
                 # 2. 处理Q（如果当前head块对应Q）
                 head_q_start = by * BLOCK_HEADS_Q
-                if head_q_start < num_heads_q:
+                if head_q_start < num_heads:
                     # 优化2：可以只存储Q的一半，计算时重组
                     # 但为了简单，我们先保持完整存储
                     Q_sh = T.alloc_shared((BLOCK_SEQ, BLOCK_HEADS_Q, head_dim), dtype)
@@ -130,7 +130,7 @@ class _RopeStrategy:
                     for s, h, d in T.Parallel(BLOCK_SEQ, BLOCK_HEADS_Q, head_dim):
                         global_seq = seq_start + s
                         global_head = head_q_start + h
-                        if global_seq < seqlen and global_head < num_heads_q:
+                        if global_seq < seqlen and global_head < num_heads:
                             Q_sh[s, h, d] = Q[batch_id, global_seq, global_head, d]
                     
                     # 计算Q的RoPE（使用优化后的cos/sin）
@@ -138,7 +138,7 @@ class _RopeStrategy:
                         global_seq = seq_start + s
                         global_head = head_q_start + h
                         
-                        if global_seq < seqlen and global_head < num_heads_q:
+                        if global_seq < seqlen and global_head < num_heads:
                             # 读取Q数据
                             a_q = Q_sh[s, h, d].astype(accum_dtype)          # 前一半
                             b_q = Q_sh[s, h, d + half_dim].astype(accum_dtype)  # 后一半
@@ -158,14 +158,14 @@ class _RopeStrategy:
                 
                 # 3. 处理K（如果当前head块对应K）
                 head_k_start = by * BLOCK_HEADS_K
-                if head_k_start < num_heads_k:
+                if head_k_start < num_kv_heads:
                     K_sh = T.alloc_shared((BLOCK_SEQ, BLOCK_HEADS_K, head_dim), dtype)
                     
                     # 加载K数据
                     for s, h, d in T.Parallel(BLOCK_SEQ, BLOCK_HEADS_K, head_dim):
                         global_seq = seq_start + s
                         global_head = head_k_start + h
-                        if global_seq < seqlen and global_head < num_heads_k:
+                        if global_seq < seqlen and global_head < num_kv_heads:
                             K_sh[s, h, d] = K[batch_id, global_seq, global_head, d]
                     
                     # 计算K的RoPE（使用相同的cos/sin）
@@ -173,7 +173,7 @@ class _RopeStrategy:
                         global_seq = seq_start + s
                         global_head = head_k_start + h
                         
-                        if global_seq < seqlen and global_head < num_heads_k:
+                        if global_seq < seqlen and global_head < num_kv_heads:
                             # 读取K数据
                             a_k = K_sh[s, h, d].astype(accum_dtype)
                             b_k = K_sh[s, h, d + half_dim].astype(accum_dtype)
@@ -192,15 +192,15 @@ class _RopeStrategy:
         return rope
 
     @tilelang.jit(out_idx=[-2, -1])
-    def rope_qk_parallel(batch, seqlen, num_heads_q, num_heads_k, head_dim, 
+    def rope_qk_parallel(batch, seqlen, num_heads, num_kv_heads, head_dim, 
                         BLOCK_SEQ, BLOCK_HEADS_Q, BLOCK_HEADS_K, threads=128,
                         dtype="bfloat16", accum_dtype="float32"):
         """
         使用T.macro提取公共计算逻辑的版本
         """
         half_dim = head_dim // 2
-        q_shape = [batch, seqlen, num_heads_q, head_dim]
-        k_shape = [batch, seqlen, num_heads_k, head_dim]
+        q_shape = [batch, seqlen, num_heads, head_dim]
+        k_shape = [batch, seqlen, num_kv_heads, head_dim]
         
         @T.macro
         def ComputeRoPE(
@@ -260,8 +260,8 @@ class _RopeStrategy:
             K_embed: T.Tensor(k_shape, dtype),
         ):
             # 计算总block数
-            total_q_blocks = batch * T.ceildiv(num_heads_q, BLOCK_HEADS_Q) * T.ceildiv(seqlen, BLOCK_SEQ)
-            total_k_blocks = batch * T.ceildiv(num_heads_k, BLOCK_HEADS_K) * T.ceildiv(seqlen, BLOCK_SEQ)
+            total_q_blocks = batch * T.ceildiv(num_heads, BLOCK_HEADS_Q) * T.ceildiv(seqlen, BLOCK_SEQ)
+            total_k_blocks = batch * T.ceildiv(num_kv_heads, BLOCK_HEADS_K) * T.ceildiv(seqlen, BLOCK_SEQ)
             total_blocks = total_q_blocks + total_k_blocks
             
             with T.Kernel(total_blocks, threads=threads) as (bidx,):
@@ -271,7 +271,7 @@ class _RopeStrategy:
                 
                 # Q block
                 if bidx < total_q_blocks:
-                    blocks_per_batch = T.ceildiv(num_heads_q, BLOCK_HEADS_Q) * T.ceildiv(seqlen, BLOCK_SEQ)
+                    blocks_per_batch = T.ceildiv(num_heads, BLOCK_HEADS_Q) * T.ceildiv(seqlen, BLOCK_SEQ)
                     batch_id = bidx // blocks_per_batch
                     remaining = bidx % blocks_per_batch
                     head_block = remaining // T.ceildiv(seqlen, BLOCK_SEQ)
@@ -280,18 +280,18 @@ class _RopeStrategy:
                     head_start = head_block * BLOCK_HEADS_Q
                     seq_start = seq_block * BLOCK_SEQ
                     
-                    if head_start < num_heads_q:
+                    if head_start < num_heads:
                         Q_sh = T.alloc_shared((BLOCK_SEQ, BLOCK_HEADS_Q, head_dim), dtype)
                         ComputeRoPE(
                             Q, cos, sin, Q_embed,
-                            batch_id, head_start, seq_start, num_heads_q, BLOCK_HEADS_Q,
+                            batch_id, head_start, seq_start, num_heads, BLOCK_HEADS_Q,
                             Q_sh, cos_sh, sin_sh
                         )
                 
                 # K block  
                 else:
                     k_bidx = bidx - total_q_blocks
-                    k_blocks_per_batch = T.ceildiv(num_heads_k, BLOCK_HEADS_K) * T.ceildiv(seqlen, BLOCK_SEQ)
+                    k_blocks_per_batch = T.ceildiv(num_kv_heads, BLOCK_HEADS_K) * T.ceildiv(seqlen, BLOCK_SEQ)
                     k_batch_id = k_bidx // k_blocks_per_batch
                     k_remaining = k_bidx % k_blocks_per_batch
                     k_head_block = k_remaining // T.ceildiv(seqlen, BLOCK_SEQ)
@@ -300,20 +300,20 @@ class _RopeStrategy:
                     head_start = k_head_block * BLOCK_HEADS_K
                     seq_start = seq_block * BLOCK_SEQ
                     
-                    if head_start < num_heads_k:
+                    if head_start < num_kv_heads:
                         K_sh = T.alloc_shared((BLOCK_SEQ, BLOCK_HEADS_K, head_dim), dtype)
                         ComputeRoPE(
                             K, cos, sin, K_embed,
-                            k_batch_id, head_start, seq_start, num_heads_k, BLOCK_HEADS_K,
+                            k_batch_id, head_start, seq_start, num_kv_heads, BLOCK_HEADS_K,
                             K_sh, cos_sh, sin_sh
                         )
         return rope
 
     
 class MicroRope(BaseMicroKernel):
-    def __init__(self, batch, seqlen, num_heads_q, num_heads_k, head_dim, dtype=T.bfloat16, accum_dtype=T.float32):
+    def __init__(self, batch, seqlen, num_heads, num_kv_heads, head_dim, dtype=T.bfloat16, accum_dtype=T.float32):
         super().__init__()
-        self.strategy = _RopeStrategy(batch, seqlen, num_heads_q, num_heads_k, head_dim, dtype, accum_dtype)
+        self.strategy = _RopeStrategy(batch, seqlen, num_heads, num_kv_heads, head_dim, dtype, accum_dtype)
         
     def get_source(self, kernel, selected_hparams):
         head_str = \
@@ -350,8 +350,8 @@ __device__ __forceinline__ void rope_kernel_<name_suffix>(const int bx, const in
         head_str = head_str.replace('<threads>', str(threads))
         head_str = head_str.replace('<BATCH>', str(self.strategy.batch))
         head_str = head_str.replace('<SEQLEN>', str(self.strategy.seqlen))
-        head_str = head_str.replace('<NUM_HEADS_Q>', str(self.strategy.num_heads_q)) 
-        head_str = head_str.replace('<NUM_HEADS_K>', str(self.strategy.num_heads_k)) 
+        head_str = head_str.replace('<NUM_HEADS_Q>', str(self.strategy.num_heads)) 
+        head_str = head_str.replace('<NUM_HEADS_K>', str(self.strategy.num_kv_heads)) 
         head_str = head_str.replace('<HEAD_DIM>', str(self.strategy.head_dim)) 
         head_str = head_str.replace('<name_suffix>', self.strategy.name_suffix)
         if self.strategy.dtype == T.bfloat16:

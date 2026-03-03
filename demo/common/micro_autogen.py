@@ -15,15 +15,15 @@ from .micro_gqa_decode import MicroGqaDecode
 from common.micro_rope import MicroRope
 
 class MicroAutoGen:
-    def __init__(self, batch_size, hidden_size, intermediate_size, max_kv_seqlen, heads, groups, dim):
+    def __init__(self, batch_size, hidden_size, intermediate_size, max_kv_seqlen, num_heads, num_kv_heads, head_dim):
         print(tilelang.__version__) # 预先加载完成FFI的静态初始化，以免初始化发生在tuning的多线程场景导致崩溃
         self.batch_size = batch_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.max_kv_seqlen = max_kv_seqlen
-        self.heads = heads
-        self.groups = groups
-        self.dim = dim
+        self.num_heads = num_heads
+        self.num_kv_heads = num_kv_heads
+        self.head_dim = head_dim
         
         self.dtype = T.bfloat16
         self.accum_dtype = T.float32
@@ -73,26 +73,26 @@ class MicroAutoGen:
                 kernel = MicroLinear(MicroLinearStrategy.GEMM_ADD, self.batch_size, self.hidden_size, self.intermediate_size, dtype=self.dtype, accum_dtype=self.accum_dtype)
                 self._save_target_info(kernel, mode, code_dir, config_file, "linear2_layout")
             if (layer_id == 4 or layer_id == 99):
-                kernel = MicroLinear(MicroLinearStrategy.GEMM, self.batch_size, (self.heads+2*self.groups)*self.dim, self.hidden_size, dtype=self.dtype, accum_dtype=self.accum_dtype)
+                kernel = MicroLinear(MicroLinearStrategy.GEMM, self.batch_size, (self.num_heads+2*self.num_kv_heads)*self.head_dim, self.hidden_size, dtype=self.dtype, accum_dtype=self.accum_dtype)
                 self._save_target_info(kernel, mode, code_dir, config_file, "qkv_proj_layout")
             if (layer_id == 5 or layer_id == 99):
-                kernel = MicroRmsNorm(self.batch_size*self.heads, self.dim, dtype=self.dtype, accum_dtype=self.accum_dtype)
-                self._save_target_info(kernel, mode, code_dir, config_file, "q_norm_layout")
+                kernel = MicroRmsNorm(self.batch_size*self.num_heads, self.head_dim, dtype=self.dtype, accum_dtype=self.accum_dtype, M2=self.batch_size*self.num_kv_heads)
+                self._save_target_info(kernel, mode, code_dir, config_file, "merge_q_k_norm_layout")
+            # if (layer_id == 6 or layer_id == 99):
+            #     kernel = MicroRmsNorm(self.batch_size*self.num_kv_heads, self.head_dim, dtype=self.dtype, accum_dtype=self.accum_dtype)
+            #     self._save_target_info(kernel, mode, code_dir, config_file, "k_norm_layout")
             if (layer_id == 6 or layer_id == 99):
-                kernel = MicroRmsNorm(self.batch_size*self.groups, self.dim, dtype=self.dtype, accum_dtype=self.accum_dtype)
-                self._save_target_info(kernel, mode, code_dir, config_file, "k_norm_layout")
-            if (layer_id == 7 or layer_id == 99):
-                kernel = MicroRope(self.batch_size, 1, self.heads, self.groups, self.dim, dtype=self.dtype, accum_dtype=self.accum_dtype)
+                kernel = MicroRope(self.batch_size, 1, self.num_heads, self.num_kv_heads, self.head_dim, dtype=self.dtype, accum_dtype=self.accum_dtype)
                 self._save_target_info(kernel, mode, code_dir, config_file, "rope_layout")
-            if (layer_id == 8 or layer_id == 99):
+            if (layer_id == 7 or layer_id == 99):
                 # for target_kv_seqlen in list(range(1, 17)): # 
-                #     kernel = MicroGqaDecode(self.batch_size, self.max_kv_seqlen, target_kv_seqlen, self.heads, self.groups, self.dim, False, dtype=self.dtype, accum_dtype=self.accum_dtype)
+                #     kernel = MicroGqaDecode(self.batch_size, self.max_kv_seqlen, target_kv_seqlen, self.num_heads, self.num_kv_heads, self.head_dim, False, dtype=self.dtype, accum_dtype=self.accum_dtype)
                 #     self._save_target_info(kernel, HparamSelectMode.HEURISTIC, code_dir, config_file, "gqa_decode_layout_"+str(target_kv_seqlen))
                 for target_kv_seqlen in [16, 32, 64, 128, 256, 512, 1024, 2048]: # 
-                    kernel = MicroGqaDecode(self.batch_size, self.max_kv_seqlen, target_kv_seqlen, self.heads, self.groups, self.dim, False, dtype=self.dtype, accum_dtype=self.accum_dtype)
+                    kernel = MicroGqaDecode(self.batch_size, self.max_kv_seqlen, target_kv_seqlen, self.num_heads, self.num_kv_heads, self.head_dim, False, dtype=self.dtype, accum_dtype=self.accum_dtype)
                     self._save_target_info(kernel, mode, code_dir, config_file, "gqa_decode_layout_"+str(target_kv_seqlen))
-            if (layer_id == 9 or layer_id == 99):
-                kernel = MicroLinear(MicroLinearStrategy.GEMM_ADD, self.batch_size, self.hidden_size, self.heads*self.dim, dtype=self.dtype, accum_dtype=self.accum_dtype)
+            if (layer_id == 8 or layer_id == 99):
+                kernel = MicroLinear(MicroLinearStrategy.GEMM_ADD, self.batch_size, self.hidden_size, self.num_heads*self.head_dim, dtype=self.dtype, accum_dtype=self.accum_dtype)
                 self._save_target_info(kernel, mode, code_dir, config_file, "o_proj_layout")
             
             

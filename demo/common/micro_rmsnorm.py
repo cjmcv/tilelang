@@ -6,10 +6,11 @@ import tilelang.language as T
 from common.micro_base import BaseMicroKernel, HparamSelectMode
     
 class _RmsNormStrategy:
-    def __init__(self, M, N, dtype, accum_dtype):
-        self.name = "rms_norm_tl"+f"_{M}_{N}"
+    def __init__(self, M, M2, N, dtype, accum_dtype):
+        self.name = "rms_norm_tl"+f"_{M+M2}_{N}"
             
         self.M = M
+        self.M2 = M2
         self.N = N
         self.dtype = dtype
         self.accum_dtype = accum_dtype
@@ -34,20 +35,41 @@ class _RmsNormStrategy:
         
     def gen_test_data(self, selected_hparams):
         import torch
-        a = torch.randn(self.M, self.N, dtype=torch.bfloat16, device="cuda")
-        b = torch.randn(1, self.N, dtype=torch.bfloat16, device="cuda")
-        return [a, b]
-    
+        if (self.M2 == 0):
+            a = torch.randn(self.M, self.N, dtype=torch.bfloat16, device="cuda")
+            b = torch.randn(1, self.N, dtype=torch.bfloat16, device="cuda")
+            return [a, b]
+        else:
+            a = torch.randn(self.M+self.M2, self.N, dtype=torch.bfloat16, device="cuda")
+            b = torch.randn(2, self.N, dtype=torch.bfloat16, device="cuda")
+            return [a, b]
+        
     def get_torch_ref(self):
         from common.pkt_util import TorchRef
-        def torch_ref(a, b):
-            return TorchRef.rms_norm(a, b) 
-        return torch_ref
+        if (self.M2 == 0):
+            def torch_ref(a, b):
+                return TorchRef.rms_norm(a, b) 
+            return torch_ref
+        else:
+            import torch
+            def torch_ref(a, b):
+                a1 = a[ : self.M, :]
+                a2 = a[self.M : self.M+self.M2, :]
+                b1 = b[0 : 1, :]
+                b2 = b[1 : 2, :]
+                # print(a1.shape, a2.shape, b1.shape,b2.shape)
+                c1 = TorchRef.rms_norm(a1, b1) 
+                c2 = TorchRef.rms_norm(a2, b2) 
+                return torch.cat([c1, c2], dim=0)
+            return torch_ref
         
     def get_kernel(self, selected_hparams):
         print("selected_hparams: ", selected_hparams)
-        return self.kernel_main(self.M, self.N, *selected_hparams, 1e-12, self.dtype, self.accum_dtype) 
-
+        if (self.M2 == 0):
+            return self.kernel_main(self.M, self.N, *selected_hparams, 1e-12, self.dtype, self.accum_dtype) 
+        else:
+            return self.kernel_merge_main(self.M, self.M2, self.N, *selected_hparams, 1e-12, self.dtype, self.accum_dtype) 
+        
     @tilelang.jit(out_idx=[-1], pass_configs={"tl.disable_tma_lower": True})
     def kernel_main(M, N, BLOCK_M, BLOCK_N, threads, eps=1e-12, dtype="bfloat16", accum_dtype="float32"):
         @T.prim_func
@@ -77,15 +99,42 @@ class _RmsNormStrategy:
 
         return rms_norm
     
+    @tilelang.jit(out_idx=[-1], pass_configs={"tl.disable_tma_lower": True})
+    def kernel_merge_main(M1, M2, N, BLOCK_M, BLOCK_N, threads, eps=1e-12, dtype="bfloat16", accum_dtype="float32"):
+        @T.prim_func
+        def rms_norm(A: T.Tensor((M1+M2, N), dtype), B: T.Tensor((2, N), dtype), C: T.Tensor((M1+M2, N), dtype)):
+            with T.Kernel(T.ceildiv(M1+M2, BLOCK_M), threads=threads) as bx:
+                A_shared = T.alloc_shared((BLOCK_M, N), dtype)
+                A_pow_local = T.alloc_fragment((BLOCK_M, N), accum_dtype)
+                A_local = T.alloc_fragment((BLOCK_M, N), accum_dtype)
+                A_powsum = T.alloc_fragment((BLOCK_M,), accum_dtype)
+                B_shared = T.alloc_shared((1, N), dtype)
+                B_local = T.alloc_fragment((1, N), accum_dtype)
+                
+                T.copy(A[bx * BLOCK_M : (bx + 1) * BLOCK_M, :], A_shared)
+                
+                if bx < M1:
+                    T.copy(B[0:1, :], B_shared)
+                else:
+                    T.copy(B[1:2, :], B_shared)
+                T.copy(A_shared, A_local)
+                T.copy(B_shared, B_local)
+                
+                for i, j in T.Parallel(BLOCK_M, N):
+                    A_pow_local[i, j] = A_local[i, j] * A_local[i, j]
+                T.reduce_sum(A_pow_local, A_powsum, dim=1)
+                for i in T.Parallel(BLOCK_M):
+                    A_powsum[i] = T.rsqrt(A_powsum[i] / N + eps)
+                for i, j in T.Parallel(BLOCK_M, N):
+                    A_local[i, j] *= A_powsum[i] * B_local[0, j]
+                T.copy(A_local, C[bx * BLOCK_M : (bx + 1) * BLOCK_M, :])
+
+        return rms_norm
+    
 class MicroRmsNorm(BaseMicroKernel):
-    def __init__(self, M, N, dtype=T.bfloat16, accum_dtype=T.float32):
+    def __init__(self, M, N, dtype=T.bfloat16, accum_dtype=T.float32, M2=0):
         super().__init__()
-        
-        self.M = M
-        self.N = N
-        self.dtype = dtype
-        self.accum_dtype = accum_dtype
-        self.strategy = _RmsNormStrategy(M, N, dtype, accum_dtype)
+        self.strategy = _RmsNormStrategy(M, M2, N, dtype, accum_dtype)
         
     def get_source(self, kernel, selected_hparams):
         head_str = \
@@ -118,10 +167,13 @@ __device__ __forceinline__ void rms_norm_kernel_<name_suffix>(const int bx, cons
         head_str = head_str.replace('<BLOCK_M>', str(BLOCK_M))
         head_str = head_str.replace('<BLOCK_N>', str(BLOCK_N)) 
         head_str = head_str.replace('<BLOCK_K>', str(BLOCK_K)) 
-        head_str = head_str.replace('<M>', str(self.M))
-        head_str = head_str.replace('<N>', str(self.N)) 
-        head_str = head_str.replace('<name_suffix>', str(self.M)+"_"+str(self.N))
-        if self.dtype == T.bfloat16:
+        head_str = head_str.replace('<M>', str(self.strategy.M+self.strategy.M2))
+        head_str = head_str.replace('<N>', str(self.strategy.N)) 
+        if (self.strategy.M2 == 0):
+            head_str = head_str.replace('<name_suffix>', str(self.strategy.M)+"_"+str(self.strategy.N))
+        else:
+            head_str = head_str.replace('<name_suffix>', str(self.strategy.M)+"_"+str(self.strategy.M2)+"_"+str(self.strategy.N))
+        if self.strategy.dtype == T.bfloat16:
             dtype = "bfloat16_t"
         else:
             dtype = "float16_t"

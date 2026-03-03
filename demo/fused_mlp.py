@@ -115,7 +115,7 @@ if __name__ == "__main__":
             grid_dim=(20, 1, 1), tile_dim=(128, 64, 64),
             sync_mode=(2, 0, 0),
         )
-    layers.compile_load(args.nc, args.output_dir)
+    layers.compile_load(is_no_compile=args.nc, output_dir=args.output_dir)
     
     ###
     def ref_run():

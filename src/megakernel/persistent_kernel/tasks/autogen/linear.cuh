@@ -1,26 +1,18 @@
 #pragma once
 
 
-
+#ifdef ENABLE_QWEN3_4B
 #include "m1/linear_gemm_tl_1_19456_2560.cuh"
 #include "m1/linear_gemm_add_tl_1_2560_9728.cuh"
+#endif
 
-#include "m32/linear_gemm_tl_32_19456_2560.cuh"
-#include "m32/linear_gemm_add_tl_32_2560_9728.cuh"
-
-#include "m128/linear_gemm_tl_128_19456_2560.cuh"
-#include "m128/linear_gemm_add_tl_128_2560_9728.cuh"
-
+#ifdef ENABLE_QWEN3_06B
 #include "m1/linear_gemm_tl_1_6144_1024.cuh"
 #include "m1/linear_gemm_add_tl_1_1024_3072.cuh"
-
-#include "m32/linear_gemm_tl_32_6144_1024.cuh"
-#include "m32/linear_gemm_add_tl_32_1024_3072.cuh"
-
 // attn
 #include "m1/linear_gemm_tl_1_4096_1024.cuh"
 #include "m1/linear_gemm_add_tl_1_1024_2048.cuh"
-
+#endif
 namespace kernel {
 
 template <typename T,
@@ -42,68 +34,53 @@ template <typename T,
                                                 void* __restrict__ output_ptr,
                                                 int num_active_tokens,
                                                 bool residual) {
+#ifdef ENABLE_QWEN3_4B
   if constexpr (FUSE_RES == true) {
     if constexpr (M == 1) {
       if constexpr (N == 2560 && K == 9728) {
         linear_gemm_add_tl_1_2560_9728<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
-          bx, by, bz, input_ptr, weight_ptr, residual_ptr, output_ptr, num_active_tokens, residual);        
-      }
-      else if constexpr (N == 1024 && K == 3072) {
-        linear_gemm_add_tl_1_1024_3072<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
-          bx, by, bz, input_ptr, weight_ptr, residual_ptr, output_ptr, num_active_tokens, residual);  
-      }
-      else if constexpr (N == 1024 && K == 2048) {
-        linear_gemm_add_tl_1_1024_2048<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
-          bx, by, bz, input_ptr, weight_ptr, residual_ptr, output_ptr, num_active_tokens, residual);  
+          bx, by, bz, input_ptr, weight_ptr, residual_ptr, output_ptr, num_active_tokens, residual); return;
       }
     } 
-    else if constexpr (M == 32) {
-      if constexpr (N == 2560 && K == 9728) {
-        linear_gemm_add_tl_32_2560_9728<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
-          bx, by, bz, input_ptr, weight_ptr, residual_ptr, output_ptr, num_active_tokens, residual);
-      }
-      else if constexpr (N == 1024 && K == 3072) {
-        linear_gemm_add_tl_32_1024_3072<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
-          bx, by, bz, input_ptr, weight_ptr, residual_ptr, output_ptr, num_active_tokens, residual);  
-      }
-    } 
-    else if constexpr (M == 128 && N == 2560 && K == 9728) {
-      linear_gemm_add_tl_128_2560_9728<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
-        bx, by, bz, input_ptr, weight_ptr, residual_ptr, output_ptr, num_active_tokens, residual);
-    } 
-    else { printf("Error: [linear_kernel_%d_%d_%d] There is no suitable microkernel!\n", M,N,K); }
   }
   else {
     if constexpr (M == 1) {
       if constexpr (N == 19456 && K == 2560) {
         linear_gemm_tl_1_19456_2560<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
-          bx, by, bz, input_ptr, weight_ptr, residual_ptr, output_ptr, num_active_tokens, residual);        
+          bx, by, bz, input_ptr, weight_ptr, residual_ptr, output_ptr, num_active_tokens, residual); return;
       }
-      else if constexpr (N == 6144 && K == 1024) {
+    }
+  }
+#endif
+
+#ifdef ENABLE_QWEN3_06B
+  if constexpr (FUSE_RES == true) {
+    if constexpr (M == 1) {
+      if constexpr (N == 1024 && K == 3072) {
+        linear_gemm_add_tl_1_1024_3072<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
+          bx, by, bz, input_ptr, weight_ptr, residual_ptr, output_ptr, num_active_tokens, residual); return;
+      }
+      else if constexpr (N == 1024 && K == 2048) {
+        linear_gemm_add_tl_1_1024_2048<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
+          bx, by, bz, input_ptr, weight_ptr, residual_ptr, output_ptr, num_active_tokens, residual); return;
+      }
+    } 
+  }
+  else {
+    if constexpr (M == 1) {
+      if constexpr (N == 6144 && K == 1024) {
         linear_gemm_tl_1_6144_1024<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
-          bx, by, bz, input_ptr, weight_ptr, residual_ptr, output_ptr, num_active_tokens, residual);  
+          bx, by, bz, input_ptr, weight_ptr, residual_ptr, output_ptr, num_active_tokens, residual); return;
       }
       else if constexpr (N == 4096 && K == 1024) {
         linear_gemm_tl_1_4096_1024<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
-          bx, by, bz, input_ptr, weight_ptr, residual_ptr, output_ptr, num_active_tokens, residual);  
+          bx, by, bz, input_ptr, weight_ptr, residual_ptr, output_ptr, num_active_tokens, residual); return;
       }
     }
-    else if constexpr (M == 32) {
-      if constexpr (N == 19456 && K == 2560) {
-        linear_gemm_tl_32_19456_2560<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
-          bx, by, bz, input_ptr, weight_ptr, residual_ptr, output_ptr, num_active_tokens, residual);
-      }
-      else if constexpr (N == 6144 && K == 1024) {
-        linear_gemm_tl_32_6144_1024<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
-          bx, by, bz, input_ptr, weight_ptr, residual_ptr, output_ptr, num_active_tokens, residual);
-      }
-    }
-    else if constexpr (M == 128 && N == 19456 && K == 2560) {
-      linear_gemm_tl_128_19456_2560<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
-        bx, by, bz, input_ptr, weight_ptr, residual_ptr, output_ptr, num_active_tokens, residual);
-    }
-    else { printf("Error: [linear_kernel_%d_%d_%d] There is no suitable microkernel!\n", M,N,K); }     
   }
+#endif
+
+  printf("Error: [linear_kernel_%d_%d_%d] There is no suitable microkernel!\n", M,N,K);
 }
 
 } // kernel

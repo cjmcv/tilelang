@@ -25,6 +25,19 @@ def profile(target_func, torch_ref_func):
                             warnup_iter=100, test_iter=500, 
                             allclose_iter=5, print_mode=0)
     
+# def test_copy():
+#     M, N = 32, 9728
+#     micro = MicroCopy(M,N, dtype=T.bfloat16, accum_dtype=T.float32)
+#     kernel, name, info  = micro.get_kernel(HparamSelectMode.HEURISTIC) # HEURISTIC, TUNING, TUNED
+
+#     test_data = micro.gen_test_data(kernel.config)
+    
+#     def target_func():
+#         return kernel(*test_data)
+#     def torch_ref():
+#         return TorchRef.silu_and_mul(*test_data)
+#     profile(target_func, torch_ref)
+    
 def test_silu_mul():
     M, N = 32, 9728
     micro = MicroSiluMul(M,N, dtype=T.bfloat16, accum_dtype=T.float32)
@@ -49,6 +62,28 @@ def test_rms_norm():
         return kernel(*test_data)
     def torch_ref():
         return TorchRef.rms_norm(*test_data) 
+    profile(target_func, torch_ref)
+    
+def test_merge_rms_norm():
+    M = 16
+    M2 = 8
+    N = 2560
+    micro = MicroRmsNorm(M,N, dtype=T.bfloat16, accum_dtype=T.float32, M2=M2)
+    kernel, fn, info = micro.get_kernel(HparamSelectMode.HEURISTIC) # HEURISTIC, TUNING, TUNED
+    
+    test_data = micro.gen_test_data(kernel.config)
+    def target_func():
+        return kernel(*test_data)
+    
+    a,b = test_data
+    a1 = a[ : M, :]
+    a2 = a[M : M+M2, :]
+    b1 = b[0 : 1, :]
+    b2 = b[1 : 2, :]
+    def torch_ref():
+        c1 = TorchRef.rms_norm(a1, b1) 
+        c2 = TorchRef.rms_norm(a2, b2) 
+        return torch.cat([c1, c2], dim=0)
     profile(target_func, torch_ref)
     
 def test_gemm():
@@ -108,18 +143,15 @@ def test_gemm_add():
     
     profile(target_func, torch_ref)
 
-def test_gqa_decode():
+def test_gqa_decode(num_heads, num_kv_heads, head_dim):
     batch = 1
-    heads = 16
-    groups = 8
     max_kv_seqlen = 8192
-    target_kv_seqlen = 128
-    valid_kv_seqlen = 128
-    dim = 128
+    target_kv_seqlen = 64
+    valid_kv_seqlen = 64
     is_causal = False
     
     # config = [64,64,64,2,128,0,true]
-    micro = MicroGqaDecode(batch, max_kv_seqlen, target_kv_seqlen, heads, groups, dim, is_causal, dtype=T.bfloat16, accum_dtype=T.float32)
+    micro = MicroGqaDecode(batch, max_kv_seqlen, target_kv_seqlen, num_heads, num_kv_heads, head_dim, is_causal, dtype=T.bfloat16, accum_dtype=T.float32)
     kernel, name, info  = micro.get_kernel(HparamSelectMode.TUNED) # HEURISTIC, TUNING, TUNED
     
     test_data = micro.gen_test_data(kernel.config)
@@ -133,11 +165,11 @@ def test_gqa_decode():
     v_slice = v[:, :valid_kv_seqlen, :, :]
         
     # if q.ndim == 3:
-    #     q_for_sdpa = q.unsqueeze(2)         # [batch, heads, seqlen_q=1, dim]
+    #     q_for_sdpa = q.unsqueeze(2)         # [batch, num_heads, seqlen_q=1, head_dim]
     # else:
     #     q_for_sdpa = q.permute(0, 2, 1, 3)
-    # k_for_sdpa = k_slice.permute(0, 2, 1, 3)    # [batch, groups, seqlen_kv, dim]  groups即是num_kv_heads
-    # v_for_sdpa = v_slice.permute(0, 2, 1, 3)  # [batch, groups, seqlen_kv, dim]
+    # k_for_sdpa = k_slice.permute(0, 2, 1, 3)    # [batch, num_kv_heads, seqlen_kv, head_dim]  groups即是num_kv_heads
+    # v_for_sdpa = v_slice.permute(0, 2, 1, 3)  # [batch, num_kv_heads, seqlen_kv, head_dim]
     
     # def torch_ref():
     #     return torch.nn.functional.scaled_dot_product_attention(
@@ -150,14 +182,11 @@ def test_gqa_decode():
         # return TorchRef.attention_split(q, k, v, mask, glse, Output_partial)
     profile(target_func, torch_ref)
 
-def test_rope():
+def test_rope(num_heads, num_kv_heads, head_dim):
     batch = 1
     seqlen = 1
-    heads = 16
-    groups = 8
-    dim = 128
     
-    micro = MicroRope(batch, seqlen, heads, groups, dim, dtype=T.bfloat16, accum_dtype=T.float32)
+    micro = MicroRope(batch, seqlen, num_heads, num_kv_heads, head_dim, dtype=T.bfloat16, accum_dtype=T.float32)
     kernel, name, info  = micro.get_kernel(HparamSelectMode.HEURISTIC) # HEURISTIC, TUNING, TUNED
     # kernel.export_sources(kernel_path="demo/gen/single_micro.cu")
     
@@ -179,17 +208,22 @@ def test_rope():
     profile(target_func, triton_ref)
 
 if __name__ == "__main__":
+    hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim = Qwen3Info.get_basic_params(4)  
+    
+    # test_copy()
+    
     # test_silu_mul()
     # test_rms_norm()
+    # test_merge_rms_norm()
     # test_gemm()
     ## test_silu_mul_gemm() # 逻辑有误，silu_mul被重复计算
     # test_gemm_add()
-    test_gqa_decode()
-    # test_rope()
+     
+    # test_gqa_decode(num_heads, num_kv_heads, head_dim)
+    # test_rope(num_heads, num_kv_heads, head_dim)
 
-    # gen = MicroAutoGen(1, 2560, 9728)
-    # gen = MicroAutoGen(batch_size=1, hidden_size=1024, intermediate_size=3072, 
-    #                    max_kv_seqlen=8192, heads=16, groups=8, dim=128)
-    # gen.gen_qwen3_ops(layer_id=99, mode=HparamSelectMode.TUNED) # HEURISTIC, TUNING, TUNED
+    gen = MicroAutoGen(batch_size=1, hidden_size=hidden_size, intermediate_size=intermediate_size, 
+                       max_kv_seqlen=8192, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim)
+    gen.gen_qwen3_ops(layer_id=99, mode=HparamSelectMode.TUNED) # HEURISTIC, TUNING, TUNED
     # print(">> Finish gen_qwen3_ops.")
     # print("Test single_micro completed.")

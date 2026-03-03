@@ -19,11 +19,11 @@ from common.micro_base import BaseMicroKernel, HparamSelectMode
 # └───────────────────────────────────────────┘
 
 class _GqaDecodeStrategy:
-    def __init__(self, batch, max_kv_seqlen, target_kv_seqlen, heads, groups, dim, is_causal, dtype, accum_dtype):
-        self.name = "gqa_decode_tl"+f"_{batch}_{max_kv_seqlen}_{target_kv_seqlen}_{heads}_{groups}_{dim}"
+    def __init__(self, batch, max_kv_seqlen, target_kv_seqlen, num_heads, num_kv_heads, dim, is_causal, dtype, accum_dtype):
+        self.name = "gqa_decode_tl"+f"_{batch}_{max_kv_seqlen}_{target_kv_seqlen}_{num_heads}_{num_kv_heads}_{dim}"
             
-        self.heads = heads
-        self.groups = groups
+        self.num_heads = num_heads
+        self.num_kv_heads = num_kv_heads
         self.dim = dim
         self.batch = batch
         self.target_kv_seqlen = target_kv_seqlen
@@ -58,22 +58,22 @@ class _GqaDecodeStrategy:
     
     def gen_test_data(self, selected_hparams):
         import torch
-        q = torch.randn(self.batch, self.heads, self.dim, device="cuda", dtype=torch.bfloat16)              # [B, N=q_seqlen=1, H=heads,  D=dim]
-        k = torch.randn(self.batch, self.max_kv_seqlen, self.groups, self.dim, device="cuda", dtype=torch.bfloat16)  # [B, N=kv_seqlen,  H=groups, D=dim]
-        v = torch.randn(self.batch, self.max_kv_seqlen, self.groups, self.dim, device="cuda", dtype=torch.bfloat16)
-        # mask = torch.randint(0, 2, (batch, kv_seqlen, groups), device="cuda", dtype=torch.uint8) # Only 0/1
+        q = torch.randn(self.batch, self.num_heads, self.dim, device="cuda", dtype=torch.bfloat16)              # [B, N=q_seqlen=1, H=num_heads,  D=dim]
+        k = torch.randn(self.batch, self.max_kv_seqlen, self.num_kv_heads, self.dim, device="cuda", dtype=torch.bfloat16)  # [B, N=kv_seqlen,  H=num_kv_heads, D=dim]
+        v = torch.randn(self.batch, self.max_kv_seqlen, self.num_kv_heads, self.dim, device="cuda", dtype=torch.bfloat16)
+        # mask = torch.randint(0, 2, (batch, kv_seqlen, num_kv_heads), device="cuda", dtype=torch.uint8) # Only 0/1
         edge = torch.empty(10, device="cuda", dtype=torch.int32)
         edge[0].fill_(self.target_kv_seqlen)
-        mask = torch.ones(self.batch, self.max_kv_seqlen, self.groups, device="cuda", dtype=torch.uint8)      # no mask, (batch, q_seqlen, kv_seqlen, groups), groups维度是广播出来的，mask只跟q_seqlen, kv_seqlen有关
+        mask = torch.ones(self.batch, self.max_kv_seqlen, self.num_kv_heads, device="cuda", dtype=torch.uint8)      # no mask, (batch, q_seqlen, kv_seqlen, num_kv_heads), groups维度是广播出来的，mask只跟q_seqlen, kv_seqlen有关
         # q_len = 4
         # kv_seqlen = 16
         # mask = torch.tril(torch.ones((q_len, kv_seqlen), device="cuda", dtype=torch.uint8)).unsqueeze(0).expand(batch, -1, -1) # (q_len, kv_seqlen)
-        # mask.unsqueeze(2).expand(-1, -1, groups, -1).transpose(1, 2)
+        # mask.unsqueeze(2).expand(-1, -1, num_kv_heads, -1).transpose(1, 2)
         # print(mask, mask.shape)
         
         _, _, num_split, _, _ = selected_hparams
-        glse = torch.empty(self.batch, self.heads, num_split, device="cuda", dtype=torch.bfloat16)
-        Output_partial = torch.empty(self.batch, self.heads, num_split, self.dim, device="cuda", dtype=torch.bfloat16)
+        glse = torch.empty(self.batch, self.num_heads, num_split, device="cuda", dtype=torch.bfloat16)
+        Output_partial = torch.empty(self.batch, self.num_heads, num_split, self.dim, device="cuda", dtype=torch.bfloat16)
         return [q, k, v, edge, mask, glse, Output_partial]
     
     def get_torch_ref(self):
@@ -89,24 +89,24 @@ class _GqaDecodeStrategy:
         _, _, num_split, _, _ = selected_hparams
         # if (self.target_kv_seqlen < 16 and num_split == 1):
         #     print("self.target_kv_seqlen < 16")
-        #     return self.kernel_main_m64(self.batch, self.heads, self.groups, self.max_kv_seqlen, self.target_kv_seqlen, self.dim, self.is_causal, *selected_hparams, self.dtype, self.accum_dtype) 
+        #     return self.kernel_main_m64(self.batch, self.num_heads, self.num_kv_heads, self.max_kv_seqlen, self.target_kv_seqlen, self.dim, self.is_causal, *selected_hparams, self.dtype, self.accum_dtype) 
         # else:
-        return self.kernel_main(self.batch, self.heads, self.groups, self.max_kv_seqlen, self.dim, self.is_causal, *selected_hparams, self.dtype, self.accum_dtype) 
+        return self.kernel_main(self.batch, self.num_heads, self.num_kv_heads, self.max_kv_seqlen, self.dim, self.is_causal, *selected_hparams, self.dtype, self.accum_dtype) 
 
     def get_pass_configs():
         return {tilelang.PassConfigKey.TL_DISABLE_TMA_LOWER: True, tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True}
 
     @tilelang.jit(out_idx=[-1], pass_configs=get_pass_configs())
-    def kernel_main_m64(batch, heads, groups, kv_seqlen, target_kv_seqlen, dim, is_causal, block_N, block_H, num_split, num_stages, threads, dtype="bfloat16", accum_dtype="float32"):
+    def kernel_main_m64(batch, num_heads, num_kv_heads, kv_seqlen, target_kv_seqlen, dim, is_causal, block_N, block_H, num_split, num_stages, threads, dtype="bfloat16", accum_dtype="float32"):
         scale = (1.0 / dim) ** 0.5 * 1.44269504  # log2(e)
-        shape_q = [batch, heads, dim]            # [batch, seqlen_q, heads, dim]
-        shape_k = [batch, kv_seqlen, groups, dim]
-        shape_v = [batch, kv_seqlen, groups, dim]
-        shape_o = [batch, heads, dim]
-        shape_mask = [batch, kv_seqlen, groups] # [batch, seqlen_q, kv_seqlen, groups], 因果掩码是 query 和 key 之间的关系，表示当前q能看到哪些kv，而group维度是广播出来的
-        kv_group_num = heads // groups  # kv_heads_num
+        shape_q = [batch, num_heads, dim]            # [batch, seqlen_q, num_heads, dim]
+        shape_k = [batch, kv_seqlen, num_kv_heads, dim]
+        shape_v = [batch, kv_seqlen, num_kv_heads, dim]
+        shape_o = [batch, num_heads, dim]
+        shape_mask = [batch, kv_seqlen, num_kv_heads] # [batch, seqlen_q, kv_seqlen, num_kv_heads], 因果掩码是 query 和 key 之间的关系，表示当前q能看到哪些kv，而group维度是广播出来的
+        kv_group_num = num_heads // num_kv_heads  # kv_heads_num
 
-        part_shape = [batch, heads, num_split, dim]
+        part_shape = [batch, num_heads, num_split, dim]
         valid_block_H = min(block_H, kv_group_num)            # 如 kv_heads_num 凑不够 block_H 时，则缩减至实际值以处理边界，但不处理kv_group_num超过block_H时的边界问题
         valid_kv_seqlen = target_kv_seqlen
         # valid_block_N = min(block_N, kv_seqlen)  # 如 kv_seqlen 凑不够 block_N 时，则缩减至实际值，但不处理kv_seqlen超过block_N时的边界问题
@@ -118,11 +118,11 @@ class _GqaDecodeStrategy:
             V: T.Tensor(shape_v, dtype),
             edge: T.Tensor([10], "int32"),
             mask: T.Tensor(shape_mask, "uint8"),
-            glse: T.Tensor([batch, heads, num_split], dtype),
+            glse: T.Tensor([batch, num_heads, num_split], dtype),
             Output_partial: T.Tensor(part_shape, dtype),
             Output: T.Tensor(shape_o, dtype),
         ):
-            with T.Kernel(batch, heads // valid_block_H, threads=threads) as (bx, by):
+            with T.Kernel(batch, num_heads // valid_block_H, threads=threads) as (bx, by):
                 Q_shared = T.alloc_shared([block_H, dim], dtype)
                 K_shared = T.alloc_shared([block_N, dim], dtype)
                 V_shared = T.alloc_shared([block_N, dim], dtype)
@@ -187,16 +187,16 @@ class _GqaDecodeStrategy:
         return flash_attn_m64
 
     @tilelang.jit(out_idx=[-1], pass_configs=get_pass_configs())
-    def kernel_main(batch, heads, groups, kv_seqlen, dim, is_causal, block_N, block_H, num_split, num_stages, threads, dtype="bfloat16", accum_dtype="float32"):
+    def kernel_main(batch, num_heads, num_kv_heads, kv_seqlen, dim, is_causal, block_N, block_H, num_split, num_stages, threads, dtype="bfloat16", accum_dtype="float32"):
         scale = (1.0 / dim) ** 0.5 * 1.44269504  # log2(e)
-        shape_q = [batch, heads, dim]            # [batch, seqlen_q, heads, dim]
-        shape_k = [batch, kv_seqlen, groups, dim]
-        shape_v = [batch, kv_seqlen, groups, dim]
-        shape_o = [batch, heads, dim]
-        shape_mask = [batch, kv_seqlen, groups] # [batch, seqlen_q, kv_seqlen, groups], 因果掩码是 query 和 key 之间的关系，表示当前q能看到哪些kv，而group维度是广播出来的
-        kv_group_num = heads // groups  # kv_heads_num
+        shape_q = [batch, num_heads, dim]            # [batch, seqlen_q, num_heads, dim]
+        shape_k = [batch, kv_seqlen, num_kv_heads, dim]
+        shape_v = [batch, kv_seqlen, num_kv_heads, dim]
+        shape_o = [batch, num_heads, dim]
+        shape_mask = [batch, kv_seqlen, num_kv_heads] # [batch, seqlen_q, kv_seqlen, num_kv_heads], 因果掩码是 query 和 key 之间的关系，表示当前q能看到哪些kv，而group维度是广播出来的
+        kv_group_num = num_heads // num_kv_heads  # kv_heads_num
 
-        part_shape = [batch, heads, num_split, dim]
+        part_shape = [batch, num_heads, num_split, dim]
         valid_block_H = min(block_H, kv_group_num)            # 如 kv_heads_num 凑不够 block_H 时，则缩减至实际值以处理边界，但不处理kv_group_num超过block_H时的边界问题
         valid_block_N = min(block_N, kv_seqlen // num_split)  # 如 kv_seqlen 凑不够 block_N 时，则缩减至实际值，但不处理kv_seqlen超过block_N时的边界问题
         
@@ -207,9 +207,9 @@ class _GqaDecodeStrategy:
             V: T.Tensor(shape_v, dtype),
             edge: T.Tensor([10], "int32"),
             mask: T.Tensor(shape_mask, "uint8"),
-            Output: T.Tensor([batch, heads, dim], dtype),
+            Output: T.Tensor([batch, num_heads, dim], dtype),
         ):
-            with T.Kernel(batch, heads // valid_block_H, threads=threads) as (bx, by):
+            with T.Kernel(batch, num_heads // valid_block_H, threads=threads) as (bx, by):
                 # qkv应围绕ND分块做计算，这里布局对应的是推理用的BNHD，所以分块需要跨过H取ND。N是seqlen，H是head，d是dim。
                 # flashdecoding中q的N(q_seqlen)=1, 分块是[1, dim]，数据量少，可以多份一起放到smem，smem分块取[block_H, dim]
                 # K和V则正常取[N, dim]
@@ -239,7 +239,7 @@ class _GqaDecodeStrategy:
                 T.fill(scores_max, -T.infinity(accum_dtype))
 
                 # ceildiv 向上取整，T.copy会自动校验并截断，超出范围部分会被赋0，
-                # 但输出是[batch, heads, dim]，即所有kv_seqlen都参与了计算，0会影响结果，正确做法是需要屏蔽掉超范围部分
+                # 但输出是[batch, num_heads, dim]，即所有kv_seqlen都参与了计算，0会影响结果，正确做法是需要屏蔽掉超范围部分
                 valid_kv_seqlen = edge[0]
                 loop_range = T.ceildiv((valid_kv_seqlen), block_N) 
                 for k in T.Pipelined(loop_range, num_stages=num_stages):
@@ -286,10 +286,10 @@ class _GqaDecodeStrategy:
             V: T.Tensor(shape_v, dtype),
             edge: T.Tensor([10], "int32"),
             mask: T.Tensor(shape_mask, "uint8"),
-            glse: T.Tensor([batch, heads, num_split], dtype),
+            glse: T.Tensor([batch, num_heads, num_split], dtype),
             Output_partial: T.Tensor(part_shape, dtype),
         ):
-            with T.Kernel(batch, heads // valid_block_H, num_split, threads=threads) as (bx, by, bz):
+            with T.Kernel(batch, num_heads // valid_block_H, num_split, threads=threads) as (bx, by, bz):
                 Q_shared = T.alloc_shared([block_H, dim], dtype)
                 K_shared = T.alloc_shared([block_N, dim], dtype)
                 V_shared = T.alloc_shared([block_N, dim], dtype)
@@ -393,11 +393,11 @@ class _GqaDecodeStrategy:
 
         @T.macro
         def combine(
-            glse: T.Tensor([batch, heads, num_split], dtype),
+            glse: T.Tensor([batch, num_heads, num_split], dtype),
             Output_partial: T.Tensor(part_shape, dtype),
             Output: T.Tensor(shape_o, dtype),
         ):
-            with T.Kernel(heads, batch, threads=128) as (by, bz):
+            with T.Kernel(num_heads, batch, threads=128) as (by, bz):
                 po_local = T.alloc_fragment([dim], dtype)
                 o_accum_local = T.alloc_fragment([dim], accum_dtype)
                 lse_local = T.alloc_fragment([num_split, 128], dtype)
@@ -442,7 +442,7 @@ class _GqaDecodeStrategy:
             V: T.Tensor(shape_v, dtype),
             edge: T.Tensor([10], "int32"),
             mask: T.Tensor(shape_mask, "uint8"),
-            glse: T.Tensor([batch, heads, num_split], dtype),
+            glse: T.Tensor([batch, num_heads, num_split], dtype),
             Output_partial: T.Tensor(part_shape, dtype),
             Output: T.Tensor(shape_o, dtype),
         ):
@@ -456,7 +456,7 @@ class _GqaDecodeStrategy:
             V: T.Tensor(shape_v, dtype),
             edge: T.Tensor([10], "int32"),
             mask: T.Tensor(shape_mask, "uint8"),
-            glse: T.Tensor([batch, heads, num_split], dtype),
+            glse: T.Tensor([batch, num_heads, num_split], dtype),
             Output_partial: T.Tensor(part_shape, dtype),
             Output: T.Tensor(shape_o, dtype),
         ):
@@ -471,11 +471,11 @@ class _GqaDecodeStrategy:
 # target_kv_seqlen: 表示该kernel是根据target_kv_seqlen进行tuning生成的，tuning时，会从max_kv_seqlen大小的cache里计算target_kv_seqlen的部分。
 # valid_kv_seqlen: 部署推理时的实际长度，如 valid_kv_seqlen==31，会选择使用target_kv_seqlen==32的kernel，kernel内会自动处理边界到31。
 class MicroGqaDecode(BaseMicroKernel):
-    def __init__(self, batch, max_kv_seqlen, target_kv_seqlen, heads, groups, dim, is_causal, dtype=T.bfloat16, accum_dtype=T.float32):
+    def __init__(self, batch, max_kv_seqlen, target_kv_seqlen, num_heads, num_kv_heads, dim, is_causal, dtype=T.bfloat16, accum_dtype=T.float32):
         super().__init__()
         
-        self.heads = heads
-        self.groups = groups
+        self.num_heads = num_heads
+        self.num_kv_heads = num_kv_heads
         self.dim = dim
         self.batch = batch
         self.max_kv_seqlen = max_kv_seqlen
@@ -484,7 +484,7 @@ class MicroGqaDecode(BaseMicroKernel):
         
         self.dtype = dtype
         self.accum_dtype = accum_dtype
-        self.strategy = _GqaDecodeStrategy(batch, max_kv_seqlen, target_kv_seqlen, heads, groups, dim, is_causal, dtype, accum_dtype)
+        self.strategy = _GqaDecodeStrategy(batch, max_kv_seqlen, target_kv_seqlen, num_heads, num_kv_heads, dim, is_causal, dtype, accum_dtype)
         
     def _get_source(self, kernel, selected_hparams):
         # self.layout = "11111"
@@ -526,13 +526,13 @@ __device__ __forceinline__ void flashattn_kernel_<name_suffix>(const int bx, con
 
         head_str = head_str.replace('<threads>', str(threads))
         head_str = head_str.replace('<BATCH>', str(self.batch))
-        head_str = head_str.replace('<HEAD>', str(self.heads))
-        head_str = head_str.replace('<GROUPS>', str(self.groups))
+        head_str = head_str.replace('<HEAD>', str(self.num_heads))
+        head_str = head_str.replace('<GROUPS>', str(self.num_kv_heads))
         head_str = head_str.replace('<DIM>', str(self.dim))
         if num_split > 1:
-            head_str = head_str.replace('<name_suffix>', f"{self.batch}_{self.max_kv_seqlen}_{self.target_kv_seqlen}_{self.heads}_{self.groups}_{self.dim}__<kernel_id>")
+            head_str = head_str.replace('<name_suffix>', f"{self.batch}_{self.max_kv_seqlen}_{self.target_kv_seqlen}_{self.num_heads}_{self.num_kv_heads}_{self.dim}__<kernel_id>")
         else:
-            head_str = head_str.replace('<name_suffix>', f"{self.batch}_{self.max_kv_seqlen}_{self.target_kv_seqlen}_{self.heads}_{self.groups}_{self.dim}")
+            head_str = head_str.replace('<name_suffix>', f"{self.batch}_{self.max_kv_seqlen}_{self.target_kv_seqlen}_{self.num_heads}_{self.num_kv_heads}_{self.dim}")
         if self.dtype == T.bfloat16:
             dtype = "bfloat16_t"
         else:

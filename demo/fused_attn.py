@@ -3,7 +3,7 @@ import torch
 import argparse
 import megakernel as mi
 
-from common.pkt_util import TorchRef, PerfReporter
+from common.pkt_util import TorchRef, PerfReporter, Qwen3Info
 from common.mpk_layers import MpkLayers
 from common.autogen.qwen3_mega_config import Qwen3MegaConfig
 
@@ -38,14 +38,10 @@ if __name__ == "__main__":
     # v_proj: torch.Size([1024, 1024])
     # o_proj: torch.Size([1024, 2048])
     
-    hidden_size = 1024
-    intermediate_size = 3072
-    num_heads = 16
-    num_kv_heads = 8
-    head_dim = 128
+    hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim = Qwen3Info.get_basic_params(0.6)
+
     seqlen_q = 1
-    seqlen_kv = 8192
-    step = 8191   # todo
+    max_seqlen_kv = 8192
     x_torch = torch.randn((batch, hidden_size), dtype=torch.bfloat16, device="cuda")
     w_layernorm_torch = torch.randn((1, hidden_size), dtype=torch.bfloat16, device="cuda")
     
@@ -59,8 +55,8 @@ if __name__ == "__main__":
     w_sin_torch = torch.cat((sin_half, sin_half), dim=-1)
     
     edge_torch = torch.empty(10, device="cuda", dtype=torch.int32)
-    key_cache_torch = torch.randn(batch, seqlen_kv, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
-    value_cache_torch = torch.randn(batch, seqlen_kv, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)
+    key_cache_torch = torch.zeros(batch, max_seqlen_kv, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
+    value_cache_torch = torch.zeros(batch, max_seqlen_kv, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)
     w_o_proj_torch = torch.randn((hidden_size, num_heads*head_dim), dtype=torch.bfloat16, device="cuda")
     
     out_torch = torch.zeros((max_batch_size, hidden_size), dtype=torch.bfloat16, device="cuda")
@@ -84,11 +80,14 @@ if __name__ == "__main__":
         
         key_cache_torch[0, step, :, :] = key_states
         value_cache_torch[0, step, :, :] = value_states
-        k_slice = key_cache_torch[:, :step, :, :]
-        v_slice = value_cache_torch[:, :step, :, :]
+        k_slice = key_cache_torch[:, :step+1, :, :]
+        v_slice = value_cache_torch[:, :step+1, :, :]
+        # k_slice.zero_()
+        # v_slice.zero_()
         attn_output = TorchRef.attention_sdpa(query_states, k_slice, v_slice, False)
         attn_output = attn_output.reshape(batch*seqlen_q, q_dim)
         final_output = TorchRef.linear(attn_output, w_o_proj_torch) + x_torch # res
+        print("torch", key_states, value_states, final_output)
         # print("torch:", query_states, "\n", key_states, "\n", value_states, "\n", attn_output, "\n", final_output)
         # print("o_proj", attn_output.size(), w_o_proj_torch.size()) # o_proj torch.Size([1, 1024]) torch.Size([1024, 2048])
         return final_output
@@ -165,6 +164,7 @@ if __name__ == "__main__":
         layout=Qwen3MegaConfig.rope_layout,
     )
     
+    step = 0
     # attn
     q_3dim_torch = query_states_torch.view(batch, num_heads, head_dim)
     q_3dim = mpk.attach_input(torch_tensor=q_3dim_torch, name="q_3dim")
@@ -172,11 +172,11 @@ if __name__ == "__main__":
     
     key_cache_torch[0, step, :, :] = k_4dim_torch
     value_cache_torch[0, step, :, :] = value_states_torch
-
-    split = 8 # TODO 自动配置
-    glse_torch = torch.empty(batch, num_heads, split, device="cuda", dtype=torch.bfloat16)
-    out_partial_torch = torch.empty(batch, num_heads, split, head_dim, device="cuda", dtype=torch.bfloat16)
-    mask_torch = torch.ones(batch, seqlen_kv, num_kv_heads, device="cuda", dtype=torch.uint8)
+    
+    max_attn_split = 8
+    glse_torch = torch.empty(batch, num_heads, max_attn_split, device="cuda", dtype=torch.bfloat16)
+    out_partial_torch = torch.empty(batch, num_heads, max_attn_split, head_dim, device="cuda", dtype=torch.bfloat16)
+    mask_torch = torch.ones(batch, max_seqlen_kv, num_kv_heads, device="cuda", dtype=torch.uint8)
     
     k_cache = mpk.attach_input(torch_tensor=key_cache_torch, name="k_cache")
     v_cache = mpk.attach_input(torch_tensor=value_cache_torch, name="v_cache")
@@ -197,7 +197,7 @@ if __name__ == "__main__":
         out_partial=out_partial,
         output=attn_out,
         sync_mode=(0, 0, 0),
-        layout=Qwen3MegaConfig.gqa_decode_layout_64,
+        layout=Qwen3MegaConfig.gqa_decode_layout_16,
     )
     attn_out_2d_torch = attn_out_torch.view(batch*seqlen_q, q_dim)
     attn_out_2d = mpk.attach_input(torch_tensor=attn_out_2d_torch, name="attn_out_2d")
@@ -210,29 +210,31 @@ if __name__ == "__main__":
         sync_mode=(0, 0, 0),
         layout=Qwen3MegaConfig.linear2_layout,
     )
-    # final_output = TorchRef.linear(attn_output, w_o_proj_torch) + x_torch
     
     layers.compile_load(meta_tensors=[edge_torch], is_no_compile=args.nc, output_dir=args.output_dir)
     
-    step = 64
-    ref_run(step)
-    edge_torch[0].fill_(step)
+    # step = 16
+    # ref_run(step)
+    
+    edge_torch[0].fill_(step+1) # kv_seqlen
     mpk(batch)
+    print("mpk", k_4dim_torch, value_states_torch, out_torch)
     # print("mpk:", q_4dim_torch, "\n", k_4dim_torch, "\n", value_states_torch, "\n", attn_out_torch, "\n", out_torch)
 
-    def torch_fix_param():
-        return ref_run(step)
-    graph, ref_output = TorchRef.compile_capture(torch_fix_param, is_compile=True)
+    ref_run(step)
+    # def torch_fix_param():
+    #     return ref_run(step)
+    # graph, ref_output = TorchRef.compile_capture(torch_fix_param, is_compile=True)
     
-    edge_torch[0].fill_(step)
-    def mpk_run():
-        mpk(batch)
-        return out_torch
-    def torch_ref():
-        graph.replay()
-        return ref_output
+    # edge_torch[0].fill_(step)
+    # def mpk_run():
+    #     mpk(batch)
+    #     return out_torch
+    # def torch_ref():
+    #     graph.replay()
+    #     return ref_output
     
-    if not args.profiling:
-        reporter.generate_report(mpk_run, torch_ref, 
-                                warnup_iter=100, test_iter=200, 
-                                allclose_iter=5, print_mode=0)
+    # if not args.profiling:
+    #     reporter.generate_report(mpk_run, torch_ref, 
+    #                             warnup_iter=100, test_iter=200, 
+    #                             allclose_iter=5, print_mode=1)

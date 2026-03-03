@@ -17,14 +17,14 @@ template <typename T,
         int TILE_DIM_Z,
         int M,
         int N>
-__device__ __forceinline__ void rms_norm_kernel_8_128(const int bx, const int by, const int bz,
+__device__ __forceinline__ void rms_norm_kernel_16_8_128(const int bx, const int by, const int bz,
                                                             void const *input_ptr,
                                                             void const *weight_ptr,
                                                             void *output_ptr,
                                                             float eps) {
   static_assert(THREAD_NUM==128);
   static_assert(TILE_DIM_X==1); static_assert(TILE_DIM_Y==1); static_assert(TILE_DIM_Z==1);
-  static_assert(M==8); static_assert(N==128);
+  static_assert(M==24); static_assert(N==128);
   
   const bfloat16_t* __restrict__ A = static_cast<const bfloat16_t*>(input_ptr);
   const bfloat16_t* __restrict__ B = static_cast<const bfloat16_t*>(weight_ptr);
@@ -36,7 +36,11 @@ __device__ __forceinline__ void rms_norm_kernel_8_128(const int bx, const int by
   float A_pow_local[1];
   float A_powsum[1];
   ((bfloat16_t*)buf_dyn_shmem)[((int)threadIdx.x)] = A[((((int)bx) * 128) + ((int)threadIdx.x))];
-  ((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 128)] = B[((int)threadIdx.x)];
+  if (((int)bx) < 16) {
+    ((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 128)] = B[((int)threadIdx.x)];
+  } else {
+    ((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 128)] = B[(((int)threadIdx.x) + 128)];
+  }
   A_local[0] = ((float)((bfloat16_t*)buf_dyn_shmem)[((int)threadIdx.x)]);
   B_local[0] = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 128)]);
   A_pow_local[0] = (A_local[0] * A_local[0]);
@@ -51,10 +55,10 @@ __device__ __forceinline__ void rms_norm_kernel_8_128(const int bx, const int by
 
 
 } // kernel
-// Strategy: rms_norm_tl_8_128
+// Strategy: rms_norm_tl_24_128
 // selected_hparams: [1, 1, 128].
 // smem: 512 bytes.
 // use_cooperative_groups: 0.
-// layout: (8, 1, 1), (1, 1, 1)
+// layout: (24, 1, 1), (1, 1, 1)
 // block_dim=(128, 1, 1).
-// latency: 0.0035 ms vs [ref-0.00542 sim-0.99999], idx: 0
+// latency: 0.00399 ms vs [ref-0.01141 sim-0.99999], idx: 0

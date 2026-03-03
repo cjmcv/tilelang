@@ -636,13 +636,14 @@ private:
     std::map<dim3, TaskId, Dim3Comparator> const &pre_task_map,
     std::map<dim3, TaskId, Dim3Comparator> &cur_task_map) {
     
-    int fence_mode = input_map.x + input_map.y*10 + input_map.z*100;
-    printf("fence_mode: %d.\n", fence_mode);
+    int fence_mode = input_map.x;
+    int parallel_mode = input_map.y; // 暂时没用上，0: 不操作；1: 忽略前一个算子的所有triggers
+    printf("input_map: (%d, %d, %d).\n", input_map.x, input_map.y, input_map.z); 
     std::vector<std::pair<std::vector<dim3>, std::vector<dim3>>> pv;
     size_t event_num = 1;
     // 获取映射信息
     if (fence_mode == 0) {
-      // 同步所有
+      // 同步所有,即只有一个event
       event_num = 1;
       for (size_t i=0; i<event_num; i++) {
         std::vector<dim3> producer;
@@ -687,6 +688,7 @@ private:
         event_num = producer_grid_dim.x;
       }
       
+      // 按event分组，得到pv组合
       for (size_t i=0; i<event_num; i++) {
         dim3 bid;
         std::vector<dim3> producer;
@@ -780,8 +782,10 @@ private:
         int task_id = pre_task_map.find(bid)->second;
         // encode gpu_id
         all_tasks[task_id].trigger_event = get_event_id(
-            my_gpu_id, all_events.size(), false /*nvshmem_event*/);
-        event_desc.num_triggers++;
+            my_gpu_id, all_events.size(), false /*nvshmem_event*/);      
+        // if (parallel_mode != 1){
+          event_desc.num_triggers++;          
+        // }
       }
 
       event_desc.event_type =
@@ -915,7 +919,6 @@ private:
         }
 
         // Step 2.2: create events and add tasks - CJM
-        // dfs_create_events_add_tasks
         create_events_add_tasks(task_type,
                                     0,                       /*depth*/
                                     my_gpu_id,               /*my_gpu_id*/
