@@ -48,6 +48,7 @@ if __name__ == "__main__":
     w_qkv_proj_torch = torch.randn(((num_heads+2*num_kv_heads)*head_dim, hidden_size), dtype=torch.bfloat16, device="cuda")
     w_q_norm_torch = torch.randn((seqlen_q, head_dim), dtype=torch.bfloat16, device="cuda")
     w_k_norm_torch = torch.randn((seqlen_q, head_dim), dtype=torch.bfloat16, device="cuda")
+    w_qk_norm_torch = torch.cat([w_q_norm_torch, w_k_norm_torch], dim=0).contiguous()
     
     cos_half = torch.randn((batch, seqlen_q, head_dim//2), dtype=torch.bfloat16, device="cuda")
     sin_half = torch.randn((batch, seqlen_q, head_dim//2), dtype=torch.bfloat16, device="cuda")
@@ -98,8 +99,7 @@ if __name__ == "__main__":
     x = mpk.attach_input(torch_tensor=x_torch, name="in")
     w_layernorm = mpk.attach_input(torch_tensor=w_layernorm_torch, name="w_layernorm")
     w_qkv_proj = mpk.attach_input(torch_tensor=w_qkv_proj_torch, name="w_qkv_proj")
-    w_q_norm = mpk.attach_input(torch_tensor=w_q_norm_torch, name="w_q_norm")
-    w_k_norm = mpk.attach_input(torch_tensor=w_k_norm_torch, name="w_k_norm")
+    
     w_o_proj = mpk.attach_input(torch_tensor=w_o_proj_torch, name="w_o_proj")
     final_attn_out = mpk.attach_input(torch_tensor=out_torch, name="final_attn_out")
     
@@ -124,27 +124,43 @@ if __name__ == "__main__":
     
     q_dim = num_heads*head_dim
     kv_dim = num_kv_heads*head_dim
-    query_states_torch = qkv_proj_out_torch[:, :q_dim].view(batch*seqlen_q*num_heads, head_dim) 
-    key_states_torch = qkv_proj_out_torch[:, q_dim:q_dim+kv_dim].view(batch*seqlen_q*num_kv_heads, head_dim) 
-    query_states = mpk.attach_input(torch_tensor=query_states_torch, name="query_states")
-    key_states = mpk.attach_input(torch_tensor=key_states_torch, name="key_states")
-    
-    # print(query_states_torch.dim, key_states_torch.dim)
-    # todo 合并两个norm
-    mpk.rmsnorm_layer(
-        input=query_states,
-        weight=w_q_norm,
-        output=query_states,
-        sync_mode=(0, 0, 0),
-        layout=Qwen3MegaConfig.q_norm_layout,
-    )
-    mpk.rmsnorm_layer(
-        input=key_states,
-        weight=w_k_norm,
-        output=key_states,
-        sync_mode=(0, 0, 0),
-        layout=Qwen3MegaConfig.k_norm_layout,
-    )
+    if 1:
+        w_qk_norm = mpk.attach_input(torch_tensor=w_qk_norm_torch, name="w_qk_norm")
+        qk_states_torch = qkv_proj_out_torch[:, :q_dim+kv_dim].view(batch*seqlen_q*(num_heads+num_kv_heads), head_dim) 
+        qk_states = mpk.attach_input(torch_tensor=qk_states_torch, name="qk_states")
+        mpk.rmsnorm_layer(
+            input=qk_states,
+            weight=w_qk_norm,
+            output=qk_states,
+            sync_mode=(0, 0, 0),
+            layout=Qwen3MegaConfig.merge_q_k_norm_layout,
+        )
+        query_states_torch = qkv_proj_out_torch[:, :q_dim].view(batch*seqlen_q*num_heads, head_dim) 
+        key_states_torch = qkv_proj_out_torch[:, q_dim:q_dim+kv_dim].view(batch*seqlen_q*num_kv_heads, head_dim) 
+    else:
+        w_q_norm = mpk.attach_input(torch_tensor=w_q_norm_torch, name="w_q_norm")
+        w_k_norm = mpk.attach_input(torch_tensor=w_k_norm_torch, name="w_k_norm")
+        query_states_torch = qkv_proj_out_torch[:, :q_dim].view(batch*seqlen_q*num_heads, head_dim) 
+        key_states_torch = qkv_proj_out_torch[:, q_dim:q_dim+kv_dim].view(batch*seqlen_q*num_kv_heads, head_dim) 
+        query_states = mpk.attach_input(torch_tensor=query_states_torch, name="query_states")
+        key_states = mpk.attach_input(torch_tensor=key_states_torch, name="key_states")
+        
+        # print(query_states_torch.dim, key_states_torch.dim)
+        # todo 合并两个norm
+        mpk.rmsnorm_layer(
+            input=query_states,
+            weight=w_q_norm,
+            output=query_states,
+            sync_mode=(0, 0, 0),
+            layout=Qwen3MegaConfig.q_norm_layout,
+        )
+        mpk.rmsnorm_layer(
+            input=key_states,
+            weight=w_k_norm,
+            output=key_states,
+            sync_mode=(0, 0, 0),
+            layout=Qwen3MegaConfig.k_norm_layout,
+        )
     
     # rope
     q_4dim_torch = query_states_torch.view(batch, seqlen_q, num_heads, head_dim)
