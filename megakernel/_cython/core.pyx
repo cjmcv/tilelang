@@ -61,28 +61,12 @@ cdef extern from "megakernel/type.h" namespace "megakernel::type":
         KN_UNKOWN = 1000,
         KN_INPUT_OP = 1001,
         KN_CUSTOMIZED_OP = 1999,
-    cdef enum TBOperatorType:
-        TB_UNKOWN = 2000,
-        TB_INPUT_OP = 2001,
-        TB_CUSTOMIZED_OP = 2999
-
-cdef extern from "megakernel/layout.h" namespace "megakernel::layout":
-    # This must be consistent with megakernel/layout.h
-    cdef enum DmemLayout:
-        DmemRowMajor = 100,
-        DmemColumnMajor = 101,
-        DmemUnknownLayout = 199,
-    cdef enum SmemLayout:
-        SmemRowMajor = 200,
-        SmemColumnMajor = 201,
-        SmemUnknownLayout = 299
 
 # cdef cppclass CppTBGraph "megakernel::threadblock::Graph"
 
 cdef extern from "megakernel/kernel/device_tensor.h" namespace "megakernel::kernel":
     cdef struct CppDTensor "megakernel::kernel::DTensor":
         DataType data_type
-        DmemLayout layout
         int num_dims
         int dim[4]
         size_t guid
@@ -111,8 +95,7 @@ cdef extern from "megakernel/kernel/graph.h" namespace "megakernel::kernel":
         CppKNGraph(dim3 gpu_dim)
         CppDTensor* new_input_ptr(vector[int] dims,
                                   vector[size_t] strides,
-                                  DataType data_type,
-                                  DmemLayout layout)
+                                  DataType data_type)
         int customized(vector[const CppDTensor*] inputs,
                        CppDTensor** outputs,
                        CppTBGraph* bgraph)
@@ -134,22 +117,17 @@ cdef extern from "megakernel/kernel/graph.h" namespace "megakernel::kernel":
 cdef extern from "megakernel/threadblock/graph.h" namespace "megakernel::threadblock":
     ctypedef struct CppSTensor "megakernel::threadblock::STensor":
         DataType data_type
-        SmemLayout layout
         int num_dims
         int dim[4]
         int owner_ts_idx
         size_t guid
     
     cdef cppclass CppTBOperator "megakernel::threadblock::TBOperator":
-        TBOperatorType op_type
         vector[CppSTensor] input_tensors
         vector[CppSTensor] output_tensors
-        int get_input_stensors(CppSTensor** cinputs)
-        int get_output_stensors(CppSTensor** cinputs)
 
     cdef cppclass CppTBInputOp "megakernel::threadblock::TBInputOp"(CppTBOperator):
         int3 input_map
-        size_t get_dtensor_guid()
 
     cdef cppclass CppTBGraph "megakernel::threadblock::Graph":
         CppTBGraph(dim3 grid_dim,
@@ -159,7 +137,6 @@ cdef extern from "megakernel/threadblock/graph.h" namespace "megakernel::threadb
 
         CppSTensor* new_input(const CppDTensor* dtensor,
                              int3 input_map,
-                             SmemLayout layout,
                              bool store_in_dmem)
 
         dim3 grid_dim
@@ -256,17 +233,6 @@ def get_kn_operator_type_string(int op_type):
         return "kn_input_op"
     elif op_type == KN_CUSTOMIZED_OP:
         return "kn_customized_op"
-    else:
-        return "unknown_op_type" + str(op_type)
-
-
-def get_tb_operator_type_string(int op_type):
-    if op_type == TB_UNKOWN:
-        return "tb_unknown"
-    elif op_type == TB_INPUT_OP:
-        return "tb_input_op"
-    elif op_type == TB_CUSTOMIZED_OP:
-        return "tb_customized_op"
     else:
         return "unknown_op_type" + str(op_type)
 
@@ -468,31 +434,6 @@ cdef class CyTBOperator:
             ptr = ctypes.cast(op, ctypes.c_void_p).value
             self.c_ptr = <CppTBOperator*>(ptr)
 
-    def get_input_stensors(self):
-        cdef CppSTensor* cinputs[1024]
-        num = self.c_ptr.get_input_stensors(cinputs)
-        inputs = list()
-        for i in range(num):
-            ptr = ctypes.cast(<unsigned long long>cinputs[i], ctypes.c_void_p)
-            inputs.append(STensor(ptr))
-        return inputs
-
-    def get_output_stensors(self):
-        cdef CppSTensor* coutputs[1024]
-        num = self.c_ptr.get_output_stensors(coutputs)
-        outputs = list()
-        for i in range(num):
-            ptr = ctypes.cast(<unsigned long long>coutputs[i], ctypes.c_void_p)
-            outputs.append(STensor(ptr))
-        return outputs
-
-    property op_type:
-        def __get__(self):
-            if self.c_ptr == NULL:
-                return None
-            else:
-                return get_tb_operator_type_string(int(self.c_ptr.op_type))
-
     def __cinit__(self, op):
         self._set_operator(op)
 
@@ -522,7 +463,7 @@ cdef class CyKNGraph:
             cstrides[i] = strides[i]
 
         c_type = convert_dtype_to_ctype(dtype)
-        cdef CppDTensor* ptr = self.p_kgraph.new_input_ptr(cdims, cstrides, c_type, DmemRowMajor)
+        cdef CppDTensor* ptr = self.p_kgraph.new_input_ptr(cdims, cstrides, c_type)
         t = ctypes.cast(<unsigned long long>ptr, ctypes.c_void_p)
         return DTensor(t)
 
@@ -627,7 +568,7 @@ cdef class CyTBGraph:
         cdef CppDTensor* dtensor_cptr = NULL
         if dtensor is not None:
             dtensor_cptr = dtensor.c_ptr
-        cdef CppSTensor* ptr = self.p_bgraph.new_input(dtensor_cptr, c_input_map, SmemRowMajor, store_in_dmem)
+        cdef CppSTensor* ptr = self.p_bgraph.new_input(dtensor_cptr, c_input_map, store_in_dmem)
         t = ctypes.cast(<unsigned long long>ptr, ctypes.c_void_p)
         return STensor(t)
 

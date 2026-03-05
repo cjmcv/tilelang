@@ -16,7 +16,7 @@
 #pragma once
 
 #include "cutlass/cutlass.h"
-#include "megakernel/layout.h"
+// #include "megakernel/layout.h"
 #include "megakernel/type.h"
 // #include "megakernel/utils/json_utils.h"
 #include <atomic>
@@ -53,9 +53,6 @@ struct alignas(16) STensor {
     if (data_type != b.data_type) {
       return false;
     }
-    if (layout != b.layout) {
-      return false;
-    }
     if (num_dims != b.num_dims) {
       return false;
     }
@@ -84,9 +81,6 @@ struct alignas(16) STensor {
     // Note that we don't check after_accum
     // when comparing two stensors
     if (data_type != b.data_type) {
-      return true;
-    }
-    if (layout != b.layout) {
       return true;
     }
     if (num_dims != b.num_dims) {
@@ -165,7 +159,6 @@ struct alignas(16) STensor {
   }
 
   megakernel::type::DataType data_type;
-  megakernel::layout::SmemLayout layout;
   int num_dims;
   int dim[MAX_TENSOR_DIMS];
   type::GuidType guid;
@@ -191,7 +184,7 @@ struct alignas(16) STensor {
 inline std::atomic<int64_t> STensor::next_guid = 20000000;
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(
-    STensor, data_type, layout, num_dims, dim, smem_offset, guid, after_accum);
+    STensor, data_type, num_dims, dim, smem_offset, guid, after_accum);
 
 } // namespace threadblock
 } // namespace megakernel

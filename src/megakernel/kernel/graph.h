@@ -94,9 +94,8 @@ public:
   // input operator
   DTensor new_input(std::vector<int> const &dims,
                     std::vector<size_t> const &strides,
-                    megakernel::type::DataType data_type,
-                    megakernel::layout::DmemLayout layout) {
-    KNInputOp *op = new KNInputOp(dims, strides, data_type, layout);
+                    megakernel::type::DataType data_type) {
+    KNInputOp *op = new KNInputOp(dims, strides, data_type);
     assert(op != nullptr);
     std::vector<DTensor>& output_tensors = op->get_output_dtensors();
     for (int i=0; i<output_tensors.size(); i++) {
@@ -107,14 +106,13 @@ public:
   }
   DTensor *new_input_ptr(std::vector<int> const &dims,
                          std::vector<size_t> const &strides,
-                         megakernel::type::DataType data_type,
-                         megakernel::layout::DmemLayout layout) {
-    KNInputOp *op = new KNInputOp(dims, strides, data_type, layout);
+                         megakernel::type::DataType data_type) {
+    KNInputOp *op = new KNInputOp(dims, strides, data_type);
     assert(op != nullptr);
     std::vector<DTensor>& output_tensors = op->get_output_dtensors();
     for (int i=0; i<output_tensors.size(); i++) {
       this->allocate(output_tensors[i]);
-    }
+    } 
     operators.push_back(op);
     return &op->output_tensors[0];
   }
@@ -149,12 +147,10 @@ public:
     {
       int num_inputs = 0;
       for (auto const &op : _graph.operators) {
-        if (op->op_type == megakernel::type::TB_INPUT_OP) {
-          megakernel::threadblock::TBInputOp const *input_op =
-              static_cast<megakernel::threadblock::TBInputOp const *>(op);
-          assert(inputs[num_inputs] == input_op->dtensor);
-          num_inputs++;
-        }
+        megakernel::threadblock::TBInputOp const *input_op =
+            static_cast<megakernel::threadblock::TBInputOp const *>(op);
+        assert(inputs[num_inputs] == input_op->dtensor);
+        num_inputs++;
       }
       assert(num_inputs == (int)inputs.size());
     }
@@ -589,7 +585,6 @@ private:
       int variant_id = std::get<3>(task_config);
       assert(bgraph.operators.size() == (size_t)num_inputs + num_outputs);
       for (auto const &op : bgraph.operators) {
-        assert(op->op_type == megakernel::type::TB_INPUT_OP);
         if (input_ops.size() < (size_t)num_inputs) {
           input_ops.push_back(static_cast<tb::TBInputOp *>(op));
         } else {
@@ -1035,7 +1030,6 @@ private:
       // int num_outputs = std::get<1>(task_config);
       TaskType task_type = std::get<2>(task_config);
       for (auto const &op : bgraph.operators) {
-        assert(op->op_type == megakernel::type::TB_INPUT_OP);
         if (input_ops.size() < (size_t)num_inputs) {
           input_ops.push_back(static_cast<tb::TBInputOp *>(op));
         } else {

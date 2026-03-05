@@ -46,7 +46,6 @@ public:
     int num_outputs = 2;
     assert(bgraph.operators.size() == (size_t)num_inputs + num_outputs);
     for (auto const &op : bgraph.operators) {
-      assert(op->op_type == megakernel::type::TB_INPUT_OP);
       if (input_ops.size() < (size_t)num_inputs) {
         input_ops.push_back(static_cast<tb::TBInputOp *>(op));
       } else {
@@ -89,7 +88,6 @@ public:
     int num_outputs = 3;
     assert(bgraph.operators.size() == (size_t)num_inputs + num_outputs);
     for (auto const &op : bgraph.operators) {
-      assert(op->op_type == megakernel::type::TB_INPUT_OP);
       if (input_ops.size() < (size_t)num_inputs) {
         input_ops.push_back(static_cast<tb::TBInputOp *>(op));
       } else {
@@ -133,7 +131,6 @@ public:
 
     assert(bgraph.operators.size() == (size_t)num_inputs + num_outputs);
     for (auto const &op : bgraph.operators) {
-      assert(op->op_type == megakernel::type::TB_INPUT_OP);
       if (input_ops.size() < (size_t)num_inputs) {
         input_ops.push_back(static_cast<tb::TBInputOp *>(op));
       } else {
@@ -171,7 +168,6 @@ public:
 
     assert(bgraph.operators.size() == (size_t)num_inputs + num_outputs);
     for (auto const &op : bgraph.operators) {
-      assert(op->op_type == megakernel::type::TB_INPUT_OP);
       if (input_ops.size() < (size_t)num_inputs) {
         input_ops.push_back(static_cast<tb::TBInputOp *>(op));
       } else {
@@ -215,7 +211,6 @@ public:
 
     assert(bgraph.operators.size() == (size_t)num_inputs + num_outputs);
     for (auto const &op : bgraph.operators) {
-      assert(op->op_type == megakernel::type::TB_INPUT_OP);
       if (input_ops.size() < (size_t)num_inputs) {
         input_ops.push_back(static_cast<tb::TBInputOp *>(op));
       } else {
@@ -279,7 +274,6 @@ public:
     int num_outputs = 1;
     assert(bgraph.operators.size() == (size_t)num_inputs + num_outputs);
     for (auto const &op : bgraph.operators) {
-      assert(op->op_type == megakernel::type::TB_INPUT_OP);
       if (input_ops.size() < (size_t)num_inputs) {
         input_ops.push_back(static_cast<tb::TBInputOp *>(op));
       } else {
@@ -325,7 +319,6 @@ public:
 
     assert(bgraph.operators.size() == (size_t)num_inputs + num_outputs);
     for (auto const &op : bgraph.operators) {
-      assert(op->op_type == megakernel::type::TB_INPUT_OP);
       if (input_ops.size() < (size_t)num_inputs) {
         input_ops.push_back(static_cast<tb::TBInputOp *>(op));
       } else {
@@ -371,7 +364,6 @@ public:
 
     assert(bgraph.operators.size() == (size_t)num_inputs + num_outputs);
     for (auto const &op : bgraph.operators) {
-      assert(op->op_type == megakernel::type::TB_INPUT_OP);
       if (input_ops.size() < (size_t)num_inputs) {
         input_ops.push_back(static_cast<tb::TBInputOp *>(op));
       } else {

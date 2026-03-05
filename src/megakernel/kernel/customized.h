@@ -56,22 +56,14 @@ public:
         my_inputs.push_back(bgraph.operators[op_idx]->output_tensors[ts_idx]);
         indices.push_back({op_idx, ts_idx});
       }
-      switch (op->op_type) {
-        case megakernel::type::TB_INPUT_OP: {
-          assert(my_inputs.size() == 0);
-          megakernel::threadblock::TBInputOp *input_op =
-              static_cast<megakernel::threadblock::TBInputOp *>(op);
-          DTensor const &dtensor = _inputs[input_idx++];
-          bgraph.new_input(dtensor,
-                          input_op->input_map,
-                          input_op->output_tensors[0].layout,
-                          input_op->output_tensors[0].store_in_dmem);
-          break;
-        }
-        default: {
-          assert(false && "Unsupported threadblock operator");
-        }
-      }
+
+      assert(my_inputs.size() == 0);
+      megakernel::threadblock::TBInputOp *input_op =
+          static_cast<megakernel::threadblock::TBInputOp *>(op);
+      DTensor const &dtensor = _inputs[input_idx++];
+      bgraph.new_input(dtensor,
+                      input_op->input_map,
+                      input_op->output_tensors[0].store_in_dmem);
     }
   }
   virtual ~KNCustomizedOp() { // CJM

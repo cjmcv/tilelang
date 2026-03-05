@@ -55,10 +55,9 @@ public:
 
   STensor new_input(megakernel::kernel::DTensor const &dtensor,
                     int3 input_map,
-                    megakernel::layout::SmemLayout layout,
                     bool store_in_dmem = false) {
     TBOperator *op =
-        create_input_op(dtensor, input_map, layout, store_in_dmem);
+        create_input_op(dtensor, input_map,  store_in_dmem);
     assert(op != nullptr);
     operators.push_back(op);
     return op->output_tensors[0];
@@ -66,12 +65,10 @@ public:
                     
   STensor *new_input(megakernel::kernel::DTensor const *dtensor,
                      int3 input_map,
-                     megakernel::layout::SmemLayout layout,
                      bool store_in_dmem = false){
     TBOperator *op = create_input_op(
         dtensor == nullptr ? kernel::DTensor::EMPTY_TENSOR : *dtensor,
         input_map,
-        layout,
         store_in_dmem);
     assert(op != nullptr);
     operators.push_back(op);
@@ -79,10 +76,9 @@ public:
   }
   TBOperator *create_input_op(megakernel::kernel::DTensor const &dtensor,
                               int3 input_map,
-                              megakernel::layout::SmemLayout layout,
                               bool store_in_dmem = false){
     TBInputOp *op = new TBInputOp(
-      grid_dim, smem_offset, dtensor, input_map, layout, store_in_dmem);
+      grid_dim, smem_offset, dtensor, input_map, store_in_dmem);
     return op;
   }
 

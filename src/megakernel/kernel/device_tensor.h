@@ -16,7 +16,7 @@
 #pragma once
 
 #include "megakernel/config.h"
-#include "megakernel/layout.h"
+// #include "megakernel/layout.h"
 #include "megakernel/type.h"
 #include <atomic>
 #include <cstddef>
@@ -30,7 +30,6 @@ class KNOperator;
 struct alignas(16) DTensor {
   DTensor(void) {
     data_type = megakernel::type::DT_UNKNOWN;
-    layout = megakernel::layout::DmemUnknownLayout;
     num_dims = 0;
     for (int i = 0; i < megakernel::config::MAX_TENSOR_DIMS; i++) {
       dim[i] = 0;
@@ -42,9 +41,6 @@ struct alignas(16) DTensor {
   }
   inline bool operator==(DTensor const &b) const {
     if (data_type != b.data_type) {
-      return false;
-    }
-    if (layout != b.layout) {
       return false;
     }
     if (num_dims != b.num_dims) {
@@ -69,9 +65,6 @@ struct alignas(16) DTensor {
   }
   inline bool operator!=(DTensor const &b) const {
     if (data_type != b.data_type) {
-      return true;
-    }
-    if (layout != b.layout) {
       return true;
     }
     if (num_dims != b.num_dims) {
@@ -113,7 +106,6 @@ struct alignas(16) DTensor {
 
 public:
   megakernel::type::DataType data_type;
-  megakernel::layout::DmemLayout layout;
   int num_dims;
   int dim[megakernel::config::MAX_TENSOR_DIMS];
   type::GuidType guid;
@@ -130,7 +122,7 @@ inline const DTensor DTensor::EMPTY_TENSOR = {/*zero-initialization*/};
 inline std::atomic<int64_t> DTensor::next_guid = 10000000;
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(
-    DTensor, data_type, layout, num_dims, dim, guid)
+    DTensor, data_type, num_dims, dim, guid)
 
 } // namespace kernel
 } // namespace megakernel

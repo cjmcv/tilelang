@@ -42,7 +42,7 @@ public:
       input_tensors.push_back(i);
     }
   }
-  
+
   int get_output_dtensors(DTensor **outputs) {
     for (size_t i = 0; i < output_tensors.size(); ++i) {
       outputs[i] = &output_tensors[i];
@@ -66,7 +66,6 @@ public:
   KNInputOp(std::vector<int> const &dims,
             std::vector<size_t> const &strides,
             megakernel::type::DataType data_type,
-            megakernel::layout::DmemLayout layout,
             int3 _input_map = {-1, -1, -1})
       : KNOperator(megakernel::type::KN_INPUT_OP), input_strides(strides),
     input_map(_input_map) {
@@ -77,7 +76,6 @@ public:
       tensor.dim[i] = dims[i];
     }
     tensor.data_type = data_type;
-    tensor.layout = layout;
     tensor.owner_op = this;
     tensor.owner_ts_idx = 0;
     tensor.guid = DTensor::next_guid++;

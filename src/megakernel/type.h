@@ -109,20 +109,6 @@ NLOHMANN_JSON_SERIALIZE_ENUM(KNOperatorType,
                                  {KN_CUSTOMIZED_OP, "kn_customized_op"},
                              })
 
-enum TBOperatorType {
-  TB_UNKOWN = 2000,
-  TB_INPUT_OP = 2001,
-  TB_CUSTOMIZED_OP = 2999
-};
-
-NLOHMANN_JSON_SERIALIZE_ENUM(
-    TBOperatorType,
-    {
-        {TB_UNKOWN, "tb_unkown"},
-        {TB_INPUT_OP, "tb_input_op"},
-        {TB_CUSTOMIZED_OP, "tb_customized_op"},
-    })
-
 } // namespace type
 } // namespace megakernel
 
