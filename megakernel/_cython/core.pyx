@@ -128,14 +128,6 @@ cdef extern from "megakernel/kernel/graph.h" namespace "megakernel::kernel":
                                 const char *name)
         void attach_nvshmem_tensor(const CppDTensor *input,
                                    const char *name)
-        CppDTensor* fuse_tensors(vector[const CppDTensor*] inputs,
-                                 int fused_dim,
-                                 int num_groups,
-                                 const char *name)
-        CppDTensor* shuffle_tensors(vector[const CppDTensor*] inputs,
-                                 int shuffled_dim,
-                                 int num_groups,
-                                 const char *name)
         void register_task(const char *task_type,
                            vector[int] params)
         TaskGraphResult generate_task_graph(int num_gpus, int my_gpu_id)
@@ -752,39 +744,6 @@ cdef class CyKNGraph:
             py_byte_string = name.encode('UTF-8')
             cname = py_byte_string
         self.p_kgraph.attach_nvshmem_tensor(tensor.c_ptr, cname)
-
-    def fuse_tensors(self, list[DTensor] inputs, int fused_dim, int num_groups, str name):
-        cdef vector[const CppDTensor*] cinputs
-        cinputs.resize(len(inputs))
-        cdef DTensor t
-        for i in range(len(inputs)):
-            assert(type(inputs[i]) == DTensor)
-            t = inputs[i]
-            cinputs[i] = t.c_ptr
-        cdef char* cname = NULL
-        if name is not None:
-            py_byte_string = name.encode('UTF-8')
-            cname = py_byte_string
-        cdef CppDTensor* ptr = self.p_kgraph.fuse_tensors(cinputs, fused_dim, num_groups, cname)
-        output = ctypes.cast(<unsigned long long>ptr, ctypes.c_void_p)
-        return DTensor(output)
-
-    def shuffle_tensors(self, list[DTensor] inputs, int shuffled_dim, int num_groups, str name):
-        cdef vector[const CppDTensor*] cinputs
-        cinputs.resize(len(inputs))
-        cdef DTensor t
-        for i in range(len(inputs)):
-            assert(type(inputs[i]) == DTensor)
-            t = inputs[i]
-            cinputs[i] = t.c_ptr
-        cdef char* cname = NULL
-        if name is not None:
-            py_byte_string = name.encode('UTF-8')
-            cname = py_byte_string
-        cdef CppDTensor* ptr = self.p_kgraph.shuffle_tensors(cinputs, shuffled_dim, num_groups, cname)
-        output = ctypes.cast(<unsigned long long>ptr, ctypes.c_void_p)
-        return DTensor(output)
-
 
     def register_task(self, CyTBGraph bgraph, str task_type, list[int] params):
         cdef char* cname = NULL
