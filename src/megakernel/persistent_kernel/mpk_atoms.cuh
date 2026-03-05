@@ -14,14 +14,6 @@
  */
 #pragma once
 
-__device__ __forceinline__ int atom_add_release_gpu_s32(int *addr, int val) {
-  int old_val;
-  asm volatile("atom.add.release.gpu.s32 %0,[%1],%2;"
-               : "=r"(old_val)
-               : "l"(addr), "r"(val)
-               : "memory");
-  return old_val;
-}
 
 __device__ __forceinline__ unsigned long long int
     atom_add_release_gpu_u64(unsigned long long int *addr,
