@@ -4,8 +4,6 @@ import os
 from typing import *
 
 from .core import *
-from .threadblock import *
-from .visualizer.kernel_visualizer import *
 from .utils import *
 
 MAX_THREADS = os.cpu_count()
@@ -44,60 +42,18 @@ def get_key_paths():
 
     return MEGAKERNEL_ROOT, INCLUDE_PATH, DEPS_PATH
 
+class TBGraph:
+    def __init__(self, graph):
+        self.cygraph = graph
 
-def get_cc_cmd(
-    target, cc, FILE_NAME, py_include_dir, INCLUDE_PATH, DEPS_PATH, so_path, profiling
-):
-    common_cmd = [
-        cc,
-        FILE_NAME,
-        "-O3",
-        f"-I{py_include_dir}",
-        f"-I{os.path.join(DEPS_PATH, 'cutlass/include')}",
-        "-DMEGAKERNEL_BACKEND_USE_CUDA",
-        "-shared",
-        "-std=c++17",
-        "-use_fast_math",
-        "-lcublas",
-        "-Xcompiler=-fPIC",
-        "--expt-relaxed-constexpr",
-        "-o",
-        so_path,
-    ]
-
-    if target == 90:
-        specific_cmd = [
-            "-arch=sm_90a",
-            "-gencode=arch=compute_90a,code=sm_90a",
-        ] + (["-DMEGAKERNEL_ENABLE_PROFILER"] if profiling else [])
-    elif target == 100:
-        specific_cmd = [
-            "-arch=sm_100a",
-            "-gencode=arch=compute_100a,code=sm_100a",
-        ] + (["-DMEGAKERNEL_ENABLE_PROFILER"] if profiling else [])
-    else:
-        specific_cmd = [
-            "-arch=native",
-        ] + (["-DMEGAKERNEL_ENABLE_PROFILER"] if profiling else [])
-
-    return common_cmd[:6] + specific_cmd + common_cmd[6:]
-
-
-def check_stride(dims, strides, layout="row-major"):
-    curr_stride = 1
-    if layout == "row-major":
-        for i in range(len(dims) - 1, -1, -1):
-            if strides[i] != curr_stride:
-                return False
-            curr_stride *= dims[i]
-    elif layout == "column-major":
-        for i in range(len(dims)):
-            if strides[i] != curr_stride:
-                return False
-            curr_stride *= dims[i]
-    else:
-        raise ValueError(f"Unsupported layout: {layout}")
-    return True
+    def new_input(
+        self,
+        dtensor: DTensor,
+        input_map: tuple,
+        store_in_dmem: bool = False,
+    ):
+        return self.cygraph.new_input(dtensor, input_map, store_in_dmem)
+    
 class KNGraph:
     def __init__(self, graph):
         self.cygraph = graph
@@ -123,27 +79,11 @@ class KNGraph:
             strides = reversed(strides)
         else:
             assert len(dims) == len(strides)
-            # assert check_stride(dims, strides, "row-major") | check_stride(
-            #     dims, strides, "column-major"
-            # )
+
         return self.cygraph.new_input(dims, tuple(strides), dtype)
 
     def customized(self, inputs: list[DTensor], bgraph: TBGraph) -> list[DTensor]:
         return self.cygraph.customized(inputs, bgraph.cygraph)
-
-    def valid_kernels(self):
-        assert self._is_compiled, "Should check kernel validness after compilation"
-        return self._valid_cuda_kernels
-
-    def get_error_message(self):
-        assert self._is_compiled, "Should check error message after compilation"
-        return self._error_message
-
-
-    def visualize(self, file_name):
-        operators = self.cygraph.get_graph_structure()
-        self.visualizer = visualizer(file_name)
-        self.visualizer.draw_graphs(operators)
 
     # Persistent Kernel functions
     def attach_torch_tensor(self, t: DTensor, torch_tensor: torch.Tensor, name: str):

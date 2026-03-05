@@ -42,13 +42,6 @@ public:
       input_tensors.push_back(i);
     }
   }
-
-  int get_input_dtensors(DTensor **inputs) {
-    for (size_t i = 0; i < input_tensors.size(); ++i) {
-      inputs[i] = &input_tensors[i];
-    }
-    return input_tensors.size();
-  }
   
   int get_output_dtensors(DTensor **outputs) {
     for (size_t i = 0; i < output_tensors.size(); ++i) {

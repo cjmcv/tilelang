@@ -8,7 +8,7 @@ import sysconfig
 
 from .core import *
 from .kernel import get_key_paths, KNGraph, TBGraph
-from .visualizer.task_graph_visualizer import display_task_graph
+from .task_graph_visualizer import display_task_graph
 
 
 INSTANCE_REUSE_PLUGIN = """
@@ -576,7 +576,7 @@ class PersistentKernel:
 
         cuda_code_path = os.path.join(output_dir, "test.cu")
         so_path = os.path.join(output_dir, "test.cpython-38-x86_64-linux-gnu.so")
-        self.kn_graph.visualize(os.path.join(output_dir, "kn_graph"))
+        # self.kn_graph.visualize(os.path.join(output_dir, "kn_graph"))
         
         # if (kernel_id == 1) {
         if 1:

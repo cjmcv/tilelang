@@ -176,48 +176,6 @@ public:
     io_config.emplace(input->guid, IODesc(IODesc::NVSHMEMMallocTensor, std::string(name), *input));
   }
 
-  // helper functions
-  int get_num_input_dtensors() const {
-    int num_inputs = 0;
-    for (auto const &op : this->operators) {
-      if (op->op_type == megakernel::type::KN_INPUT_OP) {
-        num_inputs++;
-      }
-    }
-    return num_inputs;
-  }
-  // int get_num_output_dtensors() const;
-  int get_input_dtensors(DTensor **inputs) const {
-    int num_inputs = 0;
-    for (auto const &op : this->operators) {
-      if (op->op_type == megakernel::type::KN_INPUT_OP) {
-        assert(op->output_tensors.size() == 1);
-        inputs[num_inputs++] = &op->output_tensors[0];
-      }
-    }
-    return num_inputs;
-  }
-
-  int get_input_dtensor_shape_and_stride(DTensor const *input,
-                                         int *strides,
-                                         int *dims) const{
-    for (auto const &op : this->operators) {
-      if (op == input->owner_op) {
-        assert(op->op_type == megakernel::type::KN_INPUT_OP &&
-                "input is not an KNInputOp");
-        KNInputOp *input_op = static_cast<KNInputOp *>(op);
-        int num_dims = (int)input_op->input_strides.size();
-        for (int i = 0; i < num_dims; i++) {
-          strides[i] = input_op->input_strides[i];
-          dims[i] = input->dim[i];
-        }
-        return num_dims;
-      }
-    }
-    assert(false && "Cannot find input dtensor");
-    return 0;
-  }
-
   bool allocate(DTensor &tensor) {
     // assert that the start of the tensor is 16 bytes aligned
     assert(dmem_data_offset % 16 == 0);

@@ -83,60 +83,7 @@ public:
                               bool store_in_dmem = false){
     TBInputOp *op = new TBInputOp(
       grid_dim, smem_offset, dtensor, input_map, layout, store_in_dmem);
-
-    // Check shmem usage
-    size_t smem_usage = calculate_shared_memory_usage(op);
-    if (smem_usage > megakernel::config::MAX_SMEM_SIZE) {
-      delete op;
-      return nullptr;
-    } else {
-      return op;
-    }
-  }
-
-  size_t calculate_shared_memory_usage(TBOperator *new_op) {
-    size_t usage = 0;
-    if (new_op != nullptr) {
-      operators.push_back(new_op);
-    }
-  
-    // currently use a simple heuristic to calculate shmem usage
-    // TODO: replace the following with a transpiler-based method
-    for (auto const &op : operators) {
-      // printf("op->op_type: %d.\n", op->op_type);
-      switch (op->op_type) {
-        case megakernel::type::TB_INPUT_OP: {
-          for (size_t i = 0; i < op->output_tensors.size(); i++) {
-            // Do not store in smem when store_in_demm is set
-            if (op->output_tensors[i].store_in_dmem) {
-              continue;
-            }
-            usage += op->output_tensors[i].size();
-          }
-          break;
-        }
-        default: {
-          assert(false && "Unsupported operator");
-        }
-      }
-    }
-  
-    if (new_op != nullptr) {
-      operators.pop_back();
-    }
-    return usage;
-  }
-
-  int get_smem_size_with_pipeline() const {
-    int ret = smem_offset;
-    // For pipelining, we use double buffers for all input loaders
-    for (size_t i = 0; i < operators.size(); i++) {
-      if (operators[i]->op_type == megakernel::type::TB_INPUT_OP) {
-        STensor stensor = operators[i]->output_tensors[0];
-        ret += stensor.size();
-      }
-    }
-    return ret;
+    return op;
   }
 
 public:
