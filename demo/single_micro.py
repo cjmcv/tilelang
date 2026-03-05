@@ -16,6 +16,7 @@ from common.micro_rmsnorm import MicroRmsNorm
 from common.micro_silu_mul import MicroSiluMul
 from common.micro_gqa_decode import MicroGqaDecode
 from common.micro_rope import MicroRope
+from common.micro_copy import MicroCopy
 
 from common.micro_autogen import MicroAutoGen
 
@@ -25,18 +26,18 @@ def profile(target_func, torch_ref_func):
                             warnup_iter=100, test_iter=500, 
                             allclose_iter=5, print_mode=0)
     
-# def test_copy():
-#     M, N = 32, 9728
-#     micro = MicroCopy(M,N, dtype=T.bfloat16, accum_dtype=T.float32)
-#     kernel, name, info  = micro.get_kernel(HparamSelectMode.HEURISTIC) # HEURISTIC, TUNING, TUNED
+def test_copy():
+    size = 128*
+    micro = MicroCopy(M,N, dtype=T.bfloat16, accum_dtype=T.float32)
+    kernel, name, info  = micro.get_kernel(HparamSelectMode.HEURISTIC) # HEURISTIC, TUNING, TUNED
 
-#     test_data = micro.gen_test_data(kernel.config)
+    test_data = micro.gen_test_data(kernel.config)
     
-#     def target_func():
-#         return kernel(*test_data)
-#     def torch_ref():
-#         return TorchRef.silu_and_mul(*test_data)
-#     profile(target_func, torch_ref)
+    def target_func():
+        return kernel(*test_data)
+    def torch_ref():
+        return TorchRef.silu_and_mul(*test_data)
+    profile(target_func, torch_ref)
     
 def test_silu_mul():
     M, N = 32, 9728
@@ -210,7 +211,7 @@ def test_rope(num_heads, num_kv_heads, head_dim):
 if __name__ == "__main__":
     hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim = Qwen3Info.get_basic_params(4)  
     
-    # test_copy()
+    test_copy()
     
     # test_silu_mul()
     # test_rms_norm()
@@ -222,8 +223,8 @@ if __name__ == "__main__":
     # test_gqa_decode(num_heads, num_kv_heads, head_dim)
     # test_rope(num_heads, num_kv_heads, head_dim)
 
-    gen = MicroAutoGen(batch_size=1, hidden_size=hidden_size, intermediate_size=intermediate_size, 
-                       max_kv_seqlen=8192, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim)
-    gen.gen_qwen3_ops(layer_id=99, mode=HparamSelectMode.TUNED) # HEURISTIC, TUNING, TUNED
+    # gen = MicroAutoGen(batch_size=1, hidden_size=hidden_size, intermediate_size=intermediate_size, 
+    #                    max_kv_seqlen=8192, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim)
+    # gen.gen_qwen3_ops(layer_id=99, mode=HparamSelectMode.TUNED) # HEURISTIC, TUNING, TUNED
     # print(">> Finish gen_qwen3_ops.")
     # print("Test single_micro completed.")

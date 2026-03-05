@@ -146,7 +146,6 @@ if __name__ == "__main__":
         key_states = mpk.attach_input(torch_tensor=key_states_torch, name="key_states")
         
         # print(query_states_torch.dim, key_states_torch.dim)
-        # todo 合并两个norm
         mpk.rmsnorm_layer(
             input=query_states,
             weight=w_q_norm,

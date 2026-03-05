@@ -5,6 +5,7 @@ import tilelang.language as T
 
 from common.micro_base import BaseMicroKernel, HparamSelectMode
     
+# 与通信公用一个类
 class _CopyStrategy:
     def __init__(self, M, N, dtype, accum_dtype):
         self.name = "copy_tl"+f"_{M}_{N}"
@@ -50,7 +51,7 @@ class _CopyStrategy:
     @tilelang.jit(out_idx=[-1])
     def kernel_main(M, N, BLOCK_M, BLOCK_N, threads, dtype="bfloat16", accum_dtype="float32"):
         @T.prim_func
-        def silu_mul(
+        def copy(
             A: T.Tensor((M, N*2), dtype),
             C: T.Tensor((M, N), dtype),
         ):
@@ -67,7 +68,7 @@ class _CopyStrategy:
                 T.copy(A[by * BLOCK_M:(by + 1) * BLOCK_M,
                         (bx + n_block_num) * BLOCK_N:(bx + n_block_num + 1) * BLOCK_N], B_sh)
 
-                # silu_mul for each element
+                # copy for each element
                 for i, j in T.Parallel(BLOCK_M, BLOCK_N):
                     xi = A_sh[i, j].astype(accum_dtype)      # 先转 fp32 求 sigmoid 更稳
                     sig = 1.0 / (1.0 + T.exp(-xi))           # sigmoid
@@ -77,7 +78,7 @@ class _CopyStrategy:
                 T.copy(C_sh, C[by * BLOCK_M:(by + 1) * BLOCK_M,
                             bx * BLOCK_N:(bx + 1) * BLOCK_N])
 
-        return silu_mul
+        return copy
     
 class MicroCopy(BaseMicroKernel):
     def __init__(self, M, N, dtype=T.bfloat16, accum_dtype=T.float32):
@@ -96,10 +97,11 @@ template <typename T,
           int N,
           int I_STRIDE,
           int O_STRIDE>
-__device__ __forceinline__ void silu_mul_kernel_<name_suffix>(const int bx, const int by, const int bz,
+__device__ __forceinline__ void copy_kernel_<name_suffix>(const int bx, const int by, const int bz,
                                                    void const *input_ptr,
                                                    void *output_ptr,
-                                                   int num_active_tokens) {
+                                                   int size,
+                                                   int step) {
   static_assert(THREAD_NUM==<threads>);
   static_assert(TILE_DIM_X==<BLOCK_N>); static_assert(TILE_DIM_Y==<BLOCK_M>); static_assert(TILE_DIM_Z==<BLOCK_K>);
   static_assert(M==<M>); static_assert(N==<N>);
