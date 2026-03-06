@@ -89,7 +89,6 @@ cdef extern from "megakernel/kernel/graph.h" namespace "megakernel::kernel":
  
     cdef cppclass CppKNCustomizedOp "megakernel::kernel::KNCustomizedOp"(CppKNOperator):
         CppTBGraph bgraph
-        void get_bgraph(CppTBGraph** bgraph)
 
     cdef cppclass CppKNGraph "megakernel::kernel::Graph":
         CppKNGraph(dim3 gpu_dim)
@@ -126,14 +125,10 @@ cdef extern from "megakernel/threadblock/graph.h" namespace "megakernel::threadb
         vector[CppSTensor] input_tensors
         vector[CppSTensor] output_tensors
 
-    cdef cppclass CppTBInputOp "megakernel::threadblock::TBInputOp"(CppTBOperator):
-        int3 input_map
-
     cdef cppclass CppTBGraph "megakernel::threadblock::Graph":
         CppTBGraph(dim3 grid_dim,
                    dim3 block_dim,
-                   int thread_num,
-                   int reduction_dimx)
+                   int thread_num)
 
         CppSTensor* new_input(const CppDTensor* dtensor,
                              int3 input_map,
@@ -142,7 +137,6 @@ cdef extern from "megakernel/threadblock/graph.h" namespace "megakernel::threadb
         dim3 grid_dim
         dim3 block_dim
         int thread_num
-        int reduction_dimx
         vector[CppTBOperator*] operators
 
 ################################################################
@@ -226,16 +220,6 @@ bfloat16 = dtype('bf16')
 float32 = dtype('fp32')
 float64 = dtype('fp64')
 
-def get_kn_operator_type_string(int op_type):
-    if op_type == KN_UNKOWN:
-        return "kn_unknown"
-    elif op_type == KN_INPUT_OP:
-        return "kn_input_op"
-    elif op_type == KN_CUSTOMIZED_OP:
-        return "kn_customized_op"
-    else:
-        return "unknown_op_type" + str(op_type)
-
 
 def convert_dtype_to_ctype(type : dtype):
     if type.is_int8():
@@ -258,26 +242,6 @@ def convert_dtype_to_ctype(type : dtype):
         return DT_DOUBLE
     else:
         raise RuntimeError(f"Unsupported dtype: {dtype}")
-
-def convert_dtype_to_torch_type(type : dtype):
-    if type.is_int8():
-        return torch.int8
-    elif type.is_uint16():
-        return torch.uint16
-    elif type.is_fp16():
-        return torch.float16
-    elif type.is_bf16():
-        return torch.bfloat16
-    elif type.is_int32():
-        return torch.int32
-    elif type.is_fp32():
-        return torch.float32
-    elif type.is_int64():
-        return torch.int64
-    elif type.is_fp64():
-        return torch.float64
-    else:
-        assert False, "Unsupported dtype: {}".format(type)
 
 def convert_ctype_to_dtype(type):
     if type == DT_INT8:
@@ -534,13 +498,13 @@ cdef class CyKNGraph:
 cdef class CyTBGraph:
     cdef CppTBGraph *p_bgraph #Hold a CppTBGraph instance
 
-    def __cinit__(self, tuple grid_dim = (), tuple block_dim = (), int thread_num = 128, int dimx = -1, bgraph = None):
+    def __cinit__(self, tuple grid_dim = (), tuple block_dim = (), int thread_num = 128, bgraph = None):
         cdef unsigned long long ptr
         cdef dim3 c_grid_dim
         cdef dim3 c_block_dim
         if bgraph is None:
-            if len(grid_dim) == 0 or len(block_dim) == 0 or dimx == -1:
-                assert False, "grid_dim, block_dim, thread_num, dimx must be provided"
+            if len(grid_dim) == 0 or len(block_dim) == 0:
+                assert False, "grid_dim, block_dim, thread_num must be provided"
             assert len(grid_dim) == 3, "grid_dim must include 3 dimensions"
             assert len(block_dim) == 3, "block_dim must include 3 dimensions"
             c_grid_dim.x = grid_dim[0]
@@ -549,7 +513,7 @@ cdef class CyTBGraph:
             c_block_dim.x = block_dim[0]
             c_block_dim.y = block_dim[1]
             c_block_dim.z = block_dim[2]
-            self.p_bgraph = new CppTBGraph(c_grid_dim, c_block_dim, thread_num, dimx)
+            self.p_bgraph = new CppTBGraph(c_grid_dim, c_block_dim, thread_num)
         else:
             ptr = ctypes.cast(bgraph, ctypes.c_void_p).value
             if isinstance(bgraph, int):
@@ -584,12 +548,4 @@ cdef class CyTBGraph:
         def __get__(self):
             return self.p_bgraph.thread_num
 
-    property operators:
-        def __get__(self):
-            cdef vector[CppTBOperator*] coperators
-            coperators = self.p_bgraph.operators
-            operators = list()
-            for i in range(coperators.size()):
-                ptr = ctypes.cast(<unsigned long long>coperators[i], ctypes.c_void_p)
-                operators.append(CyTBOperator(ptr))
-            return operators
+

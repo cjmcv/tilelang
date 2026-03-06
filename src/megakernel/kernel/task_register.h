@@ -40,16 +40,16 @@ public:
     // assert(params.size() == 1);
     // int sub_kernel_id = params[0];
     // printf("register_rope_task.\n");
-    std::vector<tb::TBInputOp *> input_ops;
-    std::vector<tb::TBInputOp *> output_ops;
+    std::vector<tb::TBOperator *> input_ops;
+    std::vector<tb::TBOperator *> output_ops;
     int num_inputs = 4;
     int num_outputs = 2;
     assert(bgraph.operators.size() == (size_t)num_inputs + num_outputs);
     for (auto const &op : bgraph.operators) {
       if (input_ops.size() < (size_t)num_inputs) {
-        input_ops.push_back(static_cast<tb::TBInputOp *>(op));
+        input_ops.push_back(static_cast<tb::TBOperator *>(op));
       } else {
-        output_ops.push_back(static_cast<tb::TBInputOp *>(op));
+        output_ops.push_back(static_cast<tb::TBOperator *>(op));
       }
     }
 
@@ -82,16 +82,16 @@ public:
   int register_gqa_decode_task(threadblock::Graph const &bgraph, std::vector<int> const &params) {
     assert(params.size() == 1);
     int sub_kernel_id = params[0];
-    std::vector<tb::TBInputOp *> input_ops;
-    std::vector<tb::TBInputOp *> output_ops;
+    std::vector<tb::TBOperator *> input_ops;
+    std::vector<tb::TBOperator *> output_ops;
     int num_inputs = 5;
     int num_outputs = 3;
     assert(bgraph.operators.size() == (size_t)num_inputs + num_outputs);
     for (auto const &op : bgraph.operators) {
       if (input_ops.size() < (size_t)num_inputs) {
-        input_ops.push_back(static_cast<tb::TBInputOp *>(op));
+        input_ops.push_back(static_cast<tb::TBOperator *>(op));
       } else {
-        output_ops.push_back(static_cast<tb::TBInputOp *>(op));
+        output_ops.push_back(static_cast<tb::TBOperator *>(op));
       }
     }
 
@@ -124,17 +124,17 @@ public:
 
   int register_rmsnorm_task(threadblock::Graph const &bgraph, std::vector<int> const &params) {
     assert(params.size() == 0);
-    std::vector<tb::TBInputOp *> input_ops;
-    std::vector<tb::TBInputOp *> output_ops;
+    std::vector<tb::TBOperator *> input_ops;
+    std::vector<tb::TBOperator *> output_ops;
     int num_inputs = 2;
     int num_outputs = 1;
 
     assert(bgraph.operators.size() == (size_t)num_inputs + num_outputs);
     for (auto const &op : bgraph.operators) {
       if (input_ops.size() < (size_t)num_inputs) {
-        input_ops.push_back(static_cast<tb::TBInputOp *>(op));
+        input_ops.push_back(static_cast<tb::TBOperator *>(op));
       } else {
-        output_ops.push_back(static_cast<tb::TBInputOp *>(op));
+        output_ops.push_back(static_cast<tb::TBOperator *>(op));
       }
     }
     assert(output_ops[0]->output_tensors[0].num_dims == 2);
@@ -161,17 +161,17 @@ public:
   int register_rmsnorm_linear_task(threadblock::Graph const &bgraph, std::vector<int> const &params) {
     assert(params.size() == 0);
     int batch_size = 0, output_size = 0, reduction_size = 0, output_stride = 0;
-    std::vector<tb::TBInputOp *> input_ops;
-    std::vector<tb::TBInputOp *> output_ops;
+    std::vector<tb::TBOperator *> input_ops;
+    std::vector<tb::TBOperator *> output_ops;
     int num_inputs = 3;
     int num_outputs = 1;
 
     assert(bgraph.operators.size() == (size_t)num_inputs + num_outputs);
     for (auto const &op : bgraph.operators) {
       if (input_ops.size() < (size_t)num_inputs) {
-        input_ops.push_back(static_cast<tb::TBInputOp *>(op));
+        input_ops.push_back(static_cast<tb::TBOperator *>(op));
       } else {
-        output_ops.push_back(static_cast<tb::TBInputOp *>(op));
+        output_ops.push_back(static_cast<tb::TBOperator *>(op));
       }
     }
     assert(output_ops[0]->output_tensors[0].num_dims == 2);
@@ -204,17 +204,17 @@ public:
   int register_linear_task(threadblock::Graph const &bgraph, std::vector<int> const &params, bool with_residual, bool with_silu_mul) {
     assert(params.size() == 0);
     int batch_size = 0, output_size = 0, reduction_size = 0, output_stride = 0;
-    std::vector<tb::TBInputOp *> input_ops;
-    std::vector<tb::TBInputOp *> output_ops;
+    std::vector<tb::TBOperator *> input_ops;
+    std::vector<tb::TBOperator *> output_ops;
     int num_inputs = with_residual ? 3 : 2;
     int num_outputs = 1;
 
     assert(bgraph.operators.size() == (size_t)num_inputs + num_outputs);
     for (auto const &op : bgraph.operators) {
       if (input_ops.size() < (size_t)num_inputs) {
-        input_ops.push_back(static_cast<tb::TBInputOp *>(op));
+        input_ops.push_back(static_cast<tb::TBOperator *>(op));
       } else {
-        output_ops.push_back(static_cast<tb::TBInputOp *>(op));
+        output_ops.push_back(static_cast<tb::TBOperator *>(op));
       }
     }
     assert(output_ops[0]->output_tensors[0].num_dims == 2);
@@ -268,16 +268,16 @@ public:
   int register_silu_mul_task(threadblock::Graph const &bgraph, std::vector<int> const &params){
     assert(params.size() == 0);
     int batch_size = 0, output_size = 0, input_stride, output_stride;
-    std::vector<tb::TBInputOp *> input_ops;
-    std::vector<tb::TBInputOp *> output_ops;
+    std::vector<tb::TBOperator *> input_ops;
+    std::vector<tb::TBOperator *> output_ops;
     int num_inputs = 1;
     int num_outputs = 1;
     assert(bgraph.operators.size() == (size_t)num_inputs + num_outputs);
     for (auto const &op : bgraph.operators) {
       if (input_ops.size() < (size_t)num_inputs) {
-        input_ops.push_back(static_cast<tb::TBInputOp *>(op));
+        input_ops.push_back(static_cast<tb::TBOperator *>(op));
       } else {
-        output_ops.push_back(static_cast<tb::TBInputOp *>(op));
+        output_ops.push_back(static_cast<tb::TBOperator *>(op));
       }
     }
     assert(output_ops[0]->output_tensors[0].num_dims == 2);
@@ -312,17 +312,17 @@ public:
   int register_silu_mul_linear_with_residual_task(threadblock::Graph const &bgraph, std::vector<int> const &params){
     assert(params.size() == 0);
     int batch_size = 0, output_size = 0, reduction_size = 0, output_stride = 0;
-    std::vector<tb::TBInputOp *> input_ops;
-    std::vector<tb::TBInputOp *> output_ops;
+    std::vector<tb::TBOperator *> input_ops;
+    std::vector<tb::TBOperator *> output_ops;
     int num_inputs = 3;
     int num_outputs = 1;
 
     assert(bgraph.operators.size() == (size_t)num_inputs + num_outputs);
     for (auto const &op : bgraph.operators) {
       if (input_ops.size() < (size_t)num_inputs) {
-        input_ops.push_back(static_cast<tb::TBInputOp *>(op));
+        input_ops.push_back(static_cast<tb::TBOperator *>(op));
       } else {
-        output_ops.push_back(static_cast<tb::TBInputOp *>(op));
+        output_ops.push_back(static_cast<tb::TBOperator *>(op));
       }
     }
     assert(output_ops[0]->output_tensors[0].num_dims == 2);
@@ -357,17 +357,17 @@ public:
     // params[0]: num_gpus
     // params[1]: my_gpu_id
     assert(params.size() == 2);
-    std::vector<tb::TBInputOp *> input_ops;
-    std::vector<tb::TBInputOp *> output_ops;
+    std::vector<tb::TBOperator *> input_ops;
+    std::vector<tb::TBOperator *> output_ops;
     int num_inputs = 2;
     int num_outputs = 1;
 
     assert(bgraph.operators.size() == (size_t)num_inputs + num_outputs);
     for (auto const &op : bgraph.operators) {
       if (input_ops.size() < (size_t)num_inputs) {
-        input_ops.push_back(static_cast<tb::TBInputOp *>(op));
+        input_ops.push_back(static_cast<tb::TBOperator *>(op));
       } else {
-        output_ops.push_back(static_cast<tb::TBInputOp *>(op));
+        output_ops.push_back(static_cast<tb::TBOperator *>(op));
       }
     }
     // For now, the memory partition of the input[0] results in a strided

@@ -15,7 +15,7 @@
 
 #pragma once
 
-#include "megakernel/kernel/customized.h"
+// #include "megakernel/kernel/customized.h"
 #include "megakernel/kernel/device_tensor.h"
 #include "megakernel/kernel/operator.h"
 #include "megakernel/kernel/runtime.h"
@@ -90,7 +90,7 @@ public:
 
   Graph(Graph const &) = delete;
   Graph &operator=(Graph const &) = delete;
-
+ 
   // input operator
   DTensor new_input(std::vector<int> const &dims,
                     std::vector<size_t> const &strides,
@@ -147,8 +147,8 @@ public:
     {
       int num_inputs = 0;
       for (auto const &op : _graph.operators) {
-        megakernel::threadblock::TBInputOp const *input_op =
-            static_cast<megakernel::threadblock::TBInputOp const *>(op);
+        megakernel::threadblock::TBOperator const *input_op =
+            static_cast<megakernel::threadblock::TBOperator const *>(op);
         assert(inputs[num_inputs] == input_op->dtensor);
         num_inputs++;
       }
@@ -561,7 +561,7 @@ private:
       all_tasks.push_back(t);
       all_events.push_back(e);
     }
-    std::vector<tb::TBInputOp *> pre_output_ops;
+    std::vector<tb::TBOperator *> pre_output_ops;
     kn::KNCustomizedOp const *pre_op = nullptr;
     std::map<dim3, TaskId, Dim3Comparator> pre_task_map;
     std::unordered_set<size_t> nvshmem_events_idx;
@@ -577,8 +577,8 @@ private:
       tb::Graph const &bgraph = cur_op->bgraph;
       dim3 bid;
       std::vector<FullTaskDesc> tasks;
-      std::vector<tb::TBInputOp *> input_ops;
-      std::vector<tb::TBInputOp *> output_ops;
+      std::vector<tb::TBOperator *> input_ops;
+      std::vector<tb::TBOperator *> output_ops;
       int num_inputs = std::get<0>(task_config);
       int num_outputs = std::get<1>(task_config);
       TaskType task_type = std::get<2>(task_config);
@@ -586,9 +586,9 @@ private:
       assert(bgraph.operators.size() == (size_t)num_inputs + num_outputs);
       for (auto const &op : bgraph.operators) {
         if (input_ops.size() < (size_t)num_inputs) {
-          input_ops.push_back(static_cast<tb::TBInputOp *>(op));
+          input_ops.push_back(static_cast<tb::TBOperator *>(op));
         } else {
-          output_ops.push_back(static_cast<tb::TBInputOp *>(op));
+          output_ops.push_back(static_cast<tb::TBOperator *>(op));
         }
       }
       
@@ -1024,16 +1024,16 @@ private:
           dynamic_cast<kn::KNCustomizedOp const *>(op);
       tb::Graph const &bgraph = cur_op->bgraph;
       dim3 bid;
-      std::vector<tb::TBInputOp *> input_ops;
-      std::vector<tb::TBInputOp *> output_ops;
+      std::vector<tb::TBOperator *> input_ops;
+      std::vector<tb::TBOperator *> output_ops;
       int num_inputs = std::get<0>(task_config);
       // int num_outputs = std::get<1>(task_config);
       TaskType task_type = std::get<2>(task_config);
       for (auto const &op : bgraph.operators) {
         if (input_ops.size() < (size_t)num_inputs) {
-          input_ops.push_back(static_cast<tb::TBInputOp *>(op));
+          input_ops.push_back(static_cast<tb::TBOperator *>(op));
         } else {
-          output_ops.push_back(static_cast<tb::TBInputOp *>(op));
+          output_ops.push_back(static_cast<tb::TBOperator *>(op));
         }
       }
 

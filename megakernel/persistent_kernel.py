@@ -312,7 +312,7 @@ class PersistentKernel:
         grid_dim, tile_dim = layout
         assert input.num_dims == 2
         assert output.num_dims == 2
-        tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128, 64))
+        tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128))
         print("sync_mode", sync_mode)
         tb_graph.new_input(input, sync_mode, True)
         tb_graph.new_input(weight, sync_mode, True)
@@ -333,7 +333,7 @@ class PersistentKernel:
         assert input.num_dims == 2
         assert weight_linear.num_dims == 2
         assert output.num_dims == 2
-        tb_graph = TBGraph(CyTBGraph(grid_dim, block_dim, 1, 64))
+        tb_graph = TBGraph(CyTBGraph(grid_dim, block_dim, 1))
         tb_graph.new_input(input, (-1, -1, -1), 1, True)
         tb_graph.new_input(weight_norm, (-1, -1, -1), 0, True)
         tb_graph.new_input(weight_linear, (0, -1, -1), 1, True)
@@ -361,7 +361,7 @@ class PersistentKernel:
     
         grid_dim, tile_dim = layout
         print(grid_dim, tile_dim, sync_mode)
-        tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128, 64))
+        tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128))
         tb_graph.new_input(q,       sync_mode, True)
         tb_graph.new_input(k,       sync_mode, True)
         tb_graph.new_input(cos,     sync_mode, True)
@@ -391,7 +391,7 @@ class PersistentKernel:
         for i in range(0, len(layout), 2):
             grid_dim, tile_dim = layout[i], layout[i+1]
             print(grid_dim, tile_dim, sync_mode)
-            tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128, 64))
+            tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128))
             tb_graph.new_input(q,       sync_mode, True)
             tb_graph.new_input(k_cache, sync_mode, True)
             tb_graph.new_input(v_cache, sync_mode, True)
@@ -420,7 +420,7 @@ class PersistentKernel:
         assert input.num_dims == 2  # (batch_size, hidden_size / world_size)
         assert weight.num_dims == 2  # (hidden_size, hidden_size / world_size)
         assert output.num_dims == 2  # (batch_size, hidden_size)
-        tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128, 64))
+        tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128))
         tb_graph.new_input(input, sync_mode, True)
         tb_graph.new_input(weight, sync_mode, True)
         tb_graph.new_input(output, (-1, -1, -1), True)
@@ -454,7 +454,7 @@ class PersistentKernel:
         assert weight.num_dims == 2  # (hidden_size, hidden_size / world_size)
         assert residual.num_dims == 2  # (batch_size, hidden_size)
         assert output.num_dims == 2  # (batch_size, hidden_size)
-        tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128, 64))
+        tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128))
         tb_graph.new_input(input, sync_mode, True)
         tb_graph.new_input(weight, sync_mode, True)
         tb_graph.new_input(residual, sync_mode, True)
@@ -487,7 +487,7 @@ class PersistentKernel:
         assert input.num_dims == 2  # (batch_size, hidden_size / world_size)
         assert weight.num_dims == 2  # (hidden_size, hidden_size / world_size)
         assert output.num_dims == 2  # (batch_size, hidden_size)
-        tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128, 64))
+        tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128))
         tb_graph.new_input(input, sync_mode, True)
         tb_graph.new_input(weight, sync_mode, True)
         tb_graph.new_input(output, (-1, -1, -1), True)
@@ -508,7 +508,7 @@ class PersistentKernel:
         # Currently assume that input/output
         assert input.num_dims == 2 # (batch_size, 2 * intermediate_size)
         assert output.num_dims == 2 # (batch_size, intermediate_size)
-        tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128, 64)) # CJM_TODO: thread_num应由megakernel初始化时指定，不能更改
+        tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128)) # CJM_TODO: thread_num应由megakernel初始化时指定，不能更改
         tb_graph.new_input(input, sync_mode, True)
         tb_graph.new_input(output, (-1, -1, -1), True)
         self.kn_graph.customized([input, output], tb_graph)
@@ -527,7 +527,7 @@ class PersistentKernel:
         assert input.num_dims == 2  # (batch_size, 2*intermediate_size)
         assert weight.num_dims == 2  # (hidden_size, intermediate_size)
         assert residual.num_dims == 2  # (batch_size, hidden_size)
-        tb_graph = TBGraph(CyTBGraph(grid_dim, block_dim, 1, 64))
+        tb_graph = TBGraph(CyTBGraph(grid_dim, block_dim, 1))
         tb_graph.new_input(input, (-1, -1, -1), 1, True)
         tb_graph.new_input(weight, (0, -1, -1), 1, True)
         tb_graph.new_input(residual, (1, -1, -1), 1, True)

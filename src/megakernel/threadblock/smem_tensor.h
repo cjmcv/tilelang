@@ -42,14 +42,11 @@ struct alignas(16) STensor {
     owner_op = nullptr;
     owner_ts_idx = -1000;
     smem_offset = 128;
-    after_accum = false;
     store_in_dmem = false;
   }
 
   CUTLASS_HOST_DEVICE
   bool operator==(STensor const &b) const {
-    // Note that we don't check after_accum
-    // when comparing two stensors
     if (data_type != b.data_type) {
       return false;
     }
@@ -78,8 +75,6 @@ struct alignas(16) STensor {
 
   CUTLASS_HOST_DEVICE
   bool operator!=(STensor const &b) const {
-    // Note that we don't check after_accum
-    // when comparing two stensors
     if (data_type != b.data_type) {
       return true;
     }
@@ -167,12 +162,6 @@ struct alignas(16) STensor {
   TBOperator *owner_op;
   int owner_ts_idx;
   int smem_offset;
-  // a flag indicating if the stensor is after forloop
-  // accumulation, in which case the consuming operators
-  // are outside of the forloop and considered epilogue
-  // This flag is false by default and should only be
-  // changed to true by a forloop accumulator
-  bool after_accum;
 
   // a flag indicating if the stensor is saved
   // in device memory; false by default
@@ -184,7 +173,7 @@ struct alignas(16) STensor {
 inline std::atomic<int64_t> STensor::next_guid = 20000000;
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(
-    STensor, data_type, num_dims, dim, smem_offset, guid, after_accum);
+    STensor, data_type, num_dims, dim, smem_offset, guid);
 
 } // namespace threadblock
 } // namespace megakernel

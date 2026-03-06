@@ -24,33 +24,11 @@ namespace threadblock {
 
 class TBOperator {
 public:
-  TBOperator() {}
-  TBOperator(STensor const &input1) {
-    input_tensors.push_back(input1);
-  }
-
-  TBOperator(STensor const &input1,
-             STensor const &input2) {
-    input_tensors.push_back(input1);
-    input_tensors.push_back(input2);
-  }
-
-  virtual ~TBOperator() {}
-
-  // virtual operator json() const = 0;
-
-public:
-  std::vector<STensor> input_tensors;
-  std::vector<STensor> output_tensors;
-};
-
-class TBInputOp : public TBOperator {
-public:
-  TBInputOp(dim3 grid_dim, off_t smem_offset,
+  TBOperator(dim3 grid_dim, off_t smem_offset,
             megakernel::kernel::DTensor const &_dtensor,
             int3 _input_map,
             bool store_in_dmem)
-      : TBOperator(), dtensor(_dtensor),
+      : dtensor(_dtensor),
     input_map(_input_map)  {
     STensor tensor;
     tensor.num_dims = dtensor.num_dims;
@@ -62,17 +40,19 @@ public:
     tensor.owner_op = this;
     tensor.owner_ts_idx = 0;
     tensor.guid = STensor::next_guid++;
-    tensor.after_accum = false;
     tensor.store_in_dmem = store_in_dmem;
     tensor.smem_offset = smem_offset; // bgraph->allocate_fingerprint(tensor);
     output_tensors.push_back(tensor);
   }
 
-  ~TBInputOp() {}
+  ~TBOperator() {}
 
 public:
   megakernel::kernel::DTensor dtensor;
   int3 input_map;
+
+  std::vector<STensor> input_tensors;
+  std::vector<STensor> output_tensors;
 };
 
 } // namespace threadblock
