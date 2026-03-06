@@ -314,9 +314,9 @@ class PersistentKernel:
         assert output.num_dims == 2
         tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128))
         print("sync_mode", sync_mode)
-        tb_graph.new_input(input, sync_mode, True)
-        tb_graph.new_input(weight, sync_mode, True)
-        tb_graph.new_input(output, (-1, -1, -1), True)
+        tb_graph.new_input(input, sync_mode)
+        tb_graph.new_input(weight, sync_mode)
+        tb_graph.new_input(output, (-1, -1, -1))
         self.kn_graph.customized([input, weight, output], tb_graph)
         self.kn_graph.register_task(tb_graph, "rmsnorm_hopper" if self.target_cc >= 90 else "rmsnorm")
 
@@ -334,10 +334,10 @@ class PersistentKernel:
         assert weight_linear.num_dims == 2
         assert output.num_dims == 2
         tb_graph = TBGraph(CyTBGraph(grid_dim, block_dim, 1))
-        tb_graph.new_input(input, (-1, -1, -1), 1, True)
-        tb_graph.new_input(weight_norm, (-1, -1, -1), 0, True)
-        tb_graph.new_input(weight_linear, (0, -1, -1), 1, True)
-        tb_graph.new_input(output, (1, -1, -1), -1, True)
+        tb_graph.new_input(input, (-1, -1, -1))
+        tb_graph.new_input(weight_norm, (-1, -1, -1))
+        tb_graph.new_input(weight_linear, (0, -1, -1))
+        tb_graph.new_input(output, (1, -1, -1))
         self.kn_graph.customized([input, weight_norm, weight_linear, output], tb_graph)
         self.kn_graph.register_task(tb_graph, "rmsnorm_linear")
 
@@ -362,12 +362,12 @@ class PersistentKernel:
         grid_dim, tile_dim = layout
         print(grid_dim, tile_dim, sync_mode)
         tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128))
-        tb_graph.new_input(q,       sync_mode, True)
-        tb_graph.new_input(k,       sync_mode, True)
-        tb_graph.new_input(cos,     sync_mode, True)
-        tb_graph.new_input(sin,     sync_mode, True)
-        tb_graph.new_input(q_embed, (-1, -1, -1), True)
-        tb_graph.new_input(k_embed, (-1, -1, -1), True)
+        tb_graph.new_input(q,       sync_mode)
+        tb_graph.new_input(k,       sync_mode)
+        tb_graph.new_input(cos,     sync_mode)
+        tb_graph.new_input(sin,     sync_mode)
+        tb_graph.new_input(q_embed, (-1, -1, -1))
+        tb_graph.new_input(k_embed, (-1, -1, -1))
         
         self.kn_graph.customized([q, k, cos, sin, q_embed, k_embed], tb_graph)
         self.kn_graph.register_task(tb_graph, "rope", [-1]) # TASK_ROPE
@@ -392,14 +392,14 @@ class PersistentKernel:
             grid_dim, tile_dim = layout[i], layout[i+1]
             print(grid_dim, tile_dim, sync_mode)
             tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128))
-            tb_graph.new_input(q,       sync_mode, True)
-            tb_graph.new_input(k_cache, sync_mode, True)
-            tb_graph.new_input(v_cache, sync_mode, True)
-            tb_graph.new_input(edge,    sync_mode, True)
-            tb_graph.new_input(mask,    sync_mode, True)
-            tb_graph.new_input(output, (-1, -1, -1), True)
-            tb_graph.new_input(glse,    (-1, -1, -1), True)
-            tb_graph.new_input(out_partial, (-1, -1, -1), True)
+            tb_graph.new_input(q,       sync_mode)
+            tb_graph.new_input(k_cache, sync_mode)
+            tb_graph.new_input(v_cache, sync_mode)
+            tb_graph.new_input(edge,    sync_mode)
+            tb_graph.new_input(mask,    sync_mode)
+            tb_graph.new_input(output, (-1, -1, -1))
+            tb_graph.new_input(glse,    (-1, -1, -1))
+            tb_graph.new_input(out_partial, (-1, -1, -1))
             
             self.kn_graph.customized([q, k_cache, v_cache, edge, mask, output, glse, out_partial], tb_graph)
             if len(layout) == 2:
@@ -421,9 +421,9 @@ class PersistentKernel:
         assert weight.num_dims == 2  # (hidden_size, hidden_size / world_size)
         assert output.num_dims == 2  # (batch_size, hidden_size)
         tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128))
-        tb_graph.new_input(input, sync_mode, True)
-        tb_graph.new_input(weight, sync_mode, True)
-        tb_graph.new_input(output, (-1, -1, -1), True)
+        tb_graph.new_input(input, sync_mode)
+        tb_graph.new_input(weight, sync_mode)
+        tb_graph.new_input(output, (-1, -1, -1))
         self.kn_graph.customized([input, weight, output], tb_graph)
 
         if self.target_cc == 100:
@@ -455,10 +455,10 @@ class PersistentKernel:
         assert residual.num_dims == 2  # (batch_size, hidden_size)
         assert output.num_dims == 2  # (batch_size, hidden_size)
         tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128))
-        tb_graph.new_input(input, sync_mode, True)
-        tb_graph.new_input(weight, sync_mode, True)
-        tb_graph.new_input(residual, sync_mode, True)
-        tb_graph.new_input(output, (-1, -1, -1), True)
+        tb_graph.new_input(input, sync_mode)
+        tb_graph.new_input(weight, sync_mode)
+        tb_graph.new_input(residual, sync_mode)
+        tb_graph.new_input(output, (-1, -1, -1))
         self.kn_graph.customized([input, weight, residual, output], tb_graph)
         
         if self.target_cc == 100:
@@ -488,9 +488,9 @@ class PersistentKernel:
         assert weight.num_dims == 2  # (hidden_size, hidden_size / world_size)
         assert output.num_dims == 2  # (batch_size, hidden_size)
         tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128))
-        tb_graph.new_input(input, sync_mode, True)
-        tb_graph.new_input(weight, sync_mode, True)
-        tb_graph.new_input(output, (-1, -1, -1), True)
+        tb_graph.new_input(input, sync_mode)
+        tb_graph.new_input(weight, sync_mode)
+        tb_graph.new_input(output, (-1, -1, -1))
         self.kn_graph.customized([input, weight, output], tb_graph)
         if self.target_cc == 80 or self.target_cc == 89:
             self.kn_graph.register_task(tb_graph, "silu_mul_linear")
@@ -509,8 +509,8 @@ class PersistentKernel:
         assert input.num_dims == 2 # (batch_size, 2 * intermediate_size)
         assert output.num_dims == 2 # (batch_size, intermediate_size)
         tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128)) # CJM_TODO: thread_num应由megakernel初始化时指定，不能更改
-        tb_graph.new_input(input, sync_mode, True)
-        tb_graph.new_input(output, (-1, -1, -1), True)
+        tb_graph.new_input(input, sync_mode)
+        tb_graph.new_input(output, (-1, -1, -1))
         self.kn_graph.customized([input, output], tb_graph)
         self.kn_graph.register_task(tb_graph, "silu_mul" if self.target_cc == 90 else "silu_mul")
 
@@ -528,10 +528,10 @@ class PersistentKernel:
         assert weight.num_dims == 2  # (hidden_size, intermediate_size)
         assert residual.num_dims == 2  # (batch_size, hidden_size)
         tb_graph = TBGraph(CyTBGraph(grid_dim, block_dim, 1))
-        tb_graph.new_input(input, (-1, -1, -1), 1, True)
-        tb_graph.new_input(weight, (0, -1, -1), 1, True)
-        tb_graph.new_input(residual, (1, -1, -1), 1, True)
-        tb_graph.new_input(output, (1, -1, -1), 1, True)
+        tb_graph.new_input(input, (-1, -1, -1))
+        tb_graph.new_input(weight, (0, -1, -1))
+        tb_graph.new_input(residual, (1, -1, -1))
+        tb_graph.new_input(output, (1, -1, -1))
         self.kn_graph.customized([input, weight, residual, output], tb_graph)
         self.kn_graph.register_task(tb_graph, "silu_mul_linear_with_residual")
 

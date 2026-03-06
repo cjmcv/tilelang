@@ -49,10 +49,8 @@ class TBGraph:
     def new_input(
         self,
         dtensor: DTensor,
-        input_map: tuple,
-        store_in_dmem: bool = False,
-    ):
-        return self.cygraph.new_input(dtensor, input_map, store_in_dmem)
+        input_map: tuple):
+        return self.cygraph.new_input(dtensor, input_map)
     
 class KNGraph:
     def __init__(self, graph):

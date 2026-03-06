@@ -114,25 +114,18 @@ cdef extern from "megakernel/kernel/graph.h" namespace "megakernel::kernel":
         vector[CppKNOperator*] operators
 
 cdef extern from "megakernel/threadblock/graph.h" namespace "megakernel::threadblock":
-    ctypedef struct CppSTensor "megakernel::threadblock::STensor":
-        DataType data_type
-        int num_dims
-        int dim[4]
-        int owner_ts_idx
-        size_t guid
-    
+
     cdef cppclass CppTBOperator "megakernel::threadblock::TBOperator":
-        vector[CppSTensor] input_tensors
-        vector[CppSTensor] output_tensors
+        vector[CppDTensor] input_tensors
+        vector[CppDTensor] output_tensors
 
     cdef cppclass CppTBGraph "megakernel::threadblock::Graph":
         CppTBGraph(dim3 grid_dim,
                    dim3 block_dim,
                    int thread_num)
 
-        CppSTensor* new_input(const CppDTensor* dtensor,
-                             int3 input_map,
-                             bool store_in_dmem)
+        CppDTensor* new_input(const CppDTensor* dtensor,
+                             int3 input_map)
 
         dim3 grid_dim
         dim3 block_dim
@@ -337,56 +330,6 @@ cdef class DTensor:
             assert False , "Error: index out of range"
             return None
 
-cdef class STensor:
-    cdef CppSTensor* c_ptr # Hold a CppSTensor instance
-
-    cdef inline _set_tensor(self, tensor):
-        cdef unsigned long long ptr
-        if tensor is None:
-            self.c_ptr = <CppSTensor*>(NULL)
-        else:
-            ptr = ctypes.cast(tensor, ctypes.c_void_p).value
-            self.c_ptr = <CppSTensor*>(ptr)
-    property guid:
-        def __get__(self):
-            if self.c_ptr == NULL:
-                return None
-            else:
-                return self.c_ptr.guid
-    property tensor:
-        def __get__(self):
-            if self.c_ptr == NULL:
-                return None
-            else:
-                return ctypes.cast(<unsigned long long>self.c_ptr, ctypes.c_void_p)
-        
-        def __set__(self, value):
-            self._set_tensor(value)
-
-    property num_dims:
-        def __get__(self):
-            if self.c_ptr == NULL:
-                return None
-            else:
-                return self.c_ptr.num_dims
-
-    property dtype:
-        def __get__(self):
-            if self.c_ptr == NULL:
-                return None
-            else:
-                return convert_ctype_to_dtype(self.c_ptr.data_type)
-
-    def __cinit__(self, tensor):
-        self._set_tensor(tensor)
-
-    def dim(self, int idx):  
-        if (idx < self.c_ptr.num_dims):
-            return self.c_ptr.dim[idx]
-        else:
-            assert False , "Error: index out of range"
-            return None
-
 cdef class CyTBOperator:
     cdef CppTBOperator* c_ptr # Hold a CppTBOperator instance
 
@@ -523,7 +466,7 @@ cdef class CyTBGraph:
             else:
                 assert False, "bgraph must be an integer or ctypes.c_void_p, but got " + str(type(bgraph))
     
-    def new_input(self, DTensor dtensor, tuple input_map, bool store_in_dmem = False):
+    def new_input(self, DTensor dtensor, tuple input_map):
         assert len(input_map) == 3, "input_map must be of length 3"
         cdef int3 c_input_map
         c_input_map.x = input_map[0]
@@ -532,9 +475,9 @@ cdef class CyTBGraph:
         cdef CppDTensor* dtensor_cptr = NULL
         if dtensor is not None:
             dtensor_cptr = dtensor.c_ptr
-        cdef CppSTensor* ptr = self.p_bgraph.new_input(dtensor_cptr, c_input_map, store_in_dmem)
+        cdef CppDTensor* ptr = self.p_bgraph.new_input(dtensor_cptr, c_input_map)
         t = ctypes.cast(<unsigned long long>ptr, ctypes.c_void_p)
-        return STensor(t)
+        return DTensor(t)
 
     property grid_dim:
         def __get__(self):

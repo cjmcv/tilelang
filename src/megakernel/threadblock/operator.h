@@ -15,7 +15,7 @@
 
 #pragma once
 #include "megakernel/kernel/device_tensor.h"
-#include "megakernel/threadblock/smem_tensor.h"
+// #include "megakernel/threadblock/smem_tensor.h"
 #include "megakernel/type.h"
 #include <vector>
 
@@ -24,24 +24,21 @@ namespace threadblock {
 
 class TBOperator {
 public:
-  TBOperator(dim3 grid_dim, off_t smem_offset,
+  TBOperator(dim3 grid_dim,
             megakernel::kernel::DTensor const &_dtensor,
-            int3 _input_map,
-            bool store_in_dmem)
+            int3 _input_map)
       : dtensor(_dtensor),
     input_map(_input_map)  {
-    STensor tensor;
+    kernel::DTensor tensor;
     tensor.num_dims = dtensor.num_dims;
     tensor.data_type = dtensor.data_type;
     for (int i = 0; i < tensor.num_dims; i++) {
       tensor.dim[i] = dtensor.dim[i];
     }
 
-    tensor.owner_op = this;
+    // tensor.owner_op = this;
     tensor.owner_ts_idx = 0;
-    tensor.guid = STensor::next_guid++;
-    tensor.store_in_dmem = store_in_dmem;
-    tensor.smem_offset = smem_offset; // bgraph->allocate_fingerprint(tensor);
+    tensor.guid = kernel::DTensor::next_guid++;
     output_tensors.push_back(tensor);
   }
 
@@ -51,8 +48,8 @@ public:
   megakernel::kernel::DTensor dtensor;
   int3 input_map;
 
-  std::vector<STensor> input_tensors;
-  std::vector<STensor> output_tensors;
+  std::vector<kernel::DTensor> input_tensors;
+  std::vector<kernel::DTensor> output_tensors;
 };
 
 } // namespace threadblock

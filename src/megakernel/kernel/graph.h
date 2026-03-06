@@ -602,7 +602,7 @@ private:
             for (auto const &input : input_ops) {
               TensorDesc desc;
               assert(input->output_tensors.size() == 1);
-              tb::STensor stensor = input->output_tensors[0];
+              DTensor stensor = input->output_tensors[0];
               desc.num_dims = stensor.num_dims;
               desc.data_type = stensor.data_type;
               // Assume always partition head group on gridDim.y dimension
@@ -616,7 +616,7 @@ private:
             for (auto const &output : output_ops) {
               TensorDesc desc;
               assert(output->output_tensors.size() == 1);
-              tb::STensor stensor = output->output_tensors[0];
+              DTensor stensor = output->output_tensors[0];
               desc.num_dims = stensor.num_dims;
               desc.data_type = stensor.data_type;
               for (int d = stensor.num_dims - 1; d >= 0; d--) {

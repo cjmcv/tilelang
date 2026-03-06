@@ -18,7 +18,7 @@
 #include "megakernel/config.h"
 #include "megakernel/kernel/device_tensor.h"
 #include "megakernel/threadblock/operator.h"
-#include "megakernel/threadblock/smem_tensor.h"
+// #include "megakernel/threadblock/smem_tensor.h"
 #include <vector>
 
 namespace megakernel {
@@ -28,10 +28,10 @@ class Graph {
 
 public:
   Graph()    
-    : grid_dim(1, 1, 1), block_dim(1, 1, 1), thread_num(128), smem_offset(0) {}
+    : grid_dim(1, 1, 1), block_dim(1, 1, 1), thread_num(128) {}
 
   Graph(dim3 _grid_dim, dim3 _block_dim, int _thread_num)
-    : grid_dim(_grid_dim), block_dim(_block_dim), thread_num(_thread_num), smem_offset(0) {
+    : grid_dim(_grid_dim), block_dim(_block_dim), thread_num(_thread_num) {
   // A bgraph cannot have more than MAX_NUM_THREADBLOCKS_PER_KERNEL threadblocks
   // otherwise we don't have enough buffers in device memory for saving
   // fingerprints
@@ -50,22 +50,18 @@ public:
   Graph &operator=(Graph const &) = delete;
   // input operator
       
-  STensor *new_input(megakernel::kernel::DTensor const *dtensor,
-                     int3 input_map,
-                     bool store_in_dmem = false){
+  kernel::DTensor *new_input(megakernel::kernel::DTensor const *dtensor,
+                     int3 input_map){
     TBOperator *op = create_input_op(
         dtensor == nullptr ? kernel::DTensor::EMPTY_TENSOR : *dtensor,
-        input_map,
-        store_in_dmem);
+        input_map);
     assert(op != nullptr);
     operators.push_back(op);
     return &op->output_tensors[0];
   }
   TBOperator *create_input_op(megakernel::kernel::DTensor const &dtensor,
-                              int3 input_map,
-                              bool store_in_dmem = false){
-    TBOperator *op = new TBOperator(
-      grid_dim, smem_offset, dtensor, input_map, store_in_dmem);
+                              int3 input_map){
+    TBOperator *op = new TBOperator(grid_dim, dtensor, input_map);
     return op;
   }
 
@@ -73,11 +69,8 @@ public:
   dim3 grid_dim, block_dim;
   int thread_num;
   std::vector<megakernel::threadblock::TBOperator *> operators;
-  // memory allocator
-  off_t smem_offset;
 
   using OpType = TBOperator;
-  using TensorType = STensor;
 };
 
 ////////////////////////////////////////////////////////////////////////
