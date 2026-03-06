@@ -66,7 +66,7 @@ public:
     // assert(output_ops[0]->dtensor.dim[1] == input_ops[0]->dtensor.dim[1]);
     megakernel::transpiler::CodeKeeper code;
     code.inc_indent();
-    code.e("kernel::rope_kernel<bfloat16, $, $, $, $, $, $>(",
+    code.e("kernel::rope_kernel<bfloat16_t, $, $, $, $, $, $>(",
       bgraph.thread_num, batch_size, seqlen, heads, groups, dim);
     code.e("    task_desc->bx, task_desc->by, task_desc->bz,");
     code.e("    task_desc->input_ptrs[0],");
@@ -107,7 +107,7 @@ public:
     // assert(output_ops[0]->dtensor.dim[1] == input_ops[0]->dtensor.dim[1]);
     megakernel::transpiler::CodeKeeper code;
     code.inc_indent();
-    code.e("kernel::gqa_decode_kernel<bfloat16, $, $, $, $, $, $>(",
+    code.e("kernel::gqa_decode_kernel<bfloat16_t, $, $, $, $, $, $>(",
       bgraph.thread_num, sub_kernel_id, batch_size, head, groups, dim);
     code.e("    task_desc->bx, task_desc->by, task_desc->bz,");
     code.e("    task_desc->input_ptrs[0],");
@@ -147,7 +147,7 @@ public:
     assert(output_ops[0]->dtensor.dim[1] == input_ops[0]->dtensor.dim[1]);
     megakernel::transpiler::CodeKeeper code;
     code.inc_indent();
-    code.e("kernel::rms_norm_kernel<bfloat16, $, $, $, $, $, $>(", 
+    code.e("kernel::rms_norm_kernel<bfloat16_t, $, $, $, $, $, $>(", 
       bgraph.thread_num, bgraph.block_dim.x, bgraph.block_dim.y, bgraph.block_dim.z, 
       batch_size, hidden_dim);
     code.e("    task_desc->bx, task_desc->by, task_desc->bz,");
@@ -187,7 +187,7 @@ public:
 
     megakernel::transpiler::CodeKeeper code;
     code.inc_indent();
-    code.e("kernel::norm_linear_task_impl<bfloat16, $, $, $, $>(",
+    code.e("kernel::norm_linear_task_impl<bfloat16_t, $, $, $, $>(",
           batch_size,
           output_size,
           reduction_size,
@@ -232,7 +232,7 @@ public:
       reduction_size /= 2;
     }
     megakernel::transpiler::CodeKeeper code;
-    code.e("kernel::linear_kernel<bfloat16, $, $, $, $, $, $, $, $, $, $, $>(",
+    code.e("kernel::linear_kernel<bfloat16_t, $, $, $, $, $, $, $, $, $, $, $>(",
           bgraph.thread_num, bgraph.block_dim.x, bgraph.block_dim.y, bgraph.block_dim.z, 
           batch_size,
           output_size,
@@ -297,7 +297,7 @@ public:
     output_stride = static_cast<int>(kn_input_op->input_strides[0]);
     megakernel::transpiler::CodeKeeper code;
     code.inc_indent();
-    code.e("kernel::silu_mul_kernel<bfloat16, $, $, $, $, $, $, $, $>(",
+    code.e("kernel::silu_mul_kernel<bfloat16_t, $, $, $, $, $, $, $, $>(",
           bgraph.thread_num, bgraph.block_dim.x, bgraph.block_dim.y, bgraph.block_dim.z, 
           batch_size, output_size,
           input_stride, output_stride);
@@ -338,7 +338,7 @@ public:
 
     megakernel::transpiler::CodeKeeper code;
     code.inc_indent();
-    code.e("kernel::silu_mul_linear_task_impl<bfloat16, $, $, $, $>(",
+    code.e("kernel::silu_mul_linear_task_impl<bfloat16_t, $, $, $, $>(",
           batch_size,
           output_size,
           reduction_size,
@@ -420,7 +420,7 @@ public:
     // Register reduction kernel
     megakernel::transpiler::CodeKeeper code;
     code.inc_indent();
-    code.e("kernel::reduction_kernel<bfloat16, $, $, $, $, $>(",
+    code.e("kernel::reduction_kernel<bfloat16_t, $, $, $, $, $>(",
           params[0],
           params[1],
           batch_size,

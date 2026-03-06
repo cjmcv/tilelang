@@ -15,8 +15,8 @@
 
 
 #include "profiler.h"
-#include "tasks/common/copy_sm80.cuh"
-#include "tasks/common/bfloat16.h"
+// #include "tasks/common/copy_sm80.cuh"
+// #include "tasks/common/bfloat16.h"
 #ifdef MPK_ENABLE_TMA
 #include "tma.cuh"
 #endif
@@ -43,7 +43,7 @@
 #define LIKELY(x)       __builtin_expect(!!(x), 1)
 #define UNLIKELY(x)     __builtin_expect(!!(x), 0)
 
-using bfloat16 = type::bfloat16_t;
+// using bfloat16 = type::bfloat16_t;
 using namespace megakernel::runtime;
 using namespace kernel;
 // Configurations for the MPK runtime

@@ -58,7 +58,6 @@ cdef extern from "megakernel/type.h" namespace "megakernel::type":
         DT_UINT64 = 966,
         DT_UNKNOWN = 999,
     cdef enum KNOperatorType:
-        KN_UNKOWN = 1000,
         KN_INPUT_OP = 1001,
         KN_CUSTOMIZED_OP = 1999,
 
@@ -111,7 +110,6 @@ cdef extern from "megakernel/kernel/graph.h" namespace "megakernel::kernel":
 cdef extern from "megakernel/kernel/tb_graph.h" namespace "megakernel::threadblock":
 
     cdef cppclass CppTBOperator "megakernel::threadblock::TBOperator":
-        vector[CppDTensor] input_tensors
         vector[CppDTensor] output_tensors
 
     cdef cppclass CppTBGraph "megakernel::threadblock::TBGraph":
@@ -272,6 +270,8 @@ def convert_torch_type_to_dtype(type):
         raise RuntimeError(f"Unsupported dtype: {type}")
 
 
+
+
 cdef class DTensor:
     cdef CppDTensor* c_ptr # Hold a Tensor instance
 
@@ -325,19 +325,6 @@ cdef class DTensor:
             assert False , "Error: index out of range"
             return None
 
-cdef class CyTBOperator:
-    cdef CppTBOperator* c_ptr # Hold a CppTBOperator instance
-
-    cdef inline _set_operator(self, op):
-        cdef unsigned long long ptr
-        if op is None:
-            self.c_ptr = <CppTBOperator*>(NULL)
-        else:
-            ptr = ctypes.cast(op, ctypes.c_void_p).value
-            self.c_ptr = <CppTBOperator*>(ptr)
-
-    def __cinit__(self, op):
-        self._set_operator(op)
 
 cdef class CyKNGraph:
     cdef CppKNGraph *p_kgraph #Hold a CppKNGraph instance
@@ -473,17 +460,5 @@ cdef class CyTBGraph:
         cdef CppDTensor* ptr = self.p_bgraph.new_input(dtensor_cptr, c_input_map)
         t = ctypes.cast(<unsigned long long>ptr, ctypes.c_void_p)
         return DTensor(t)
-
-    property grid_dim:
-        def __get__(self):
-            return {
-                "x": self.p_bgraph.grid_dim.x,
-                "y": self.p_bgraph.grid_dim.y,
-                "z": self.p_bgraph.grid_dim.z
-            }
-
-    property thread_num:
-        def __get__(self):
-            return self.p_bgraph.thread_num
 
 

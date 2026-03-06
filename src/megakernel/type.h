@@ -97,14 +97,12 @@ inline size_t get_datatype_size(DataType type) {
 }
 
 enum KNOperatorType {
-  KN_UNKOWN = 1000,
   KN_INPUT_OP = 1001,
   KN_CUSTOMIZED_OP = 1999,
 };
 
 NLOHMANN_JSON_SERIALIZE_ENUM(KNOperatorType,
                              {
-                                 {KN_UNKOWN, "kn_unkown"},
                                  {KN_INPUT_OP, "kn_input_op"},
                                  {KN_CUSTOMIZED_OP, "kn_customized_op"},
                              })
