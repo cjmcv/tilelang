@@ -16,9 +16,7 @@
 #pragma once
 
 #include "megakernel/kernel/device_tensor.h"
-#include "megakernel/threadblock/graph.h"
-#include "megakernel/threadblock/operator.h"
-// #include "megakernel/threadblock/smem_tensor.h"
+#include "megakernel/kernel/tb_graph.h"
 #include <vector>
 
 namespace megakernel {
@@ -81,7 +79,6 @@ public:
     }
     tensor.data_type = data_type;
     tensor.owner_op = this;
-    tensor.owner_ts_idx = 0;
     tensor.guid = DTensor::next_guid++;
     // kgraph->allocate(tensor);
     output_tensors.push_back(tensor);
@@ -99,44 +96,23 @@ class KNCustomizedOp : public megakernel::kernel::KNOperator {
 public:
   KNCustomizedOp(Graph *_kgraph,
                  std::vector<DTensor> const &_inputs,
-                 megakernel::threadblock::Graph const &_graph)
+                 megakernel::threadblock::TBGraph const &_graph)
                  : KNOperator(megakernel::type::KN_CUSTOMIZED_OP, _inputs),
       bgraph(_graph.grid_dim,
              _graph.block_dim,
              _graph.thread_num) {
     size_t input_idx = 0;
     for (auto const &op : _graph.operators) {
-      // std::vector<DTensor> my_inputs;
-      // // std::vector<std::pair<int, int>> indices;
-      // for (size_t i = 0; i < op->input_tensors.size(); i++) {
-      //   int op_idx = -1, ts_idx = op->input_tensors[i].owner_ts_idx;
-      //   for (size_t l = 0; l < _graph.operators.size(); l++) {
-      //     if (_graph.operators[l] == op->input_tensors[i].owner_op) {
-      //       assert(op_idx == -1);
-      //       op_idx = static_cast<int>(l);
-      //     }
-      //   }
-      //   assert(op_idx != -1);
-      //   // my_inputs.push_back(bgraph.operators[op_idx]->output_tensors[ts_idx]);
-      //   // indices.push_back({op_idx, ts_idx});
-      // }
-
-      // assert(my_inputs.size() == 0);
       megakernel::threadblock::TBOperator *input_op =
           static_cast<megakernel::threadblock::TBOperator *>(op);
-      // DTensor const &dtensor = _inputs[input_idx++];
       bgraph.new_input(&_inputs[input_idx++],
                       input_op->input_map);
     }
   }
-  virtual ~KNCustomizedOp() { // CJM
-    // for (int i = output_tensors.size() - 1; i >= 0; i--) {
-    //   kgraph->free(output_tensors[i]);
-    // }
-  }
+  virtual ~KNCustomizedOp() {}
 
 public:
-  megakernel::threadblock::Graph bgraph;
+  megakernel::threadblock::TBGraph bgraph;
 };
 
 } // namespace kernel

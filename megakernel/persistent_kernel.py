@@ -318,7 +318,7 @@ class PersistentKernel:
         tb_graph.new_input(weight, sync_mode)
         tb_graph.new_input(output, (-1, -1, -1))
         self.kn_graph.customized([input, weight, output], tb_graph)
-        self.kn_graph.register_task(tb_graph, "rmsnorm_hopper" if self.target_cc >= 90 else "rmsnorm")
+        self.kn_graph.register_task("rmsnorm_hopper" if self.target_cc >= 90 else "rmsnorm")
 
     def rmsnorm_linear_layer(
         self,
@@ -339,7 +339,7 @@ class PersistentKernel:
         tb_graph.new_input(weight_linear, (0, -1, -1))
         tb_graph.new_input(output, (1, -1, -1))
         self.kn_graph.customized([input, weight_norm, weight_linear, output], tb_graph)
-        self.kn_graph.register_task(tb_graph, "rmsnorm_linear")
+        self.kn_graph.register_task("rmsnorm_linear")
 
     def rope_layer(
         self,
@@ -370,7 +370,7 @@ class PersistentKernel:
         tb_graph.new_input(k_embed, (-1, -1, -1))
         
         self.kn_graph.customized([q, k, cos, sin, q_embed, k_embed], tb_graph)
-        self.kn_graph.register_task(tb_graph, "rope", [-1]) # TASK_ROPE
+        self.kn_graph.register_task("rope", [-1]) # TASK_ROPE
                         
     def gqa_decode_layer(
         self,
@@ -403,9 +403,9 @@ class PersistentKernel:
             
             self.kn_graph.customized([q, k_cache, v_cache, edge, mask, output, glse, out_partial], tb_graph)
             if len(layout) == 2:
-                self.kn_graph.register_task(tb_graph, "gqa_decode", [0])
+                self.kn_graph.register_task("gqa_decode", [0])
             else:
-                self.kn_graph.register_task(tb_graph, "gqa_decode", [i//2]) # sub kernel id for combined kernel
+                self.kn_graph.register_task("gqa_decode", [i//2]) # sub kernel id for combined kernel
         
     def linear_layer(
         self,
@@ -427,15 +427,15 @@ class PersistentKernel:
         self.kn_graph.customized([input, weight, output], tb_graph)
 
         if self.target_cc == 100:
-            self.kn_graph.register_task(tb_graph, "linear_sm100")
+            self.kn_graph.register_task("linear_sm100")
         elif self.target_cc == 90:
             if weight.dim(0) // grid_dim[0] <= 64:
-                self.kn_graph.register_task(tb_graph, "linear_swapAB_hopper")
-                # self.kn_graph.register_task(tb_graph, "linear_cutlass_hopper")
+                self.kn_graph.register_task("linear_swapAB_hopper")
+                # self.kn_graph.register_task("linear_cutlass_hopper")
             else:
-                self.kn_graph.register_task(tb_graph, "linear_swapAB_hopper")
+                self.kn_graph.register_task("linear_swapAB_hopper")
         elif self.target_cc == 80 or self.target_cc == 89:
-            self.kn_graph.register_task(tb_graph, "linear")
+            self.kn_graph.register_task("linear")
         else:
             assert False
     
@@ -462,15 +462,15 @@ class PersistentKernel:
         self.kn_graph.customized([input, weight, residual, output], tb_graph)
         
         if self.target_cc == 100:
-            self.kn_graph.register_task(tb_graph, "linear_with_residual_sm100")
+            self.kn_graph.register_task("linear_with_residual_sm100")
         elif self.target_cc == 90:
             if weight.dim(0) // grid_dim[0] <= 64:
-                # self.kn_graph.register_task(tb_graph, "linear_cutlass_with_residual_hopper")
-                self.kn_graph.register_task(tb_graph, "linear_swapAB_with_residual_hopper")
+                # self.kn_graph.register_task("linear_cutlass_with_residual_hopper")
+                self.kn_graph.register_task("linear_swapAB_with_residual_hopper")
             else:
-                self.kn_graph.register_task(tb_graph, "linear_swapAB_with_residual_hopper")
+                self.kn_graph.register_task("linear_swapAB_with_residual_hopper")
         elif self.target_cc == 80 or self.target_cc == 89:
-            self.kn_graph.register_task(tb_graph, "linear_with_residual")
+            self.kn_graph.register_task("linear_with_residual")
         else:
             assert False
                     
@@ -493,7 +493,7 @@ class PersistentKernel:
         tb_graph.new_input(output, (-1, -1, -1))
         self.kn_graph.customized([input, weight, output], tb_graph)
         if self.target_cc == 80 or self.target_cc == 89:
-            self.kn_graph.register_task(tb_graph, "silu_mul_linear")
+            self.kn_graph.register_task("silu_mul_linear")
         else:
             assert False
 
@@ -512,7 +512,7 @@ class PersistentKernel:
         tb_graph.new_input(input, sync_mode)
         tb_graph.new_input(output, (-1, -1, -1))
         self.kn_graph.customized([input, output], tb_graph)
-        self.kn_graph.register_task(tb_graph, "silu_mul" if self.target_cc == 90 else "silu_mul")
+        self.kn_graph.register_task("silu_mul" if self.target_cc == 90 else "silu_mul")
 
     def silu_mul_linear_with_residual_layer(
         self,
@@ -533,7 +533,7 @@ class PersistentKernel:
         tb_graph.new_input(residual, (1, -1, -1))
         tb_graph.new_input(output, (1, -1, -1))
         self.kn_graph.customized([input, weight, residual, output], tb_graph)
-        self.kn_graph.register_task(tb_graph, "silu_mul_linear_with_residual")
+        self.kn_graph.register_task("silu_mul_linear_with_residual")
 
     def mark_basic_weights(self, weight_names):
         self.basic_weight_names = weight_names

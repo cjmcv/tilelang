@@ -62,17 +62,12 @@ cdef extern from "megakernel/type.h" namespace "megakernel::type":
         KN_INPUT_OP = 1001,
         KN_CUSTOMIZED_OP = 1999,
 
-# cdef cppclass CppTBGraph "megakernel::threadblock::Graph"
-
 cdef extern from "megakernel/kernel/device_tensor.h" namespace "megakernel::kernel":
     cdef struct CppDTensor "megakernel::kernel::DTensor":
         DataType data_type
         int num_dims
         int dim[4]
         size_t guid
-        #KNOperator *owner_op
-        #void *data_ptr
-        int owner_ts_idx
 
 cdef extern from "megakernel/kernel/runtime.h" namespace "megakernel::runtime":
     ctypedef struct TaskGraphResult:
@@ -113,13 +108,13 @@ cdef extern from "megakernel/kernel/graph.h" namespace "megakernel::kernel":
 
         vector[CppKNOperator*] operators
 
-cdef extern from "megakernel/threadblock/graph.h" namespace "megakernel::threadblock":
+cdef extern from "megakernel/kernel/tb_graph.h" namespace "megakernel::threadblock":
 
     cdef cppclass CppTBOperator "megakernel::threadblock::TBOperator":
         vector[CppDTensor] input_tensors
         vector[CppDTensor] output_tensors
 
-    cdef cppclass CppTBGraph "megakernel::threadblock::Graph":
+    cdef cppclass CppTBGraph "megakernel::threadblock::TBGraph":
         CppTBGraph(dim3 grid_dim,
                    dim3 block_dim,
                    int thread_num)
@@ -417,7 +412,7 @@ cdef class CyKNGraph:
             cname = py_byte_string
         self.p_kgraph.attach_nvshmem_tensor(tensor.c_ptr, cname)
 
-    def register_task(self, CyTBGraph bgraph, str task_type, list[int] params):
+    def register_task(self, str task_type, list[int] params):
         cdef char* cname = NULL
         if task_type is not None:
             py_byte_string = task_type.encode('UTF-8')

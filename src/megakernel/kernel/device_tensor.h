@@ -36,7 +36,6 @@ struct alignas(16) DTensor {
       // stride[i] = 0;
     }
     owner_op = nullptr;
-    owner_ts_idx = -1000;
     data_offset = -1000;
   }
   inline bool operator==(DTensor const &b) const {
@@ -55,9 +54,6 @@ struct alignas(16) DTensor {
       // }
     }
     if (owner_op != b.owner_op) {
-      return false;
-    }
-    if (owner_ts_idx != b.owner_ts_idx) {
       return false;
     }
     assert(data_offset == b.data_offset);
@@ -79,9 +75,6 @@ struct alignas(16) DTensor {
       // }
     }
     if (owner_op != b.owner_op) {
-      return true;
-    }
-    if (owner_ts_idx != b.owner_ts_idx) {
       return true;
     }
     assert(data_offset == b.data_offset);
@@ -111,7 +104,6 @@ public:
   type::GuidType guid;
   //  DTensor fields
   KNOperator *owner_op;
-  int owner_ts_idx;
   // offset in device memory
   int64_t data_offset;
 

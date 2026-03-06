@@ -93,8 +93,8 @@ class KNGraph:
     def attach_nvshmem_tensor(self, t: DTensor, name: str):
         return self.cygraph.attach_nvshmem_tensor(t, name)
     
-    def register_task(self, bgraph: TBGraph, task_type: str, params: list[int] = None):
-        return self.cygraph.register_task(bgraph.cygraph, task_type, params)
+    def register_task(self, task_type: str, params: list[int] = None):
+        return self.cygraph.register_task(task_type, params)
 
     def generate_task_graph(self, num_gpus: int, my_gpu_id: int):
         return self.cygraph.generate_task_graph(num_gpus, my_gpu_id)

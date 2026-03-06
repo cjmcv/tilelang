@@ -16,7 +16,7 @@
 #pragma once
 
 #include "megakernel/persistent_kernel/runtime_header.h"
-#include "megakernel/threadblock/graph.h"
+#include "megakernel/kernel/tb_graph.h"
 #include "megakernel/kernel/operator.h"
 #include "megakernel/code_keeper.h"
 
@@ -36,7 +36,7 @@ public:
     return &singleton;
   }
 
-  int register_rope_task(threadblock::Graph const &bgraph, std::vector<int> const &params) {
+  int register_rope_task(tb::TBGraph const &bgraph, std::vector<int> const &params) {
     // assert(params.size() == 1);
     // int sub_kernel_id = params[0];
     // printf("register_rope_task.\n");
@@ -79,7 +79,7 @@ public:
     return register_task_variant(TASK_ROPE, code.to_string());
   }
 
-  int register_gqa_decode_task(threadblock::Graph const &bgraph, std::vector<int> const &params) {
+  int register_gqa_decode_task(tb::TBGraph const &bgraph, std::vector<int> const &params) {
     assert(params.size() == 1);
     int sub_kernel_id = params[0];
     std::vector<tb::TBOperator *> input_ops;
@@ -122,7 +122,7 @@ public:
     return register_task_variant(TASK_GQA_DECODE, code.to_string());
   }
 
-  int register_rmsnorm_task(threadblock::Graph const &bgraph, std::vector<int> const &params) {
+  int register_rmsnorm_task(tb::TBGraph const &bgraph, std::vector<int> const &params) {
     assert(params.size() == 0);
     std::vector<tb::TBOperator *> input_ops;
     std::vector<tb::TBOperator *> output_ops;
@@ -158,7 +158,7 @@ public:
     return register_task_variant(TASK_RMS_NORM, code.to_string());
   }
 
-  int register_rmsnorm_linear_task(threadblock::Graph const &bgraph, std::vector<int> const &params) {
+  int register_rmsnorm_linear_task(tb::TBGraph const &bgraph, std::vector<int> const &params) {
     assert(params.size() == 0);
     int batch_size = 0, output_size = 0, reduction_size = 0, output_stride = 0;
     std::vector<tb::TBOperator *> input_ops;
@@ -201,7 +201,7 @@ public:
     return register_task_variant(TASK_RMS_NORM_LINEAR, code.to_string());
   }
 
-  int register_linear_task(threadblock::Graph const &bgraph, std::vector<int> const &params, bool with_residual, bool with_silu_mul) {
+  int register_linear_task(tb::TBGraph const &bgraph, std::vector<int> const &params, bool with_residual, bool with_silu_mul) {
     assert(params.size() == 0);
     int batch_size = 0, output_size = 0, reduction_size = 0, output_stride = 0;
     std::vector<tb::TBOperator *> input_ops;
@@ -265,7 +265,7 @@ public:
     }
   }
   
-  int register_silu_mul_task(threadblock::Graph const &bgraph, std::vector<int> const &params){
+  int register_silu_mul_task(tb::TBGraph const &bgraph, std::vector<int> const &params){
     assert(params.size() == 0);
     int batch_size = 0, output_size = 0, input_stride, output_stride;
     std::vector<tb::TBOperator *> input_ops;
@@ -309,7 +309,7 @@ public:
   }
 
 
-  int register_silu_mul_linear_with_residual_task(threadblock::Graph const &bgraph, std::vector<int> const &params){
+  int register_silu_mul_linear_with_residual_task(tb::TBGraph const &bgraph, std::vector<int> const &params){
     assert(params.size() == 0);
     int batch_size = 0, output_size = 0, reduction_size = 0, output_stride = 0;
     std::vector<tb::TBOperator *> input_ops;
@@ -352,7 +352,7 @@ public:
                                 code.to_string());
   }
   
-  int register_reduce_task(threadblock::Graph const &bgraph, std::vector<int> const &params){
+  int register_reduce_task(tb::TBGraph const &bgraph, std::vector<int> const &params){
     // Currently, allreduce task is split to two sub-tasks: allgather + reduce
     // params[0]: num_gpus
     // params[1]: my_gpu_id

@@ -19,7 +19,7 @@
 #include "megakernel/kernel/device_tensor.h"
 #include "megakernel/kernel/operator.h"
 #include "megakernel/kernel/runtime.h"
-#include "megakernel/threadblock/graph.h"
+#include "megakernel/kernel/tb_graph.h"
 #include "megakernel/kernel/task_register.h"
 #include <vector>
 
@@ -117,23 +117,14 @@ public:
     return &op->output_tensors[0];
   }
 
-  // customized operator
-  std::vector<DTensor> customized(std::vector<DTensor> const &inputs,
-                                  megakernel::threadblock::Graph const &_graph) {
-    KNOperator *op = create_customized_op(inputs, _graph);
-    assert(op != nullptr);
-    operators.push_back(op);
-    return op->output_tensors;
-  }
-
   int customized(std::vector<DTensor const *> _inputs,
                  DTensor **outputs,
-                 megakernel::threadblock::Graph const *bgraph) {
+                 megakernel::threadblock::TBGraph const *bgraph) {
     std::vector<DTensor> inputs;
     for (auto const &t : _inputs) {
       inputs.push_back(t == nullptr ? DTensor::EMPTY_TENSOR : *t);
     }
-    KNOperator *op = create_customized_op(inputs, *bgraph);
+    KNOperator *op = new KNCustomizedOp(this, inputs, *bgraph);
     assert(op != nullptr);
     operators.push_back(op);
     for (size_t i = 0; i < op->output_tensors.size(); i++) {
@@ -141,24 +132,7 @@ public:
     }
     return op->output_tensors.size();
   }
-  KNOperator *create_customized_op(std::vector<DTensor> const &inputs,
-                                   megakernel::threadblock::Graph const &_graph) {
-    // Assert that _graph's dtensor inputs align with inputs
-    {
-      int num_inputs = 0;
-      for (auto const &op : _graph.operators) {
-        megakernel::threadblock::TBOperator const *input_op =
-            static_cast<megakernel::threadblock::TBOperator const *>(op);
-        assert(inputs[num_inputs] == input_op->dtensor);
-        num_inputs++;
-      }
-      assert(num_inputs == (int)inputs.size());
-    }
 
-
-    KNCustomizedOp *op = new KNCustomizedOp(this, inputs, _graph);
-    return op;
-  }
   // persistent kernel functions
   void attach_torch_tensor(DTensor const *input,
                            void *torch_ptr,
@@ -574,7 +548,7 @@ private:
       assert(op->op_type == type::KNOperatorType::KN_CUSTOMIZED_OP);
       // Customized op
       kn::KNCustomizedOp const *cur_op = dynamic_cast<kn::KNCustomizedOp const *>(op);
-      tb::Graph const &bgraph = cur_op->bgraph;
+      tb::TBGraph const &bgraph = cur_op->bgraph;
       dim3 bid;
       std::vector<FullTaskDesc> tasks;
       std::vector<tb::TBOperator *> input_ops;
@@ -1022,7 +996,7 @@ private:
       // Customized op
       kn::KNCustomizedOp const *cur_op =
           dynamic_cast<kn::KNCustomizedOp const *>(op);
-      tb::Graph const &bgraph = cur_op->bgraph;
+      tb::TBGraph const &bgraph = cur_op->bgraph;
       dim3 bid;
       std::vector<tb::TBOperator *> input_ops;
       std::vector<tb::TBOperator *> output_ops;

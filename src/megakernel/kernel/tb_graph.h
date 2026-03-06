@@ -17,20 +17,45 @@
 
 #include "megakernel/config.h"
 #include "megakernel/kernel/device_tensor.h"
-#include "megakernel/threadblock/operator.h"
-// #include "megakernel/threadblock/smem_tensor.h"
 #include <vector>
 
 namespace megakernel {
 namespace threadblock {
 
-class Graph {
+class TBOperator {
+public:
+  TBOperator(dim3 grid_dim,
+            megakernel::kernel::DTensor const &_dtensor,
+            int3 _input_map)
+      : dtensor(_dtensor),
+    input_map(_input_map)  {
+    kernel::DTensor tensor;
+    tensor.num_dims = dtensor.num_dims;
+    tensor.data_type = dtensor.data_type;
+    for (int i = 0; i < tensor.num_dims; i++) {
+      tensor.dim[i] = dtensor.dim[i];
+    }
+
+    tensor.guid = kernel::DTensor::next_guid++;
+    output_tensors.push_back(tensor);
+  }
+
+  ~TBOperator() {}
 
 public:
-  Graph()    
+  megakernel::kernel::DTensor dtensor;
+  int3 input_map;
+
+  std::vector<kernel::DTensor> output_tensors;
+};
+
+class TBGraph {
+
+public:
+  TBGraph()    
     : grid_dim(1, 1, 1), block_dim(1, 1, 1), thread_num(128) {}
 
-  Graph(dim3 _grid_dim, dim3 _block_dim, int _thread_num)
+  TBGraph(dim3 _grid_dim, dim3 _block_dim, int _thread_num)
     : grid_dim(_grid_dim), block_dim(_block_dim), thread_num(_thread_num) {
   // A bgraph cannot have more than MAX_NUM_THREADBLOCKS_PER_KERNEL threadblocks
   // otherwise we don't have enough buffers in device memory for saving
@@ -39,15 +64,15 @@ public:
       megakernel::config::MAX_NUM_THREADBLOCKS_PER_KERNEL);
   }
 
-  ~Graph() {
+  ~TBGraph() {
     while (!operators.empty()) {
       delete operators.back();
       operators.pop_back();
     }
   }
 
-  Graph(Graph const &) = delete;
-  Graph &operator=(Graph const &) = delete;
+  TBGraph(TBGraph const &) = delete;
+  TBGraph &operator=(TBGraph const &) = delete;
   // input operator
       
   kernel::DTensor *new_input(megakernel::kernel::DTensor const *dtensor,
