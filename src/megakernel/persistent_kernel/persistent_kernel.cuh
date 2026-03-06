@@ -17,9 +17,9 @@
 #include "profiler.h"
 // #include "tasks/common/copy_sm80.cuh"
 // #include "tasks/common/bfloat16.h"
-#ifdef MPK_ENABLE_TMA
-#include "tma.cuh"
-#endif
+// #ifdef MPK_ENABLE_TMA
+// #include "tma.cuh"
+// #endif
 #include "mpk_atoms.cuh"
 #include "runtime_header.h"
 #ifdef USE_NVSHMEM
