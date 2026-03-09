@@ -59,6 +59,9 @@ rm -rf .git/modules/3rdparty/tvm/
 git submodule add https://github.com/apache/tvm.git 3rdparty/tvm
 
 # TODO
+0. 手写拷贝kernel，叠加到已有算子的layout上，用已有算子去衔接graph，多出的block用来处理拷贝kernel。
+   拼接在生成代码阶段，把kernel放入。
+
 0. 单kernel多布局切换。
 0. 实现fused_attn.py: mpk(batch, step), 添加step参数用于控制推理步数。gqa kernel动态选择时的布局兼容问题，如何处理？
 1. 可以先完成固定step的推理集成。

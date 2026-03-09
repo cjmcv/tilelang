@@ -37,7 +37,6 @@ public:
     }
 
     tensor.guid = kernel::DTensor::next_guid++;
-    output_tensors.push_back(tensor);
   }
 
   ~TBOperator() {}
@@ -45,8 +44,6 @@ public:
 public:
   megakernel::kernel::DTensor dtensor;
   int3 input_map;
-
-  std::vector<kernel::DTensor> output_tensors;
 };
 
 class TBGraph {
@@ -82,7 +79,7 @@ public:
         input_map);
     assert(op != nullptr);
     operators.push_back(op);
-    return &op->output_tensors[0];
+    return &op->dtensor;
   }
   TBOperator *create_input_op(megakernel::kernel::DTensor const &dtensor,
                               int3 input_map){
@@ -94,8 +91,6 @@ public:
   dim3 grid_dim, block_dim;
   int thread_num;
   std::vector<megakernel::threadblock::TBOperator *> operators;
-
-  using OpType = TBOperator;
 };
 
 ////////////////////////////////////////////////////////////////////////

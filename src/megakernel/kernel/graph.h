@@ -79,10 +79,8 @@ public:
   ~Graph() {
     while (!operators.empty()) {
       KNOperator *op = operators.back();
-      std::vector<DTensor>& output_tensors = op->get_output_dtensors();
-      for (size_t i=0; i<output_tensors.size(); i++) {
-        this->free(output_tensors[i]);
-      }
+      this->free(op->dtensor);
+
       delete op;
       operators.pop_back();
     }
@@ -97,24 +95,20 @@ public:
                     megakernel::type::DataType data_type) {
     KNInputOp *op = new KNInputOp(dims, strides, data_type);
     assert(op != nullptr);
-    std::vector<DTensor>& output_tensors = op->get_output_dtensors();
-    for (int i=0; i<output_tensors.size(); i++) {
-      this->allocate(output_tensors[i]);
-    }
+
+    this->allocate(op->dtensor);
     operators.push_back(op);
-    return op->output_tensors[0];
+    return op->dtensor;
   }
   DTensor *new_input_ptr(std::vector<int> const &dims,
                          std::vector<size_t> const &strides,
                          megakernel::type::DataType data_type) {
     KNInputOp *op = new KNInputOp(dims, strides, data_type);
     assert(op != nullptr);
-    std::vector<DTensor>& output_tensors = op->get_output_dtensors();
-    for (int i=0; i<output_tensors.size(); i++) {
-      this->allocate(output_tensors[i]);
-    } 
+
+    this->allocate(op->dtensor);
     operators.push_back(op);
-    return &op->output_tensors[0];
+    return &op->dtensor;
   }
 
   int customized(std::vector<DTensor const *> _inputs,
@@ -127,10 +121,10 @@ public:
     KNOperator *op = new KNCustomizedOp(this, inputs, *bgraph);
     assert(op != nullptr);
     operators.push_back(op);
-    for (size_t i = 0; i < op->output_tensors.size(); i++) {
-      outputs[i] = &op->output_tensors[i];
-    }
-    return op->output_tensors.size();
+
+    outputs[0] = &op->dtensor;
+
+    return 1;
   }
 
   // persistent kernel functions
@@ -575,8 +569,7 @@ private:
             // Initialize input tensors to the task
             for (auto const &input : input_ops) {
               TensorDesc desc;
-              assert(input->output_tensors.size() == 1);
-              DTensor stensor = input->output_tensors[0];
+              DTensor stensor = input->dtensor;
               desc.num_dims = stensor.num_dims;
               desc.data_type = stensor.data_type;
               // Assume always partition head group on gridDim.y dimension
@@ -589,8 +582,7 @@ private:
             // Initialize output tensors to the task
             for (auto const &output : output_ops) {
               TensorDesc desc;
-              assert(output->output_tensors.size() == 1);
-              DTensor stensor = output->output_tensors[0];
+              DTensor stensor = output->dtensor;
               desc.num_dims = stensor.num_dims;
               desc.data_type = stensor.data_type;
               for (int d = stensor.num_dims - 1; d >= 0; d--) {
@@ -1312,7 +1304,6 @@ public:
   std::map<megakernel::type::GuidType, megakernel::runtime::IODesc> io_config;
   TaskConfigMap task_config;
 
-  using OpType = KNOperator;
   using TensorType = DTensor;
 };
 

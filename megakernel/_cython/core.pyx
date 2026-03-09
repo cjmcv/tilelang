@@ -77,9 +77,6 @@ cdef extern from "megakernel/kernel/graph.h" namespace "megakernel::kernel":
 
     cdef cppclass CppKNOperator "megakernel::kernel::KNOperator":
         KNOperatorType op_type
-        vector[CppDTensor] input_tensors
-        vector[CppDTensor] output_tensors
-        int get_output_dtensors(CppDTensor** cinputs)
  
     cdef cppclass CppKNCustomizedOp "megakernel::kernel::KNCustomizedOp"(CppKNOperator):
         CppTBGraph bgraph
@@ -110,7 +107,7 @@ cdef extern from "megakernel/kernel/graph.h" namespace "megakernel::kernel":
 cdef extern from "megakernel/kernel/tb_graph.h" namespace "megakernel::threadblock":
 
     cdef cppclass CppTBOperator "megakernel::threadblock::TBOperator":
-        vector[CppDTensor] output_tensors
+        pass
 
     cdef cppclass CppTBGraph "megakernel::threadblock::TBGraph":
         CppTBGraph(dim3 grid_dim,

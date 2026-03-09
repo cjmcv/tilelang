@@ -53,12 +53,12 @@ public:
       }
     }
 
-    assert(output_ops[0]->output_tensors[0].num_dims == 4);
-    int batch_size = output_ops[0]->output_tensors[0].dim[0];
-    int seqlen = output_ops[0]->output_tensors[0].dim[1];
-    int heads = output_ops[0]->output_tensors[0].dim[2];
-    int dim = output_ops[0]->output_tensors[0].dim[3];
-    int groups = output_ops[1]->output_tensors[0].dim[2];
+    assert(output_ops[0]->dtensor.num_dims == 4);
+    int batch_size = output_ops[0]->dtensor.dim[0];
+    int seqlen = output_ops[0]->dtensor.dim[1];
+    int heads = output_ops[0]->dtensor.dim[2];
+    int dim = output_ops[0]->dtensor.dim[3];
+    int groups = output_ops[1]->dtensor.dim[2];
 
     assert(batch_size == 1);
     // assert(input_ops[0]->dtensor.num_dims == 2);
@@ -95,11 +95,11 @@ public:
       }
     }
 
-    assert(output_ops[0]->output_tensors[0].num_dims == 3);
-    int batch_size = output_ops[0]->output_tensors[0].dim[0];
-    int head = output_ops[0]->output_tensors[0].dim[1];
-    int dim = output_ops[0]->output_tensors[0].dim[2];
-    int groups = input_ops[1]->output_tensors[0].dim[2];
+    assert(output_ops[0]->dtensor.num_dims == 3);
+    int batch_size = output_ops[0]->dtensor.dim[0];
+    int head = output_ops[0]->dtensor.dim[1];
+    int dim = output_ops[0]->dtensor.dim[2];
+    int groups = input_ops[1]->dtensor.dim[2];
 
     assert(batch_size == 1);
     // assert(input_ops[0]->dtensor.num_dims == 2);
@@ -137,9 +137,9 @@ public:
         output_ops.push_back(static_cast<tb::TBOperator *>(op));
       }
     }
-    assert(output_ops[0]->output_tensors[0].num_dims == 2);
-    int batch_size = output_ops[0]->output_tensors[0].dim[0];
-    int hidden_dim = output_ops[0]->output_tensors[0].dim[1];
+    assert(output_ops[0]->dtensor.num_dims == 2);
+    int batch_size = output_ops[0]->dtensor.dim[0];
+    int hidden_dim = output_ops[0]->dtensor.dim[1];
     // Currently assume that each rmsnorm task processes one token
     assert(batch_size == 1);
     assert(input_ops[0]->dtensor.num_dims == 2);
@@ -174,9 +174,9 @@ public:
         output_ops.push_back(static_cast<tb::TBOperator *>(op));
       }
     }
-    assert(output_ops[0]->output_tensors[0].num_dims == 2);
-    batch_size = output_ops[0]->output_tensors[0].dim[0];
-    output_size = output_ops[0]->output_tensors[0].dim[1];
+    assert(output_ops[0]->dtensor.num_dims == 2);
+    batch_size = output_ops[0]->dtensor.dim[0];
+    output_size = output_ops[0]->dtensor.dim[1];
     assert(input_ops[0]->dtensor.num_dims == 2);
     reduction_size = input_ops[0]->dtensor.dim[1];
     // get output stride
@@ -217,9 +217,9 @@ public:
         output_ops.push_back(static_cast<tb::TBOperator *>(op));
       }
     }
-    assert(output_ops[0]->output_tensors[0].num_dims == 2);
-    batch_size = output_ops[0]->output_tensors[0].dim[0];
-    output_size = output_ops[0]->output_tensors[0].dim[1];
+    assert(output_ops[0]->dtensor.num_dims == 2);
+    batch_size = output_ops[0]->dtensor.dim[0];
+    output_size = output_ops[0]->dtensor.dim[1];
     assert(input_ops[0]->dtensor.num_dims == 2);
     reduction_size = input_ops[0]->dtensor.dim[1];
     // get output stride
@@ -280,11 +280,11 @@ public:
         output_ops.push_back(static_cast<tb::TBOperator *>(op));
       }
     }
-    assert(output_ops[0]->output_tensors[0].num_dims == 2);
-    batch_size = output_ops[0]->output_tensors[0].dim[0];
-    output_size = output_ops[0]->output_tensors[0].dim[1];
+    assert(output_ops[0]->dtensor.num_dims == 2);
+    batch_size = output_ops[0]->dtensor.dim[0];
+    output_size = output_ops[0]->dtensor.dim[1];
     assert(input_ops[0]->dtensor.num_dims == 2);
-    assert(input_ops[0]->output_tensors[0].dim[1] == output_size * 2);
+    assert(input_ops[0]->dtensor.dim[1] == output_size * 2);
     // get input stride
     assert(input_ops[0]->dtensor.owner_op->op_type == type::KN_INPUT_OP);
     kn::KNInputOp *kn_input_op =
@@ -325,9 +325,9 @@ public:
         output_ops.push_back(static_cast<tb::TBOperator *>(op));
       }
     }
-    assert(output_ops[0]->output_tensors[0].num_dims == 2);
-    batch_size = output_ops[0]->output_tensors[0].dim[0];
-    output_size = output_ops[0]->output_tensors[0].dim[1];
+    assert(output_ops[0]->dtensor.num_dims == 2);
+    batch_size = output_ops[0]->dtensor.dim[0];
+    output_size = output_ops[0]->dtensor.dim[1];
     assert(input_ops[0]->dtensor.num_dims == 2);
     reduction_size = input_ops[0]->dtensor.dim[1] / 2;
     // get output stride
@@ -378,11 +378,11 @@ public:
     assert(input_ops[0]->input_map.x == 1 && input_ops[0]->input_map.y == -1 &&
           input_ops[0]->input_map.z == -1);
     // Currently support 2D reduction, buffer has an extra world_size dim
-    assert(input_ops[0]->output_tensors[0].num_dims == 2);
-    assert(input_ops[1]->output_tensors[0].num_dims == 3);
-    assert(output_ops[0]->output_tensors[0].num_dims == 2);
-    int batch_size = input_ops[0]->output_tensors[0].dim[0];
-    int output_size = input_ops[0]->output_tensors[0].dim[1];
+    assert(input_ops[0]->dtensor.num_dims == 2);
+    assert(input_ops[1]->dtensor.num_dims == 3);
+    assert(output_ops[0]->dtensor.num_dims == 2);
+    int batch_size = input_ops[0]->dtensor.dim[0];
+    int output_size = input_ops[0]->dtensor.dim[1];
     // get output stride
     assert(input_ops[0]->dtensor.owner_op->op_type == type::KN_INPUT_OP);
     assert(output_ops[0]->dtensor.owner_op->op_type == type::KN_INPUT_OP);
