@@ -16,7 +16,6 @@ from common.micro_rmsnorm import MicroRmsNorm
 from common.micro_silu_mul import MicroSiluMul
 from common.micro_gqa_decode import MicroGqaDecode
 from common.micro_rope import MicroRope
-from common.micro_copy import MicroCopy
 
 from common.micro_autogen import MicroAutoGen
 
@@ -213,3 +212,5 @@ if __name__ == "__main__":
     gen.gen_qwen3_ops(layer_id=99, mode=HparamSelectMode.TUNED) # HEURISTIC, TUNING, TUNED
     # print(">> Finish gen_qwen3_ops.")
     # print("Test single_micro completed.")
+    
+    # PerfReporter.draw()

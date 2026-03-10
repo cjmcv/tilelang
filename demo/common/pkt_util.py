@@ -429,8 +429,61 @@ class PerfReporter:
         ref_latency = do_bench(lambda: torch_run(), warmup=warnup_iter, rep=test_iter, backend="cupti")
         print(f"Latency: {latency:.4f}ms vs {ref_latency:.4f}(torch) ms")
         
+    @staticmethod
+    def draw():
+        # attention的计算量统计，围绕QK和PV两个gemm计算，softmax可直接忽略。
+        # QK^t: [q_seqlen, head_dim] * [kv_seqlen, head_dim] = [q_seqlen, kv_seqlen], 计算量为 2 * q_seqlen * kv_seqlen * head_dim
+        # PV:   [q_seqlen, kv_seqlen] * [kv_seqlen, head_dim] = [q_seqlen, head_dim], 计算量为 2 * q_seqlen * kv_seqlen * head_dim
+        # softmax:  对每个Q头的score矩阵计算 全局 max + (Score-max) + exp(Score-max) + 全局 sum (exp 结果) + exp 结果 /sum
+        #                                        0  +     1         +      1       +      0             +   1
+        #          约等于 3 * q_seqlen * kv_seqlen
+        # 总计算量为：heads * (QK^t + softmax + PV) 
+        #          = heads * (4 * q_seqlen * kv_seqlen * head_dim + 3 * q_seqlen * kv_seqlen), GQA的kv_head少，但会重复被取来计算，计算量不变，只看q_heads.
 
+        import matplotlib.pyplot as plt
+        def cal_attn_tflops(q_seqlen, kv_seqlen, head_dim, heads):
 
+            qk_flops = heads * 2 * q_seqlen * kv_seqlen * head_dim
+            pv_flops = heads * 2 * q_seqlen * kv_seqlen * head_dim
+            softmax_flops = heads * 3 * q_seqlen * kv_seqlen
+    
+            # attn_flops = heads * 4 * q_seqlen * kv_seqlen * head_dim
+            attn_flops = qk_flops + softmax_flops + pv_flops
+            attn_tflops = attn_flops / 1e12
+            return attn_tflops
+            
+        q_seqlen = 1
+        heads = 32
+        head_dim = 128
+        
+        # L40: 0.6 / 4 / 8B 数据都接近
+        kv_seqlen     = [  16,     32,       64,     128,      256,     512,     1024,    2048,    4096,    8192]
+        torch_bf16_ms = [0.00645, 0.00674, 0.00854, 0.01239, 0.01276, 0.01484, 0.01897, 0.02788, 0.04652, 0.07821]
+        xop_bf16_ms   = [0.00601, 0.00669, 0.00796, 0.00927, 0.01032, 0.01353, 0.01741, 0.02485, 0.04092, 0.07311]
+
+        torch_bf16_tflops = []
+        xop_bf16_tflops = []
+        for i in range(len(kv_seqlen)):
+            attn_tflops = cal_attn_tflops(q_seqlen, kv_seqlen[i], head_dim, heads)
+            torch_bf16_tflops.append(attn_tflops / (torch_bf16_ms[i] / 1000))
+            xop_bf16_tflops.append(attn_tflops / (xop_bf16_ms[i] / 1000))
+
+        plot_x = range(len(kv_seqlen))
+        plt.xticks(plot_x, kv_seqlen, rotation=45)
+        plt.plot(plot_x, torch_bf16_tflops, label='fa2_bf16', marker='o', markersize=3)
+        plt.plot(plot_x, xop_bf16_tflops, label='xop_bf16', marker='s', markersize=3)
+
+        plt.title(f'perf-attn-q_seqlen{q_seqlen}-heads{heads}-head_dim{head_dim}')
+        plt.xlabel('kv_seqlen')
+        plt.ylabel('tflops')
+        
+        plt.legend()
+        plt.grid(True)
+
+        # plt.xticks(plot_x)
+        plt.savefig(f'perf-attn-q_seqlen{q_seqlen}-heads{heads}-head_dim{head_dim}' + '.png', bbox_inches='tight')
+        plt.show()
+    
     # pushd build && make -j8 && popd
     
     # git clone --recursive https://www.github.com/megakernel-project/megakernel
