@@ -37,9 +37,16 @@ public:
   }
 
   int register_rope_task(tb::TBGraph const &bgraph, std::vector<int> const &params) {
-    // assert(params.size() == 1);
+    int size = params.size();
+    int fused_params_start_id = -1;
+    for (int i=0; i<size; i++) {
+      if (params[i] == 99) {
+        fused_params_start_id = i+1;
+        break;
+      }
+    }
     // int sub_kernel_id = params[0];
-    // printf("register_rope_task.\n");
+    printf("register_rope_task.\n");
     std::vector<tb::TBOperator *> input_ops;
     std::vector<tb::TBOperator *> output_ops;
     int num_inputs = 4;
@@ -76,6 +83,24 @@ public:
     code.e("    task_desc->output_ptrs[0],");
     code.e("    task_desc->output_ptrs[1]);");
 
+    if (fused_params_start_id != -1) {
+      int extra_func_id = params[fused_params_start_id];
+      int extra_bx = params[fused_params_start_id+1];
+      int extra_by = params[fused_params_start_id+2]; // 0
+      int extra_bz = params[fused_params_start_id+3]; // 0
+      code.inc_indent();
+      code.e("  if (task_desc->bx >= $ && task_desc->by == 0 && task_desc->bz == 0) {", 
+        bgraph.grid_dim.x-extra_bx);
+      code.e("  kernel::copy_kernel<bfloat16_t>(");
+      code.e("    task_desc->bx-$, task_desc->by, task_desc->bz,", bgraph.grid_dim.x-extra_bx);
+      code.e("    *runtime_config.step,");
+      code.e("    *runtime_config.onestep_size,");
+      code.e("    runtime_config.kcache_curstep,");
+      code.e("    runtime_config.vcache_curstep,");
+      code.e("    runtime_config.kcache,");
+      code.e("    runtime_config.vcache);");
+      code.e("  }");
+    }
     return register_task_variant(TASK_ROPE, code.to_string());
   }
 

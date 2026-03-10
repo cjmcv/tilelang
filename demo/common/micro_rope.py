@@ -335,6 +335,7 @@ __device__ __forceinline__ void rope_kernel_<name_suffix>(const int bx, const in
   static_assert(THREAD_NUM==<threads>);
   static_assert(BATCH==<BATCH>); static_assert(SEQLEN==<SEQLEN>); 
   static_assert(NUM_HEADS_Q==<NUM_HEADS_Q>); static_assert(NUM_HEADS_K==<NUM_HEADS_K>); static_assert(HEAD_DIM==<HEAD_DIM>);
+  if (bx >= <gridx_0> || by >= <gridy_0> || bz >= <gridz_0>) { return; }
   
   const <dtype>* __restrict__ Q = static_cast<const <dtype>*>(q);
   const <dtype>* __restrict__ K = static_cast<const <dtype>*>(k);
@@ -368,6 +369,9 @@ __device__ __forceinline__ void rope_kernel_<name_suffix>(const int bx, const in
         
         grid_dim, block_dim, dynamic_smem_buf, use_cooperative_groups = kernel.get_launch_info()[0]
         self.layout = f"({grid_dim['blockIdx.x']}, {grid_dim['blockIdx.y']}, {grid_dim['blockIdx.z']}), ({1}, {1}, {1})"
+        source = source.replace("<gridx_0>", str(grid_dim['blockIdx.x']))
+        source = source.replace("<gridy_0>", str(grid_dim['blockIdx.y']))
+        source = source.replace("<gridz_0>", str(grid_dim['blockIdx.z']))
         extra_attr = f"\n// Strategy: {self.strategy.name}"
         extra_attr += f"\n// selected_hparams: {selected_hparams}."
         extra_attr += f"\n// smem: {dynamic_smem_buf} bytes."

@@ -312,4 +312,4 @@ __device__ __forceinline__ void flashattn_kernel_1_8192_32_16_8_128(const int bx
 // use_cooperative_groups: 0.
 // layout: (1, 8, 1), (32, 64, 1)
 // block_dim=(128, 1, 1).
-// latency: 0.00926 ms vs [ref-0.00818 sim-1.0], idx: 3
+// latency: 0.00859 ms vs [ref-0.00843 sim-1.0], idx: 3

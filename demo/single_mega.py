@@ -29,6 +29,7 @@ def test_parallel_rms_norm(mpk, max_batch_size, batch_size, hidden_size):
         sync_mode=(0, 0, 0),
         layout=Qwen3MegaConfig.merge_q_k_norm_layout,
     )
+    
     layers.compile_load(is_no_compile=args.nc, output_dir=args.output_dir)
 
     def torch_ref():
@@ -233,6 +234,78 @@ def test_rope(mpk, max_batch_size, batch, num_heads, num_kv_heads, head_dim):
                             warnup_iter=100, test_iter=100, 
                             allclose_iter=5, print_mode=1)
      
+def test_rope_fused(mpk, max_batch_size, batch, num_heads, num_kv_heads, head_dim):
+    seqlen = 1
+    q_torch = torch.randn(batch, seqlen, num_heads, head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen=1, H=num_heads,  D=head_dim]
+    k_torch = torch.randn(batch, seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)   # [B, N=seqlen=1, H=num_kv_heads, D=head_dim]
+    cos_half = torch.randn(batch, seqlen, head_dim//2, device="cuda", dtype=torch.bfloat16)
+    sin_half = torch.randn(batch, seqlen, head_dim//2, device="cuda", dtype=torch.bfloat16)
+    cos_torch = torch.cat((cos_half, cos_half), dim=-1)
+    sin_torch = torch.cat((sin_half, sin_half), dim=-1)
+    q_out_torch = torch.empty(batch, seqlen, num_heads, head_dim, device="cuda", dtype=torch.bfloat16)
+    k_out_torch = torch.empty(batch, seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)
+    
+    # print("torch: ", q_torch.data_ptr(), k_torch.data_ptr(), v_torch.data_ptr(), mask_torch.data_ptr(), out_torch.data_ptr())
+    q = mpk.attach_input(torch_tensor=q_torch, name="q")
+    k = mpk.attach_input(torch_tensor=k_torch, name="k")
+    cos = mpk.attach_input(torch_tensor=cos_torch, name="cos")
+    sin = mpk.attach_input(torch_tensor=sin_torch, name="sin")
+    q_out = mpk.attach_input(torch_tensor=q_out_torch, name="q_out")
+    k_out = mpk.attach_input(torch_tensor=k_out_torch, name="k_out")
+
+    extra_layout = (2, 0, 0)
+    fused_layout = tuple(a + b for a, b in zip(Qwen3MegaConfig.rope_layout[0], extra_layout)), Qwen3MegaConfig.rope_layout[1]
+    mpk.rope_layer(
+        q=q,
+        k=k,
+        cos=cos,
+        sin=sin,
+        q_embed=q_out,
+        k_embed=k_out,
+        sync_mode=(0, 0, 0),
+        layout=fused_layout,
+        fused_params=[99, 0, *extra_layout, 0, 1],
+    )
+    
+    kv_seqlen = 8192
+    key_cache_torch = torch.zeros(batch, kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
+    value_cache_torch = torch.zeros(batch, kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)
+    key_cache_curstep_torch = torch.randn(num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
+    value_cache_curstep_torch = torch.randn(num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)
+    
+    # print("hello", num_kv_heads*head_dim, key_cache_torch.data_ptr(), value_cache_torch.data_ptr())
+    edge_torch = torch.empty(10, device="cuda", dtype=torch.int32)
+    edge_torch[0].fill_(100)
+    edge_torch[1].fill_(num_kv_heads*head_dim)
+    meta = [edge_torch, key_cache_torch, value_cache_torch, key_cache_curstep_torch, value_cache_curstep_torch]
+    layers.compile_load(meta_tensors=meta, is_no_compile=args.nc, output_dir=args.output_dir)
+    print(key_cache_torch[:,100,:,:], key_cache_curstep_torch)
+    
+    def target_func():
+        mpk(batch_size)
+        return torch.cat((q_out_torch, k_out_torch), dim=-2)
+    
+    def torch_ref():
+        q_emb, k_emb = TorchRef.apply_rotary_pos_emb_triton(q_torch, k_torch, cos_torch, sin_torch, position_ids=None, unsqueeze_dim=2)
+        return torch.cat((q_emb, k_emb), dim=-2)
+    
+    target_output = target_func()    
+    ref_output = torch_ref()
+    print("target_output", target_output)
+    print("ref_output", ref_output)
+    
+    print("target_output", target_func())
+    print("ref_output", torch_ref())
+    # print("target_output", target_func())
+    # print("ref_output", torch_ref())
+    # print("target_output", target_func())
+    # print("ref_output", torch_ref())
+    # if (torch.allclose(out_torch, ref_output, rtol=1e-2, atol=0)):
+    #     print("allclose: True")
+    
+    reporter.generate_report(target_func, torch_ref, 
+                            warnup_iter=100, test_iter=100, 
+                            allclose_iter=5, print_mode=0)
 # def mpk_tensor(mpk):
 #     return mpk
 
@@ -432,7 +505,7 @@ if __name__ == "__main__":
     mpk = layers.get_mpk()
     
     hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim = Qwen3Info.get_basic_params(0.6)
-    seqlen_kv=8192
+    seqlen_kv=2048
     
     # test_rms_norm(mpk, max_batch_size, batch_size, hidden_size)
     # test_linear(mpk, max_batch_size, batch_size, intermediate_size*2, hidden_size, Qwen3MegaConfig.linear1_layout)
@@ -448,8 +521,9 @@ if __name__ == "__main__":
         
         
     #######################################
-    test_parallel_rms_norm(mpk, max_batch_size, batch_size, hidden_size)
-        
+    # test_parallel_rms_norm(mpk, max_batch_size, batch_size, hidden_size)
+    test_rope_fused(mpk, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim)
+    
     print("Test single_mega completed.")
     # ncu --set full --section "SpeedOfLight_RooflineChart" -k "kernel" -o my_profile python demo/single_linear.py --nc
     # ncu --set full --section "SpeedOfLight_RooflineChart" -k "persistent_kernel" -o my_profile python demo/single_linear.py

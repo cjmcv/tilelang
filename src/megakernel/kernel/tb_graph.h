@@ -74,19 +74,12 @@ public:
       
   kernel::DTensor *new_input(megakernel::kernel::DTensor const *dtensor,
                      int3 input_map){
-    TBOperator *op = create_input_op(
-        dtensor == nullptr ? kernel::DTensor::EMPTY_TENSOR : *dtensor,
-        input_map);
+    TBOperator *op = new TBOperator(grid_dim, *dtensor, input_map);
     assert(op != nullptr);
     operators.push_back(op);
     return &op->dtensor;
   }
-  TBOperator *create_input_op(megakernel::kernel::DTensor const &dtensor,
-                              int3 input_map){
-    TBOperator *op = new TBOperator(grid_dim, dtensor, input_map);
-    return op;
-  }
-
+  
 public:
   dim3 grid_dim, block_dim;
   int thread_num;

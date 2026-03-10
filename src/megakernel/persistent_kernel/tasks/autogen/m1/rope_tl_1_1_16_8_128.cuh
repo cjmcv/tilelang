@@ -27,6 +27,7 @@ __device__ __forceinline__ void rope_kernel_1_1_16_8_128(const int bx, const int
   static_assert(THREAD_NUM==128);
   static_assert(BATCH==1); static_assert(SEQLEN==1); 
   static_assert(NUM_HEADS_Q==16); static_assert(NUM_HEADS_K==8); static_assert(HEAD_DIM==128);
+  if (bx >= 24 || by >= 1 || bz >= 1) { return; }
   
   const bfloat16_t* __restrict__ Q = static_cast<const bfloat16_t*>(q);
   const bfloat16_t* __restrict__ K = static_cast<const bfloat16_t*>(k);
@@ -42,11 +43,11 @@ __device__ __forceinline__ void rope_kernel_1_1_16_8_128(const int bx, const int
       tl::__sync_thread_partial<3, 64>();
       ((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 256)] = sin[((int)threadIdx.x)];
     }
-    ((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 128)] = Q[((((int)bx) * 128) + ((int)threadIdx.x))];
+    ((bfloat16_t*)buf_dyn_shmem)[((int)threadIdx.x)] = Q[((((int)bx) * 128) + ((int)threadIdx.x))];
     __syncthreads();
     if (((int)threadIdx.x) < 64) {
-      float a = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 128)]);
-      float b = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 192)]);
+      float a = ((float)((bfloat16_t*)buf_dyn_shmem)[((int)threadIdx.x)]);
+      float b = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 64)]);
       float cos_val = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 320)]);
       float sin_val = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 256)]);
       float out_first = ((a * cos_val) - (b * sin_val));
@@ -60,11 +61,11 @@ __device__ __forceinline__ void rope_kernel_1_1_16_8_128(const int bx, const int
       tl::__sync_thread_partial<3, 64>();
       ((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 256)] = sin[((int)threadIdx.x)];
     }
-    ((bfloat16_t*)buf_dyn_shmem)[((int)threadIdx.x)] = K[(((((int)bx) * 128) + ((int)threadIdx.x)) - 2048)];
+    ((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 128)] = K[(((((int)bx) * 128) + ((int)threadIdx.x)) - 2048)];
     __syncthreads();
     if (((int)threadIdx.x) < 64) {
-      float a_1 = ((float)((bfloat16_t*)buf_dyn_shmem)[((int)threadIdx.x)]);
-      float b_1 = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 64)]);
+      float a_1 = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 128)]);
+      float b_1 = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 192)]);
       float cos_val_1 = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 320)]);
       float sin_val_1 = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 256)]);
       float out_first_1 = ((a_1 * cos_val_1) - (b_1 * sin_val_1));
@@ -83,4 +84,4 @@ __device__ __forceinline__ void rope_kernel_1_1_16_8_128(const int bx, const int
 // use_cooperative_groups: 0.
 // layout: (24, 1, 1), (1, 1, 1)
 // block_dim=(128, 1, 1).
-// latency: 0.00444 ms vs [ref-0.00512 sim-1.0], idx: 0
+// latency: 0.00358 ms vs [ref-0.00414 sim-1.0], idx: 0

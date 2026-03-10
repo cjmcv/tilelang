@@ -308,6 +308,7 @@ class PersistentKernel:
         output: DTensor,
         sync_mode: tuple,
         layout: tuple,
+        
     ):
         grid_dim, tile_dim = layout
         assert input.num_dims == 2
@@ -351,6 +352,7 @@ class PersistentKernel:
         k_embed: DTensor,
         sync_mode: tuple,
         layout: tuple,
+        fused_params: list = None, # flag 99, funcid, layout[3]
     ):
         assert q.num_dims == 4
         assert k.num_dims == 4
@@ -370,7 +372,7 @@ class PersistentKernel:
         tb_graph.new_input(k_embed, (-1, -1, -1))
         
         self.kn_graph.customized([q, k, cos, sin, q_embed, k_embed], tb_graph)
-        self.kn_graph.register_task("rope", [-1]) # TASK_ROPE
+        self.kn_graph.register_task("rope", [-1]+(fused_params if fused_params is not None else [])) # TASK_ROPE
                         
     def gqa_decode_layer(
         self,

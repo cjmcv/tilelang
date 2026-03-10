@@ -86,8 +86,7 @@ cdef extern from "megakernel/kernel/graph.h" namespace "megakernel::kernel":
         CppDTensor* new_input_ptr(vector[int] dims,
                                   vector[size_t] strides,
                                   DataType data_type)
-        int customized(vector[const CppDTensor*] inputs,
-                       CppDTensor** outputs,
+        void customized(vector[const CppDTensor*] inputs,
                        CppTBGraph* bgraph)
 
         # Persistent kernel functions
@@ -364,13 +363,7 @@ cdef class CyKNGraph:
                 assert (type(inputs[i]) == DTensor)
                 t = inputs[i]
                 cinputs[i] = t.c_ptr
-        cdef CppDTensor* coutputs[1024]
-        num_outputs = self.p_kgraph.customized(cinputs, coutputs, bgraph.p_bgraph)
-        outputs = list()
-        for i in range(num_outputs):
-            ptr = ctypes.cast(<unsigned long long>coutputs[i], ctypes.c_void_p)
-            outputs.append(DTensor(ptr))
-        return outputs
+        self.p_kgraph.customized(cinputs, bgraph.p_bgraph)
 
     # Functions for ersistent kernels
     def attach_torch_tensor(self, DTensor tensor, torch_tensor, str name):

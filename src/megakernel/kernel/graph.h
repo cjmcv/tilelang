@@ -111,8 +111,7 @@ public:
     return &op->dtensor;
   }
 
-  int customized(std::vector<DTensor const *> _inputs,
-                 DTensor **outputs,
+  void customized(std::vector<DTensor const *> _inputs,
                  megakernel::threadblock::TBGraph const *bgraph) {
     std::vector<DTensor> inputs;
     for (auto const &t : _inputs) {
@@ -121,10 +120,6 @@ public:
     KNOperator *op = new KNCustomizedOp(this, inputs, *bgraph);
     assert(op != nullptr);
     operators.push_back(op);
-
-    outputs[0] = &op->dtensor;
-
-    return 1;
   }
 
   // persistent kernel functions
