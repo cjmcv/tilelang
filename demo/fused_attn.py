@@ -41,7 +41,7 @@ if __name__ == "__main__":
     hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim = Qwen3Info.get_basic_params(0.6)
 
     seqlen_q = 1
-    max_seqlen_kv = 8192
+    max_kv_seqlen = 8192
     x_torch = torch.randn((batch, hidden_size), dtype=torch.bfloat16, device="cuda")
     w_layernorm_torch = torch.randn((1, hidden_size), dtype=torch.bfloat16, device="cuda")
     
@@ -55,15 +55,13 @@ if __name__ == "__main__":
     w_cos_torch = torch.cat((cos_half, cos_half), dim=-1)
     w_sin_torch = torch.cat((sin_half, sin_half), dim=-1)
     
-    edge_torch = torch.empty(10, device="cuda", dtype=torch.int32)
-    key_cache_torch = torch.zeros(batch, max_seqlen_kv, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
-    value_cache_torch = torch.zeros(batch, max_seqlen_kv, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)
     w_o_proj_torch = torch.randn((hidden_size, num_heads*head_dim), dtype=torch.bfloat16, device="cuda")
     
-    out_torch = torch.zeros((max_batch_size, hidden_size), dtype=torch.bfloat16, device="cuda")
-
     ###
     def ref_run(step):
+        key_cache_torch = torch.zeros(batch, max_kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
+        value_cache_torch = torch.zeros(batch, max_kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)
+    
         o1 = TorchRef.rms_norm(x_torch, w_layernorm_torch)
         qkv_out = TorchRef.linear(o1, w_qkv_proj_torch)
         # print("qkv_out", qkv_out)
@@ -93,13 +91,21 @@ if __name__ == "__main__":
         # print("o_proj", attn_output.size(), w_o_proj_torch.size()) # o_proj torch.Size([1, 1024]) torch.Size([1024, 2048])
         return final_output
     
+    edge_torch = torch.empty(10, device="cuda", dtype=torch.int32)
+    # def megaattn_run(step):
+    layer_id = 0
+    layer_num = 10
+    
+    key_cache_torch = torch.zeros(layer_num, batch, max_kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
+    value_cache_torch = torch.zeros(layer_num, batch, max_kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)
+    out_torch = torch.zeros((max_batch_size, hidden_size), dtype=torch.bfloat16, device="cuda")
+
     layers = MpkLayers(0, 1, world_size, rank, max_batch_size, args.trace_name, args.profiling)
     mpk = layers.get_mpk()
 
     x = mpk.attach_input(torch_tensor=x_torch, name="in")
     w_layernorm = mpk.attach_input(torch_tensor=w_layernorm_torch, name="w_layernorm")
     w_qkv_proj = mpk.attach_input(torch_tensor=w_qkv_proj_torch, name="w_qkv_proj")
-    
     w_o_proj = mpk.attach_input(torch_tensor=w_o_proj_torch, name="w_o_proj")
     final_attn_out = mpk.attach_input(torch_tensor=out_torch, name="final_attn_out")
     
@@ -168,6 +174,9 @@ if __name__ == "__main__":
     k_4dim = mpk.attach_input(torch_tensor=k_4dim_torch, name="k_4dim")
     cos = mpk.attach_input(torch_tensor=w_cos_torch, name="cos")
     sin = mpk.attach_input(torch_tensor=w_sin_torch, name="sin")
+    
+    extra_layout = (2, 0, 0)
+    fused_layout = tuple(a + b for a, b in zip(Qwen3MegaConfig.rope_layout[0], extra_layout)), Qwen3MegaConfig.rope_layout[1]
     mpk.rope_layer(
         q=q_4dim,
         k=k_4dim,
@@ -176,25 +185,26 @@ if __name__ == "__main__":
         q_embed=q_4dim,
         k_embed=k_4dim,
         sync_mode=(0, 0, 0),
-        layout=Qwen3MegaConfig.rope_layout,
+        layout=fused_layout,
+        fused_params=[99, 0, *extra_layout, layer_id],
     )
     
-    step = 0
     # attn
     q_3dim_torch = query_states_torch.view(batch, num_heads, head_dim)
     q_3dim = mpk.attach_input(torch_tensor=q_3dim_torch, name="q_3dim")
     value_states_torch = qkv_proj_out_torch[:, q_dim+kv_dim:].view(batch, seqlen_q, num_kv_heads, head_dim)
     
-    key_cache_torch[0, step, :, :] = k_4dim_torch
-    value_cache_torch[0, step, :, :] = value_states_torch
+    step = 15
+    # key_cache_torch[layer_id, :, step, :, :] = k_4dim_torch
+    # value_cache_torch[layer_id, :, step, :, :] = value_states_torch
     
     max_attn_split = 8
     glse_torch = torch.empty(batch, num_heads, max_attn_split, device="cuda", dtype=torch.bfloat16)
     out_partial_torch = torch.empty(batch, num_heads, max_attn_split, head_dim, device="cuda", dtype=torch.bfloat16)
-    mask_torch = torch.ones(batch, max_seqlen_kv, num_kv_heads, device="cuda", dtype=torch.uint8)
+    mask_torch = torch.ones(batch, max_kv_seqlen, num_kv_heads, device="cuda", dtype=torch.uint8)
     
-    k_cache = mpk.attach_input(torch_tensor=key_cache_torch, name="k_cache")
-    v_cache = mpk.attach_input(torch_tensor=value_cache_torch, name="v_cache")
+    k_cache = mpk.attach_input(torch_tensor=key_cache_torch[layer_id, :, :, :, :], name="k_cache")
+    v_cache = mpk.attach_input(torch_tensor=value_cache_torch[layer_id, :, :, :, :], name="v_cache")
     edge = mpk.attach_input(torch_tensor=edge_torch, name="edge")
     mask = mpk.attach_input(torch_tensor=mask_torch, name="mask")
     glse = mpk.attach_input(torch_tensor=glse_torch, name="glse")
@@ -213,6 +223,7 @@ if __name__ == "__main__":
         output=attn_out,
         sync_mode=(0, 0, 0),
         layout=Qwen3MegaConfig.gqa_decode_layout_16,
+        
     )
     attn_out_2d_torch = attn_out_torch.view(batch*seqlen_q, q_dim)
     attn_out_2d = mpk.attach_input(torch_tensor=attn_out_2d_torch, name="attn_out_2d")
@@ -226,12 +237,13 @@ if __name__ == "__main__":
         layout=Qwen3MegaConfig.linear2_layout,
     )
     
-    layers.compile_load(meta_tensors=[edge_torch], is_no_compile=args.nc, output_dir=args.output_dir)
-    
-    # step = 16
-    # ref_run(step)
-    
-    edge_torch[0].fill_(step+1) # kv_seqlen
+    # step = 15
+    edge_torch[0].fill_(step) # kv_seqlen
+    edge_torch[1].fill_(num_kv_heads*head_dim) # kvcache onestep_size
+    edge_torch[2].fill_(batch*max_kv_seqlen*num_kv_heads*head_dim) # kvcache onelayer_size
+    meta = [edge_torch, key_cache_torch, value_cache_torch, k_4dim_torch, value_states_torch]    
+    layers.compile_load(meta_tensors=meta, is_no_compile=args.nc, output_dir=args.output_dir)
+
     mpk(batch)
     print("mpk", k_4dim_torch, value_states_torch, out_torch)
     # print("mpk:", q_4dim_torch, "\n", k_4dim_torch, "\n", value_states_torch, "\n", attn_out_torch, "\n", out_torch)

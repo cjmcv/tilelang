@@ -252,7 +252,7 @@ class _GqaDecodeStrategy:
 
                 # ceildiv 向上取整，T.copy会自动校验并截断，超出范围部分会被赋0，
                 # 但输出是[batch, num_heads, dim]，即所有kv_seqlen都参与了计算，0会影响结果，正确做法是需要屏蔽掉超范围部分
-                valid_kv_seqlen = edge[0]
+                valid_kv_seqlen = edge[0] + 1
                 loop_range = T.ceildiv((valid_kv_seqlen), block_N) 
                 for k in T.Pipelined(loop_range, num_stages=num_stages):
                     T.copy(K[bid, k * block_N : (k + 1) * block_N, cur_kv_head, :], K_shared)
@@ -327,7 +327,7 @@ class _GqaDecodeStrategy:
                 T.fill(scores_max, -T.infinity(accum_dtype))
                 
                 # valid_kv_seqlen = T.floordiv(edge[0], num_split)
-                actual_kv_seqlen = edge[0]
+                actual_kv_seqlen = edge[0]+1
                 # 计算当前split的起始位置
                 base_len = actual_kv_seqlen // num_split
                 split_start = sid * base_len

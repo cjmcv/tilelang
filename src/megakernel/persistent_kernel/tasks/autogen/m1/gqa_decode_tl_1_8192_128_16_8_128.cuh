@@ -75,7 +75,7 @@ __device__ __forceinline__ void flashattn_kernel_1_8192_128_16_8_128__0(const in
   for (int i_3 = 0; i_3 < 2; ++i_3) {
     scores_max[i_3] = -CUDART_INF_F;
   }
-  int actual_kv_seqlen = edge[0];
+  int actual_kv_seqlen = (edge[0] + 1);
   int condval_1;
   if ((((int)bz) == 3)) {
     condval_1 = (actual_kv_seqlen - (((int)bz) * (actual_kv_seqlen >> 2)));
@@ -415,4 +415,4 @@ __device__ __forceinline__ void flashattn_kernel_1_8192_128_16_8_128__1(const in
 // use_cooperative_groups: 0.
 // layout: (1, 8, 4), (32, 64, 4), (16, 1, 1), (32, 64, 4)
 // block_dim=(128, 1, 1).
-// latency: 0.01344 ms vs [ref-0.01401 sim-0.99998], idx: 9
+// latency: 0.0171 ms vs [ref-0.0136 sim-0.99833], idx: 9

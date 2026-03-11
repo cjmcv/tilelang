@@ -255,8 +255,8 @@ def test_rope_fused(mpk, max_batch_size, batch, num_heads, num_kv_heads, head_di
 
     layer_num = 10
     max_kv_seqlen = 8192
-    key_cache_torch = torch.zeros(layer_num, max_kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
-    value_cache_torch = torch.zeros(layer_num, max_kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)
+    key_cache_torch = torch.zeros(layer_num, batch, max_kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
+    value_cache_torch = torch.zeros(layer_num, batch, max_kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)
     key_cache_curstep_torch = torch.randn(num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
     value_cache_curstep_torch = torch.randn(num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)
     
@@ -280,14 +280,13 @@ def test_rope_fused(mpk, max_batch_size, batch, num_heads, num_kv_heads, head_di
     edge_torch = torch.empty(10, device="cuda", dtype=torch.int32)
     edge_torch[0].fill_(step) # step, 动态更新复用
     edge_torch[1].fill_(num_kv_heads*head_dim) # kvcache onestep_size
-    edge_torch[2].fill_(max_kv_seqlen*num_kv_heads*head_dim) # kvcache onelayer_size
+    edge_torch[2].fill_(batch*max_kv_seqlen*num_kv_heads*head_dim) # kvcache onelayer_size
     meta = [edge_torch, key_cache_torch, value_cache_torch, key_cache_curstep_torch, value_cache_curstep_torch]
     layers.compile_load(meta_tensors=meta, is_no_compile=args.nc, output_dir=args.output_dir)
     
     print(torch.all(key_cache_torch == 0))
-    print("ptr1", key_cache_torch[layer_id,step,:,:].data_ptr(), value_cache_torch[layer_id,step,:,:].data_ptr())
+    print("ptr1", key_cache_torch[layer_id,:,step,:,:].data_ptr(), value_cache_torch[layer_id,:,step,:,:].data_ptr())
     print("ptr2", key_cache_curstep_torch.data_ptr(), value_cache_curstep_torch.data_ptr())
-    # print(key_cache_torch[:,step,:,:], key_cache_curstep_torch)
     
     def target_func():
         mpk(batch_size)
@@ -302,7 +301,7 @@ def test_rope_fused(mpk, max_batch_size, batch, num_heads, num_kv_heads, head_di
     print("target_output", target_output)
     print("ref_output", ref_output)
     
-    print(key_cache_torch[layer_id,step,:,:], "\n", key_cache_curstep_torch)
+    print(key_cache_torch[layer_id,:,step,:,:], "\n", key_cache_curstep_torch)
     # print("target_output", target_func())
     # print("ref_output", torch_ref())
     
@@ -323,12 +322,12 @@ def test_gqa_decode(mpk, max_batch_size, batch, num_heads, num_kv_heads, seqlen_
     glse_torch = torch.empty(batch, num_heads, split, device="cuda", dtype=torch.bfloat16)
     out_partial_torch = torch.empty(batch, num_heads, split, head_dim, device="cuda", dtype=torch.bfloat16)
     
-    valid_kv_seqlen = 64
+    step = 63
     q_torch = torch.randn(batch, num_heads, head_dim, device="cuda", dtype=torch.bfloat16)              # [B, N=seqlen_q=1, H=num_heads,  D=head_dim]
     k_torch = torch.randn(batch, seqlen_kv, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=num_kv_heads, D=head_dim]
     v_torch = torch.randn(batch, seqlen_kv, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)
     edge_torch = torch.empty(10, device="cuda", dtype=torch.int32)
-    edge_torch[0].fill_(valid_kv_seqlen)
+    edge_torch[0].fill_(step)
     mask_torch = torch.ones(batch, seqlen_kv, num_kv_heads, device="cuda", dtype=torch.uint8)
     out_torch = torch.empty(batch, num_heads, head_dim, device="cuda", dtype=torch.bfloat16)
     
@@ -361,8 +360,8 @@ def test_gqa_decode(mpk, max_batch_size, batch, num_heads, num_kv_heads, seqlen_
         mpk(batch_size)
         return out_torch
     
-    k_slice = k_torch[:, :valid_kv_seqlen, :, :]
-    v_slice = v_torch[:, :valid_kv_seqlen, :, :]
+    k_slice = k_torch[:, :step+1, :, :]
+    v_slice = v_torch[:, :step+1, :, :]
     def torch_ref():
         return TorchRef.attention_sdpa(q_torch, k_slice, v_slice, False)
     
