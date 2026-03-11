@@ -221,6 +221,7 @@ struct RuntimeConfig {
   int *kcache_curstep;         // Metadata for LLM serving
   int *vcache_curstep;         // Metadata for LLM serving
   int *onestep_size;         // Metadata for LLM serving
+  int *onelayer_size;           // Metadata for LLM serving
   long long *tokens;            // Metadata for LLM serving
   long long *input_tokens;      // Metadata for LLM serving
   long long *output_tokens;     // Metadata for LLM serving

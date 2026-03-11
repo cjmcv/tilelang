@@ -53,6 +53,7 @@ public:
     int extra_bx = params[fused_params_start_id+1];
     int extra_by = params[fused_params_start_id+2]; // 0
     int extra_bz = params[fused_params_start_id+3]; // 0
+    int layer_id = params[fused_params_start_id+4];
 
     code.inc_indent();
     code.e("  if (task_desc->bx >= $ && task_desc->by == 0 && task_desc->bz == 0) {", 
@@ -61,6 +62,8 @@ public:
       // Update kv result to kvcache
       code.e("  kernel::copy_kernel<bfloat16_t, $>(", bgraph.thread_num);
       code.e("    task_desc->bx-$, task_desc->by, task_desc->bz,", bgraph.grid_dim.x-extra_bx);
+      code.e("    $,", layer_id);
+      code.e("    *runtime_config.onelayer_size,");
       code.e("    *runtime_config.step,");
       code.e("    *runtime_config.onestep_size,");
       code.e("    runtime_config.kcache_curstep,");

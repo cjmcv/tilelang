@@ -253,6 +253,15 @@ def test_rope_fused(mpk, max_batch_size, batch, num_heads, num_kv_heads, head_di
     q_out = mpk.attach_input(torch_tensor=q_out_torch, name="q_out")
     k_out = mpk.attach_input(torch_tensor=k_out_torch, name="k_out")
 
+    layer_num = 10
+    max_kv_seqlen = 8192
+    key_cache_torch = torch.zeros(layer_num, max_kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
+    value_cache_torch = torch.zeros(layer_num, max_kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)
+    key_cache_curstep_torch = torch.randn(num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
+    value_cache_curstep_torch = torch.randn(num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)
+    
+    layer_id = 5
+    step = 100
     extra_layout = (2, 0, 0)
     fused_layout = tuple(a + b for a, b in zip(Qwen3MegaConfig.rope_layout[0], extra_layout)), Qwen3MegaConfig.rope_layout[1]
     mpk.rope_layer(
@@ -264,26 +273,21 @@ def test_rope_fused(mpk, max_batch_size, batch, num_heads, num_kv_heads, head_di
         k_embed=k_out,
         sync_mode=(0, 0, 0),
         layout=fused_layout,
-        fused_params=[99, 0, *extra_layout],
+        fused_params=[99, 0, *extra_layout, layer_id],
     )
-    
-    kv_seqlen = 8192
-    key_cache_torch = torch.zeros(batch, kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
-    value_cache_torch = torch.zeros(batch, kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)
-    key_cache_curstep_torch = torch.randn(num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
-    value_cache_curstep_torch = torch.randn(num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)
     
     # print("hello", num_kv_heads*head_dim, key_cache_torch.data_ptr(), value_cache_torch.data_ptr())
     edge_torch = torch.empty(10, device="cuda", dtype=torch.int32)
-    edge_torch[0].fill_(100)
-    edge_torch[1].fill_(num_kv_heads*head_dim)
+    edge_torch[0].fill_(step) # step, 动态更新复用
+    edge_torch[1].fill_(num_kv_heads*head_dim) # kvcache onestep_size
+    edge_torch[2].fill_(max_kv_seqlen*num_kv_heads*head_dim) # kvcache onelayer_size
     meta = [edge_torch, key_cache_torch, value_cache_torch, key_cache_curstep_torch, value_cache_curstep_torch]
     layers.compile_load(meta_tensors=meta, is_no_compile=args.nc, output_dir=args.output_dir)
     
     print(torch.all(key_cache_torch == 0))
-    print("ptr1", key_cache_torch[:,100,:,:].data_ptr(), value_cache_torch[:,100,:,:].data_ptr())
+    print("ptr1", key_cache_torch[layer_id,step,:,:].data_ptr(), value_cache_torch[layer_id,step,:,:].data_ptr())
     print("ptr2", key_cache_curstep_torch.data_ptr(), value_cache_curstep_torch.data_ptr())
-    # print(key_cache_torch[:,100,:,:], key_cache_curstep_torch)
+    # print(key_cache_torch[:,step,:,:], key_cache_curstep_torch)
     
     def target_func():
         mpk(batch_size)
@@ -298,7 +302,7 @@ def test_rope_fused(mpk, max_batch_size, batch, num_heads, num_kv_heads, head_di
     print("target_output", target_output)
     print("ref_output", ref_output)
     
-    print(key_cache_torch[:,100,:,:], key_cache_curstep_torch)
+    print(key_cache_torch[layer_id,step,:,:], "\n", key_cache_curstep_torch)
     # print("target_output", target_func())
     # print("ref_output", torch_ref())
     

@@ -265,6 +265,7 @@ extern "C" void init_persistent_kernel(int kernel_id,
     global_runtime_config[kernel_id].step = &((int*)meta_tensors[0])[0]; 
     if (meta_tensors.size() == 5) { 
       global_runtime_config[kernel_id].onestep_size = &((int*)meta_tensors[0])[1];
+      global_runtime_config[kernel_id].onelayer_size = &((int*)meta_tensors[0])[2];
       global_runtime_config[kernel_id].kcache = (int*)meta_tensors[1];
       global_runtime_config[kernel_id].vcache = (int*)meta_tensors[2];
       global_runtime_config[kernel_id].kcache_curstep = (int*)meta_tensors[3]; 
