@@ -91,7 +91,7 @@ public:
       code.inc_indent();
       code.e("  if (task_desc->bx >= $ && task_desc->by == 0 && task_desc->bz == 0) {", 
         bgraph.grid_dim.x-extra_bx);
-      code.e("  kernel::copy_kernel<bfloat16_t>(");
+      code.e("  kernel::copy_kernel<bfloat16_t, $>(", bgraph.thread_num);
       code.e("    task_desc->bx-$, task_desc->by, task_desc->bz,", bgraph.grid_dim.x-extra_bx);
       code.e("    *runtime_config.step,");
       code.e("    *runtime_config.onestep_size,");

@@ -279,7 +279,10 @@ def test_rope_fused(mpk, max_batch_size, batch, num_heads, num_kv_heads, head_di
     edge_torch[1].fill_(num_kv_heads*head_dim)
     meta = [edge_torch, key_cache_torch, value_cache_torch, key_cache_curstep_torch, value_cache_curstep_torch]
     layers.compile_load(meta_tensors=meta, is_no_compile=args.nc, output_dir=args.output_dir)
-    print(key_cache_torch[:,100,:,:], key_cache_curstep_torch)
+    print(torch.all(key_cache_torch == 0))
+    print("ptr1", key_cache_torch[:,100,:,:].data_ptr(), value_cache_torch[:,100,:,:].data_ptr())
+    print("ptr2", key_cache_curstep_torch.data_ptr(), value_cache_curstep_torch.data_ptr())
+    # print(key_cache_torch[:,100,:,:], key_cache_curstep_torch)
     
     def target_func():
         mpk(batch_size)
@@ -294,20 +297,13 @@ def test_rope_fused(mpk, max_batch_size, batch, num_heads, num_kv_heads, head_di
     print("target_output", target_output)
     print("ref_output", ref_output)
     
-    print("target_output", target_func())
-    print("ref_output", torch_ref())
+    print(key_cache_torch[:,100,:,:], key_cache_curstep_torch)
     # print("target_output", target_func())
     # print("ref_output", torch_ref())
-    # print("target_output", target_func())
-    # print("ref_output", torch_ref())
-    # if (torch.allclose(out_torch, ref_output, rtol=1e-2, atol=0)):
-    #     print("allclose: True")
     
     reporter.generate_report(target_func, torch_ref, 
                             warnup_iter=100, test_iter=100, 
                             allclose_iter=5, print_mode=0)
-# def mpk_tensor(mpk):
-#     return mpk
 
 def test_gqa_decode(mpk, max_batch_size, batch, num_heads, num_kv_heads, seqlen_kv, head_dim):
     # 1）两个图切换，以适配两个gqa配置？
