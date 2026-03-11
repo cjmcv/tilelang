@@ -7,6 +7,39 @@ from common.pkt_util import TorchRef, PerfReporter, Qwen3Info
 from common.mpk_layers import MpkLayers
 from common.autogen.qwen3_mega_config import Qwen3MegaConfig
 
+def ref_run(x_torch, step, w_layernorm_torch, w_qkv_proj_torch, w_q_norm_torch, w_k_norm_torch, w_cos_torch, w_sin_torch, w_o_proj_torch):
+    key_cache_torch = torch.zeros(batch, max_kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
+    value_cache_torch = torch.zeros(batch, max_kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)
+
+    o1 = TorchRef.rms_norm(x_torch, w_layernorm_torch)
+    qkv_out = TorchRef.linear(o1, w_qkv_proj_torch)
+    # print("qkv_out", qkv_out)
+    # print("qkv_proj", x_torch.size(), w_qkv_proj_torch.size()) # qkv_proj torch.Size([1, 1024]) torch.Size([4096, 1024])
+    
+    q_dim = num_heads*head_dim
+    kv_dim = num_kv_heads*head_dim
+    query_states = qkv_out[:, :q_dim].view(batch, seqlen_q, num_heads, head_dim) 
+    key_states = qkv_out[:, q_dim:q_dim+kv_dim].view(batch, seqlen_q, num_kv_heads, head_dim) 
+    value_states = qkv_out[:, q_dim+kv_dim:].view(batch, seqlen_q, num_kv_heads, head_dim) 
+    
+    query_states = TorchRef.rms_norm(query_states, w_q_norm_torch)
+    key_states = TorchRef.rms_norm(key_states, w_k_norm_torch)
+    query_states, key_states = TorchRef.apply_rotary_pos_emb_triton(query_states, key_states, w_cos_torch, w_sin_torch, unsqueeze_dim=2)
+    
+    key_cache_torch[0, step, :, :] = key_states
+    value_cache_torch[0, step, :, :] = value_states
+    k_slice = key_cache_torch[:, :step+1, :, :]
+    v_slice = value_cache_torch[:, :step+1, :, :]
+    # k_slice.zero_()
+    # v_slice.zero_()
+    attn_output = TorchRef.attention_sdpa(query_states, k_slice, v_slice, False)
+    attn_output = attn_output.reshape(batch*seqlen_q, q_dim)
+    final_output = TorchRef.linear(attn_output, w_o_proj_torch) + x_torch # res
+    print("torch", key_states, value_states, final_output)
+    # print("torch:", query_states, "\n", key_states, "\n", value_states, "\n", attn_output, "\n", final_output)
+    # print("o_proj", attn_output.size(), w_o_proj_torch.size()) # o_proj torch.Size([1, 1024]) torch.Size([1024, 2048])
+    return final_output
+    
 if __name__ == "__main__":
     max_batch_size = 1
     batch = 1
@@ -54,44 +87,10 @@ if __name__ == "__main__":
     sin_half = torch.randn((batch, seqlen_q, head_dim//2), dtype=torch.bfloat16, device="cuda")
     w_cos_torch = torch.cat((cos_half, cos_half), dim=-1)
     w_sin_torch = torch.cat((sin_half, sin_half), dim=-1)
-    
     w_o_proj_torch = torch.randn((hidden_size, num_heads*head_dim), dtype=torch.bfloat16, device="cuda")
     
     ###
-    def ref_run(step):
-        key_cache_torch = torch.zeros(batch, max_kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
-        value_cache_torch = torch.zeros(batch, max_kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)
     
-        o1 = TorchRef.rms_norm(x_torch, w_layernorm_torch)
-        qkv_out = TorchRef.linear(o1, w_qkv_proj_torch)
-        # print("qkv_out", qkv_out)
-        # print("qkv_proj", x_torch.size(), w_qkv_proj_torch.size()) # qkv_proj torch.Size([1, 1024]) torch.Size([4096, 1024])
-        
-        q_dim = num_heads*head_dim
-        kv_dim = num_kv_heads*head_dim
-        query_states = qkv_out[:, :q_dim].view(batch, seqlen_q, num_heads, head_dim) 
-        key_states = qkv_out[:, q_dim:q_dim+kv_dim].view(batch, seqlen_q, num_kv_heads, head_dim) 
-        value_states = qkv_out[:, q_dim+kv_dim:].view(batch, seqlen_q, num_kv_heads, head_dim) 
-        
-        query_states = TorchRef.rms_norm(query_states, w_q_norm_torch)
-        key_states = TorchRef.rms_norm(key_states, w_k_norm_torch)
-        query_states, key_states = TorchRef.apply_rotary_pos_emb_triton(query_states, key_states, w_cos_torch, w_sin_torch, unsqueeze_dim=2)
-        
-        key_cache_torch[0, step, :, :] = key_states
-        value_cache_torch[0, step, :, :] = value_states
-        k_slice = key_cache_torch[:, :step+1, :, :]
-        v_slice = value_cache_torch[:, :step+1, :, :]
-        # k_slice.zero_()
-        # v_slice.zero_()
-        attn_output = TorchRef.attention_sdpa(query_states, k_slice, v_slice, False)
-        attn_output = attn_output.reshape(batch*seqlen_q, q_dim)
-        final_output = TorchRef.linear(attn_output, w_o_proj_torch) + x_torch # res
-        print("torch", key_states, value_states, final_output)
-        # print("torch:", query_states, "\n", key_states, "\n", value_states, "\n", attn_output, "\n", final_output)
-        # print("o_proj", attn_output.size(), w_o_proj_torch.size()) # o_proj torch.Size([1, 1024]) torch.Size([1024, 2048])
-        return final_output
-    
-    edge_torch = torch.empty(10, device="cuda", dtype=torch.int32)
     # def megaattn_run(step):
     layer_id = 0
     layer_num = 10
@@ -189,79 +188,93 @@ if __name__ == "__main__":
         fused_params=[99, 0, *extra_layout, layer_id],
     )
     
-    # attn
-    q_3dim_torch = query_states_torch.view(batch, num_heads, head_dim)
-    q_3dim = mpk.attach_input(torch_tensor=q_3dim_torch, name="q_3dim")
+    # # attn
+    # q_3dim_torch = query_states_torch.view(batch, num_heads, head_dim)
+    # q_3dim = mpk.attach_input(torch_tensor=q_3dim_torch, name="q_3dim")
     value_states_torch = qkv_proj_out_torch[:, q_dim+kv_dim:].view(batch, seqlen_q, num_kv_heads, head_dim)
+
+    # max_attn_split = 8
+    edge_torch = torch.empty(10, device="cuda", dtype=torch.int32)
+    # glse_torch = torch.empty(batch, num_heads, max_attn_split, device="cuda", dtype=torch.bfloat16)
+    # out_partial_torch = torch.empty(batch, num_heads, max_attn_split, head_dim, device="cuda", dtype=torch.bfloat16)
+    # mask_torch = torch.ones(batch, max_kv_seqlen, num_kv_heads, device="cuda", dtype=torch.uint8)
+    
+    # k_cache = mpk.attach_input(torch_tensor=key_cache_torch[layer_id, :, :, :, :], name="k_cache")
+    # v_cache = mpk.attach_input(torch_tensor=value_cache_torch[layer_id, :, :, :, :], name="v_cache")
+    # edge = mpk.attach_input(torch_tensor=edge_torch, name="edge")
+    # mask = mpk.attach_input(torch_tensor=mask_torch, name="mask")
+    # glse = mpk.attach_input(torch_tensor=glse_torch, name="glse")
+    # out_partial = mpk.attach_input(torch_tensor=out_partial_torch, name="out_partial")
+    
+    # attn_out_torch = torch.empty(batch, num_heads, head_dim, device="cuda", dtype=torch.bfloat16)
+    # attn_out = mpk.attach_input(torch_tensor=attn_out_torch, name="attn_out") # 
+    # mpk.gqa_decode_layer(
+    #     q=q_3dim,
+    #     k_cache=k_cache,
+    #     v_cache=v_cache,
+    #     edge=edge,
+    #     mask=mask,
+    #     glse=glse,
+    #     out_partial=out_partial,
+    #     output=attn_out,
+    #     sync_mode=(0, 0, 0),
+    #     layout=Qwen3MegaConfig.gqa_decode_layout_16,
+        
+    # )
+    # attn_out_2d_torch = attn_out_torch.view(batch*seqlen_q, q_dim)
+    # attn_out_2d = mpk.attach_input(torch_tensor=attn_out_2d_torch, name="attn_out_2d")
+    
+    # mpk.linear_with_residual_layer(
+    #     input=attn_out_2d,
+    #     weight=w_o_proj,
+    #     residual=x,
+    #     output=final_attn_out,
+    #     sync_mode=(0, 0, 0),
+    #     layout=Qwen3MegaConfig.linear2_layout,
+    # )
     
     step = 15
-    # key_cache_torch[layer_id, :, step, :, :] = k_4dim_torch
-    # value_cache_torch[layer_id, :, step, :, :] = value_states_torch
-    
-    max_attn_split = 8
-    glse_torch = torch.empty(batch, num_heads, max_attn_split, device="cuda", dtype=torch.bfloat16)
-    out_partial_torch = torch.empty(batch, num_heads, max_attn_split, head_dim, device="cuda", dtype=torch.bfloat16)
-    mask_torch = torch.ones(batch, max_kv_seqlen, num_kv_heads, device="cuda", dtype=torch.uint8)
-    
-    k_cache = mpk.attach_input(torch_tensor=key_cache_torch[layer_id, :, :, :, :], name="k_cache")
-    v_cache = mpk.attach_input(torch_tensor=value_cache_torch[layer_id, :, :, :, :], name="v_cache")
-    edge = mpk.attach_input(torch_tensor=edge_torch, name="edge")
-    mask = mpk.attach_input(torch_tensor=mask_torch, name="mask")
-    glse = mpk.attach_input(torch_tensor=glse_torch, name="glse")
-    out_partial = mpk.attach_input(torch_tensor=out_partial_torch, name="out_partial")
-    
-    attn_out_torch = torch.empty(batch, num_heads, head_dim, device="cuda", dtype=torch.bfloat16)
-    attn_out = mpk.attach_input(torch_tensor=attn_out_torch, name="attn_out") # 
-    mpk.gqa_decode_layer(
-        q=q_3dim,
-        k_cache=k_cache,
-        v_cache=v_cache,
-        edge=edge,
-        mask=mask,
-        glse=glse,
-        out_partial=out_partial,
-        output=attn_out,
-        sync_mode=(0, 0, 0),
-        layout=Qwen3MegaConfig.gqa_decode_layout_16,
-        
-    )
-    attn_out_2d_torch = attn_out_torch.view(batch*seqlen_q, q_dim)
-    attn_out_2d = mpk.attach_input(torch_tensor=attn_out_2d_torch, name="attn_out_2d")
-    
-    mpk.linear_with_residual_layer(
-        input=attn_out_2d,
-        weight=w_o_proj,
-        residual=x,
-        output=final_attn_out,
-        sync_mode=(0, 0, 0),
-        layout=Qwen3MegaConfig.linear2_layout,
-    )
-    
-    # step = 15
     edge_torch[0].fill_(step) # kv_seqlen
     edge_torch[1].fill_(num_kv_heads*head_dim) # kvcache onestep_size
     edge_torch[2].fill_(batch*max_kv_seqlen*num_kv_heads*head_dim) # kvcache onelayer_size
-    meta = [edge_torch, key_cache_torch, value_cache_torch, k_4dim_torch, value_states_torch]    
+    meta = [edge_torch, key_cache_torch, value_cache_torch, k_4dim_torch, value_states_torch]
     layers.compile_load(meta_tensors=meta, is_no_compile=args.nc, output_dir=args.output_dir)
 
+    
+    print(key_cache_torch[layer_id, 0, step, :, :].data_ptr(), value_cache_torch[layer_id, 0, step, :, :].data_ptr())
     mpk(batch)
-    print("mpk", k_4dim_torch, value_states_torch, out_torch)
-    # print("mpk:", q_4dim_torch, "\n", k_4dim_torch, "\n", value_states_torch, "\n", attn_out_torch, "\n", out_torch)
-
-    ref_run(step)
+    a = key_cache_torch[layer_id, 0, step, :, :]
+    b = k_4dim_torch
+    
+    # torch.set_printoptions(threshold=float('inf'))
+    print("mpk1", torch.allclose(key_cache_torch[layer_id, 0, step, :, :], k_4dim_torch, rtol=0.01, atol=0.01))
+    # print("mpk1", key_cache_torch[layer_id, 0, step, :, :], k_4dim_torch)
+    # print() # 全量打印分析是否没拷贝完
+    # # print("mpk1", key_cache_torch[layer_id, 0, step, :, :], attn_out_torch, k_4dim_torch, value_states_torch, out_torch)
+    
+    # # print("mpk:", q_4dim_torch, "\n", k_4dim_torch, "\n", value_states_torch, "\n", attn_out_torch, "\n", out_torch)
+    # mpk(batch)
+    # print("mpk2", attn_out_torch, out_torch, torch.allclose(key_cache_torch[layer_id, 0, step, :, :], k_4dim_torch, rtol=0.01, atol=0.01),
+    #     torch.allclose(a, key_cache_torch[layer_id, 0, step, :, :], rtol=0.01, atol=0.01),
+    #     torch.allclose(b, k_4dim_torch, rtol=0.01, atol=0.01),
+    #     torch.allclose(a, b, rtol=0.01, atol=0.01))
+    # mpk(batch)
+    # print("mpk3", attn_out_torch, out_torch, torch.allclose(key_cache_torch[layer_id, 0, step, :, :], k_4dim_torch, rtol=0.01, atol=0.01))
+    # print("mpk2", key_cache_torch[layer_id, 0, step, :, :], attn_out_torch, k_4dim_torch, value_states_torch, out_torch)
+    
+    # ref_run(x_torch, step, w_layernorm_torch, w_qkv_proj_torch, w_q_norm_torch, w_k_norm_torch, w_cos_torch, w_sin_torch, w_o_proj_torch)
     # def torch_fix_param():
     #     return ref_run(step)
     # graph, ref_output = TorchRef.compile_capture(torch_fix_param, is_compile=True)
     
-    # edge_torch[0].fill_(step)
+
+    # # # edge_torch[0].fill_(step)
     # def mpk_run():
     #     mpk(batch)
     #     return out_torch
     # def torch_ref():
-    #     graph.replay()
-    #     return ref_output
-    
-    # if not args.profiling:
-    #     reporter.generate_report(mpk_run, torch_ref, 
-    #                             warnup_iter=100, test_iter=200, 
-    #                             allclose_iter=5, print_mode=1)
+    #     return ref_run(step)
+
+    # reporter.generate_report(mpk_run, torch_ref, 
+    #                         warnup_iter=100, test_iter=200, 
+    #                         allclose_iter=5, print_mode=1)

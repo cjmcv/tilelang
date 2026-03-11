@@ -257,8 +257,8 @@ def test_rope_fused(mpk, max_batch_size, batch, num_heads, num_kv_heads, head_di
     max_kv_seqlen = 8192
     key_cache_torch = torch.zeros(layer_num, batch, max_kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
     value_cache_torch = torch.zeros(layer_num, batch, max_kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)
-    key_cache_curstep_torch = torch.randn(num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
-    value_cache_curstep_torch = torch.randn(num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)
+    # key_cache_curstep_torch = torch.randn(batch, seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
+    value_cache_curstep_torch = torch.randn(batch, seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)
     
     layer_id = 5
     step = 100
@@ -281,16 +281,18 @@ def test_rope_fused(mpk, max_batch_size, batch, num_heads, num_kv_heads, head_di
     edge_torch[0].fill_(step) # step, 动态更新复用
     edge_torch[1].fill_(num_kv_heads*head_dim) # kvcache onestep_size
     edge_torch[2].fill_(batch*max_kv_seqlen*num_kv_heads*head_dim) # kvcache onelayer_size
-    meta = [edge_torch, key_cache_torch, value_cache_torch, key_cache_curstep_torch, value_cache_curstep_torch]
+    meta = [edge_torch, key_cache_torch, value_cache_torch, k_torch, value_cache_curstep_torch]
     layers.compile_load(meta_tensors=meta, is_no_compile=args.nc, output_dir=args.output_dir)
     
-    print(torch.all(key_cache_torch == 0))
-    print("ptr1", key_cache_torch[layer_id,:,step,:,:].data_ptr(), value_cache_torch[layer_id,:,step,:,:].data_ptr())
-    print("ptr2", key_cache_curstep_torch.data_ptr(), value_cache_curstep_torch.data_ptr())
+    print("ptr1", key_cache_torch[layer_id,:,step,:,:].data_ptr(), 
+          value_cache_torch[layer_id,:,step,:,:].data_ptr(),
+          value_cache_curstep_torch.data_ptr())
     
+    inner_k_out_torch = key_cache_torch[layer_id,:,step,:,:].view(batch, seqlen, num_kv_heads, head_dim)
+    print("shape:", inner_k_out_torch.shape)
     def target_func():
         mpk(batch_size)
-        return torch.cat((q_out_torch, k_out_torch), dim=-2)
+        return torch.cat((q_out_torch, inner_k_out_torch), dim=-2)
     
     def torch_ref():
         q_emb, k_emb = TorchRef.apply_rotary_pos_emb_triton(q_torch, k_torch, cos_torch, sin_torch, position_ids=None, unsqueeze_dim=2)
@@ -300,8 +302,7 @@ def test_rope_fused(mpk, max_batch_size, batch, num_heads, num_kv_heads, head_di
     ref_output = torch_ref()
     print("target_output", target_output)
     print("ref_output", ref_output)
-    
-    print(key_cache_torch[layer_id,:,step,:,:], "\n", key_cache_curstep_torch)
+    print("allclose", torch.allclose(value_cache_torch[layer_id, 0, step, :, :], value_cache_curstep_torch, rtol=0.01, atol=0.01))
     # print("target_output", target_func())
     # print("ref_output", torch_ref())
     

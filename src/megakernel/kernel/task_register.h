@@ -111,9 +111,16 @@ public:
     code.e("    task_desc->input_ptrs[2],");
     code.e("    task_desc->input_ptrs[3],");
     code.e("    task_desc->output_ptrs[0],");
-    code.e("    task_desc->output_ptrs[1]);");
-
-    if (fused_params_start_id != -1) {
+    if (fused_params_start_id == -1) {
+      code.e("    task_desc->output_ptrs[1]);");
+    }
+    else {
+      int extra_func_id = params[fused_params_start_id];
+      int extra_bx = params[fused_params_start_id+1];
+      int extra_by = params[fused_params_start_id+2]; // 0
+      int extra_bz = params[fused_params_start_id+3]; // 0
+      int layer_id = params[fused_params_start_id+4];
+      code.e("    ((bfloat16_t*)runtime_config.kcache) + $ * (*runtime_config.onelayer_size) + (*runtime_config.step) * (*runtime_config.onestep_size));", layer_id);
       append_fused_func(bgraph, params, fused_params_start_id, code);
     }
     return register_task_variant(TASK_ROPE, code.to_string());

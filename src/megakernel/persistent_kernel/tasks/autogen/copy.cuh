@@ -27,22 +27,20 @@ __device__ __forceinline__ void copy_kernel(const int bx, const int by, const in
   bfloat16_t* __restrict__ output1 = static_cast<bfloat16_t*>(output_ptr1) + layer_id * onelayer_size + step * onestep_size;
   bfloat16_t* __restrict__ output2 = static_cast<bfloat16_t*>(output_ptr2) + layer_id * onelayer_size + step * onestep_size;
   // if (threadIdx.x == 0) {
-  //   printf("copy_kernel: (%d,%d,%d): %d, %d\n", bx, by, bz, step, onestep_size);   
+  //   printf("copy_kernel: (%d,%d,%d): %d, %d, %d, %d, %d\n", bx, by, bz, layer_id, onelayer_size, step, onestep_size, THREAD_NUM);   
   //   printf("copy_kernel2: (%lld, %lld), (%lld, %lld), %f, %f\n", output1, output2, input1, input2, static_cast<float>(input1[0]), static_cast<float>(input1[1]));    
   // }
   if (bx == 0) {
-    for (int i = threadIdx.x; i < onestep_size; i += THREAD_NUM) {
-      output1[i] = input1[i];
-      // printf("(%d, %f, %f), ", bx, static_cast<float>(output1[i]), static_cast<float>(input1[i]));
-    }
-    return;
+    // for (int i = threadIdx.x; i < onestep_size; i += THREAD_NUM) {
+    //   output1[i] = input1[i];
+    //   // printf("(%d, %f, %f), ", bx, static_cast<float>(output1[i]), static_cast<float>(input1[i]));
+    // }
   }
   else if (bx == 1) {
     for (int i = threadIdx.x; i < onestep_size; i += THREAD_NUM) {
       output2[i] = input2[i];
       // printf("(%d, %f, %f), ", bx, static_cast<float>(output2[i]), static_cast<float>(input2[i]));
     }
-    return;
   }
 }
 

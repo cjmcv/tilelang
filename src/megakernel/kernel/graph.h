@@ -238,7 +238,7 @@ public:
       assert(false && "Unsupported task type");
     }
   }
-  
+
 private:
   bool sanity_check(megakernel::kernel::Graph const &graph,
                     std::vector<FullTaskDesc> const &all_tasks,
