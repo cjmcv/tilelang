@@ -264,7 +264,7 @@ def test_rope_fused(mpk, max_batch_size, batch, num_heads, num_kv_heads, head_di
         k_embed=k_out,
         sync_mode=(0, 0, 0),
         layout=fused_layout,
-        fused_params=[99, 0, *extra_layout, 0, 1],
+        fused_params=[99, 0, *extra_layout],
     )
     
     kv_seqlen = 8192
@@ -279,6 +279,7 @@ def test_rope_fused(mpk, max_batch_size, batch, num_heads, num_kv_heads, head_di
     edge_torch[1].fill_(num_kv_heads*head_dim)
     meta = [edge_torch, key_cache_torch, value_cache_torch, key_cache_curstep_torch, value_cache_curstep_torch]
     layers.compile_load(meta_tensors=meta, is_no_compile=args.nc, output_dir=args.output_dir)
+    
     print(torch.all(key_cache_torch == 0))
     print("ptr1", key_cache_torch[:,100,:,:].data_ptr(), value_cache_torch[:,100,:,:].data_ptr())
     print("ptr2", key_cache_curstep_torch.data_ptr(), value_cache_curstep_torch.data_ptr())
