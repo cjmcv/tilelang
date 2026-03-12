@@ -515,7 +515,7 @@ if __name__ == "__main__":
     
 
     # test_linear(mpk, max_batch_size, batch_size, (num_heads+2*num_kv_heads)*head_dim, hidden_size, Qwen3MegaConfig.qkv_proj_layout)
-    # test_rope(mpk, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim)
+    test_rope(mpk, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim)
     # test_gqa_decode(mpk, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, seqlen_kv=seqlen_kv, head_dim=head_dim)
     # test_linear_residual(mpk, max_batch_size, batch_size, hidden_size, num_heads*head_dim, Qwen3MegaConfig.o_proj_layout)
     # test_gqa_decode_multi_instance(mpk, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, seqlen_kv=seqlen_kv, head_dim=head_dim)
@@ -523,7 +523,7 @@ if __name__ == "__main__":
         
     #######################################
     # test_parallel_rms_norm(mpk, max_batch_size, batch_size, hidden_size)
-    test_rope_fused(mpk, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim)
+    # test_rope_fused(mpk, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim)
     
     print("Test single_mega completed.")
     # ncu --set full --section "SpeedOfLight_RooflineChart" -k "kernel" -o my_profile python demo/single_linear.py --nc
