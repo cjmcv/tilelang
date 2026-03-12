@@ -297,7 +297,7 @@ class Qwen3Attention(nn.Module):
         )
 
         cos, sin = position_embeddings
-        print("position_embeddings: ", query_states.size(), key_states.size(), cos.size(), sin.size())
+        # print("position_embeddings: ", query_states.size(), key_states.size(), cos.size(), sin.size())
 
         # query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=2)
         query_states, key_states = apply_rotary_pos_emb_triton(
@@ -385,6 +385,7 @@ class Qwen3DecoderLayer(nn.Module):
     ) -> Tuple[
         torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]
     ]:
+        # print("forward: ", hidden_states.size(), attention_mask, position_embeddings[0].size(), position_embeddings[1].size(), step)
         if (ENABLE_MPK and self.layer_idx == 0 and hidden_states.shape[1] == 1):
 
             residual = hidden_states
@@ -432,7 +433,7 @@ class Qwen3DecoderLayer(nn.Module):
         # print("shape1: ", hidden_states.shape, residual.shape)
         
         # Fully Connected
-        print("Qwen3DecoderLayer", hidden_states.shape)
+        # print("Qwen3DecoderLayer", hidden_states.shape)
         residual = hidden_states
         # hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(

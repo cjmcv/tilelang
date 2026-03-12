@@ -7,10 +7,8 @@ from common.pkt_util import TorchRef, PerfReporter, Qwen3Info
 from common.mpk_layers import MpkLayers
 from common.autogen.qwen3_mega_config import Qwen3MegaConfig
 
-def ref_run(x_torch, step, w_layernorm_torch, w_qkv_proj_torch, w_q_norm_torch, w_k_norm_torch, w_cos_torch, w_sin_torch, w_o_proj_torch):
-    key_cache_5dim_torch = torch.zeros(batch, max_kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
-    value_cache_5dim_torch = torch.zeros(batch, max_kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)
-
+# w_cos_torch, w_sin_torch针对step，每个step一份，所有层共享
+def ref_run(step, key_cache, value_cache, x_torch, w_layernorm_torch, w_qkv_proj_torch, w_q_norm_torch, w_k_norm_torch, w_cos_torch, w_sin_torch, w_o_proj_torch):
     o1 = TorchRef.rms_norm(x_torch, w_layernorm_torch)
     qkv_out = TorchRef.linear(o1, w_qkv_proj_torch)
     # print("qkv_out", qkv_out)
@@ -26,10 +24,10 @@ def ref_run(x_torch, step, w_layernorm_torch, w_qkv_proj_torch, w_q_norm_torch, 
     key_states = TorchRef.rms_norm(key_states, w_k_norm_torch)
     query_states, key_states = TorchRef.apply_rotary_pos_emb_triton(query_states, key_states, w_cos_torch, w_sin_torch, unsqueeze_dim=2)
     
-    key_cache_5dim_torch[0, step, :, :] = key_states
-    value_cache_5dim_torch[0, step, :, :] = value_states
-    k_slice = key_cache_5dim_torch[:, :step+1, :, :]
-    v_slice = value_cache_5dim_torch[:, :step+1, :, :]
+    key_cache[0, step, :, :] = key_states
+    value_cache[0, step, :, :] = value_states
+    k_slice = key_cache[:, :step+1, :, :]
+    v_slice = value_cache[:, :step+1, :, :]
     # k_slice.zero_()
     # v_slice.zero_()
     attn_output = TorchRef.attention_sdpa(query_states, k_slice, v_slice, False)
@@ -85,28 +83,34 @@ if __name__ == "__main__":
     
     cos_half = torch.randn((batch, seqlen_q, head_dim//2), dtype=torch.bfloat16, device="cuda")
     sin_half = torch.randn((batch, seqlen_q, head_dim//2), dtype=torch.bfloat16, device="cuda")
-    w_cos_torch = torch.cat((cos_half, cos_half), dim=-1)
-    w_sin_torch = torch.cat((sin_half, sin_half), dim=-1)
+    w_cos_torch = torch.cat((cos_half, cos_half), dim=-1).contiguous()
+    w_sin_torch = torch.cat((sin_half, sin_half), dim=-1).contiguous()
     w_o_proj_torch = torch.randn((hidden_size, num_heads*head_dim), dtype=torch.bfloat16, device="cuda")
     
     ###
     layer_num = 10
     key_cache_5dim_torch = torch.zeros(layer_num, batch, max_kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
     value_cache_5dim_torch = torch.zeros(layer_num, batch, max_kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)
-
+    
+    # 
     q_dim = num_heads*head_dim
     kv_dim = num_kv_heads*head_dim    
     qkv_proj_out_torch = torch.zeros(max_batch_size, q_dim+2*kv_dim, dtype=torch.bfloat16, device="cuda")
-    qk_states_torch = qkv_proj_out_torch[:, :q_dim+kv_dim].view(batch*seqlen_q*(num_heads+num_kv_heads), head_dim) 
-    
-    q_2dim_torch = qkv_proj_out_torch[:, :q_dim].view(batch*seqlen_q*num_heads, head_dim)
-    q_3dim_torch = q_2dim_torch.view(batch, num_heads, head_dim)
-    q_4dim_torch = q_2dim_torch.view(batch, seqlen_q, num_heads, head_dim)
-    
-    k_2dim_torch = qkv_proj_out_torch[:, q_dim:q_dim+kv_dim].view(batch*seqlen_q*num_kv_heads, head_dim)
-    k_4dim_torch = k_2dim_torch.view(batch, seqlen_q, num_kv_heads, head_dim)
-    
-    v_4dim_torch = qkv_proj_out_torch[:, q_dim+kv_dim:].view(batch, seqlen_q, num_kv_heads, head_dim)
+    qk_torch = {
+        "2d": qkv_proj_out_torch[:, :q_dim+kv_dim].view(batch*seqlen_q*(num_heads+num_kv_heads), head_dim) 
+    }
+    q_torch = {
+        "2d": qkv_proj_out_torch[:, :q_dim].view(batch*seqlen_q*num_heads, head_dim),
+        "3d": qkv_proj_out_torch[:, :q_dim].view(batch*seqlen_q, num_heads, head_dim),
+        "4d": qkv_proj_out_torch[:, :q_dim].view(batch, seqlen_q, num_heads, head_dim),
+    }
+    k_torch = {
+        "2d": qkv_proj_out_torch[:, q_dim:q_dim+kv_dim].view(batch*seqlen_q*num_kv_heads, head_dim),
+        "4d": qkv_proj_out_torch[:, q_dim:q_dim+kv_dim].view(batch, seqlen_q, num_kv_heads, head_dim),
+    }
+    v_torch = {
+        "4d": qkv_proj_out_torch[:, q_dim+kv_dim:].view(batch, seqlen_q, num_kv_heads, head_dim),
+    }
     
     max_attn_split = 8
     edge_torch = torch.empty(10, device="cuda", dtype=torch.int32)
@@ -126,43 +130,43 @@ if __name__ == "__main__":
     mpk = layers.get_mpk()
 
     x = mpk.attach_input(torch_tensor=x_torch, name="in")
+    #    rmsnorm (x) -> linear (qkv proj) -> rmsnorm (q/k) -> rope (q/k) -> attn -> linear_res
+    # -> update cos/sin (step)                             -> update kvcache (step)
     w_layernorm = mpk.attach_input(torch_tensor=w_layernorm_torch, name="w_layernorm")
-    w_qkv_proj = mpk.attach_input(torch_tensor=w_qkv_proj_torch, name="w_qkv_proj")
-    w_o_proj = mpk.attach_input(torch_tensor=w_o_proj_torch, name="w_o_proj")
-    
-    # 
     layernorm_out = mpk.new_tensor(dims=(max_batch_size, hidden_size), dtype=mi.bfloat16, name="layernorm_out", io_category="cuda_tensor")
+    # qkv proj
+    w_qkv_proj = mpk.attach_input(torch_tensor=w_qkv_proj_torch, name="w_qkv_proj")
     qkv_proj_out = mpk.attach_input(torch_tensor=qkv_proj_out_torch, name="qkv_proj_out")
+    # qk norm
     if 1:
         w_qk_norm = mpk.attach_input(torch_tensor=w_qk_norm_torch, name="w_qk_norm")
-        qk_states = mpk.attach_input(torch_tensor=qk_states_torch, name="qk_states")
+        qk_states = mpk.attach_input(torch_tensor=qk_torch["2d"], name="qk_states")
     else:
         w_q_norm = mpk.attach_input(torch_tensor=w_q_norm_torch, name="w_q_norm")
         w_k_norm = mpk.attach_input(torch_tensor=w_k_norm_torch, name="w_k_norm")
-        query_states = mpk.attach_input(torch_tensor=q_2dim_torch, name="query_states")
-        key_states = mpk.attach_input(torch_tensor=k_2dim_torch, name="key_states")
-        
+        query_states = mpk.attach_input(torch_tensor=q_torch["2d"], name="query_states")
+        key_states = mpk.attach_input(torch_tensor=k_torch["2d"], name="key_states")
     # rope
-    q_4dim = mpk.attach_input(torch_tensor=q_4dim_torch, name="q_4dim")
-    k_4dim = mpk.attach_input(torch_tensor=k_4dim_torch, name="k_4dim")
+    rope_in_q = mpk.attach_input(torch_tensor=q_torch["4d"], name="rope_in_q")
+    rope_in_k = mpk.attach_input(torch_tensor=k_torch["4d"], name="rope_in_k")
     w_cos = mpk.attach_input(torch_tensor=w_cos_torch, name="cos")
     w_sin = mpk.attach_input(torch_tensor=w_sin_torch, name="sin")
-    
     # attn
-    q_3dim = mpk.attach_input(torch_tensor=q_3dim_torch, name="q_3dim")
-    k_4dim_cache = mpk.attach_input(torch_tensor=key_cache_5dim_torch[layer_id, :, :, :, :], name="k_4dim_cache")
-    v_4dim_cache = mpk.attach_input(torch_tensor=value_cache_5dim_torch[layer_id, :, :, :, :], name="v_4dim_cache")
+    attn_in_q = mpk.attach_input(torch_tensor=q_torch["3d"], name="attn_in_q")
+    attn_in_kcache = mpk.attach_input(torch_tensor=key_cache_5dim_torch[layer_id, :, :, :, :], name="attn_in_kcache")
+    attn_in_vcache = mpk.attach_input(torch_tensor=value_cache_5dim_torch[layer_id, :, :, :, :], name="attn_in_vcache")
     edge = mpk.attach_input(torch_tensor=edge_torch, name="edge")
-    mask = mpk.attach_input(torch_tensor=mask_torch, name="mask")
-    glse = mpk.attach_input(torch_tensor=glse_torch, name="glse")
-    out_partial = mpk.attach_input(torch_tensor=out_partial_torch, name="out_partial")
-    
+    attn_in_mask = mpk.attach_input(torch_tensor=mask_torch, name="attn_in_mask")
+    attn_in_glse = mpk.attach_input(torch_tensor=glse_torch, name="attn_in_glse")
+    attn_out_partial = mpk.attach_input(torch_tensor=out_partial_torch, name="attn_out_partial")
     attn_out_3dim = mpk.attach_input(torch_tensor=attn_out_3dim_torch, name="attn_out_3dim") # 
     attn_out_2dim = mpk.attach_input(torch_tensor=attn_out_2dim_torch, name="attn_out_2dim")
-    
     # linear_res
-    linear_res_out = mpk.attach_input(torch_tensor=out_torch, name="linear_res_out")
+    w_o_proj = mpk.attach_input(torch_tensor=w_o_proj_torch, name="w_o_proj")
+    o_proj_res_out = mpk.attach_input(torch_tensor=out_torch, name="o_proj_res_out")
+    
     #########################################
+    
     mpk.rmsnorm_layer(
         input=x,
         weight=w_layernorm,
@@ -187,7 +191,6 @@ if __name__ == "__main__":
             layout=Qwen3MegaConfig.merge_q_k_norm_layout,
         )
     else:
-        # print(q_2dim_torch.dim, k_2dim_torch.dim)
         mpk.rmsnorm_layer(
             input=query_states,
             weight=w_q_norm,
@@ -207,26 +210,26 @@ if __name__ == "__main__":
     extra_layout = (2, 0, 0)
     fused_layout = tuple(a + b for a, b in zip(Qwen3MegaConfig.rope_layout[0], extra_layout)), Qwen3MegaConfig.rope_layout[1]
     mpk.rope_layer(
-        q=q_4dim,
-        k=k_4dim,
+        q=rope_in_q,
+        k=rope_in_k,
         cos=w_cos,
         sin=w_sin,
-        q_embed=q_4dim,
-        k_embed=k_4dim,
+        q_embed=rope_in_q,
+        k_embed=rope_in_k,
         sync_mode=(0, 0, 0),
         layout=fused_layout,
         fused_params=[99, 0, *extra_layout, layer_id],
     )
     
-    # # attn    
+    # attn    
     mpk.gqa_decode_layer(
-        q=q_3dim,
-        k_cache=k_4dim_cache,
-        v_cache=v_4dim_cache,
+        q=attn_in_q,
+        k_cache=attn_in_kcache,
+        v_cache=attn_in_vcache,
         edge=edge,
-        mask=mask,
-        glse=glse,
-        out_partial=out_partial,
+        mask=attn_in_mask,
+        glse=attn_in_glse,
+        out_partial=attn_out_partial,
         output=attn_out_3dim,
         sync_mode=(0, 0, 0),
         layout=Qwen3MegaConfig.gqa_decode_layout_16,
@@ -236,7 +239,7 @@ if __name__ == "__main__":
         input=attn_out_2dim,
         weight=w_o_proj,
         residual=x,
-        output=linear_res_out,
+        output=o_proj_res_out,
         sync_mode=(0, 0, 0),
         layout=Qwen3MegaConfig.linear2_layout,
     )
@@ -245,7 +248,7 @@ if __name__ == "__main__":
     edge_torch[0].fill_(step) # kv_seqlen
     edge_torch[1].fill_(num_kv_heads*head_dim) # kvcache onestep_size
     edge_torch[2].fill_(batch*max_kv_seqlen*num_kv_heads*head_dim) # kvcache onelayer_size
-    meta = [edge_torch, key_cache_5dim_torch, value_cache_5dim_torch, k_4dim_torch, v_4dim_torch]
+    meta = [edge_torch, key_cache_5dim_torch, value_cache_5dim_torch, k_torch["4d"], v_torch["4d"]]
     layers.compile_load(meta_tensors=meta, is_no_compile=args.nc, output_dir=args.output_dir)
 
     print(key_cache_5dim_torch[layer_id, 0, step, :, :].data_ptr(), value_cache_5dim_torch[layer_id, 0, step, :, :].data_ptr())
@@ -255,8 +258,12 @@ if __name__ == "__main__":
     def mpk_run():
         mpk(batch)
         return out_torch
+    
+    key_cache = torch.zeros(batch, max_kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
+    value_cache = torch.zeros(batch, max_kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)
     def torch_ref():
-        return ref_run(x_torch, step, w_layernorm_torch, w_qkv_proj_torch, w_q_norm_torch, w_k_norm_torch, w_cos_torch, w_sin_torch, w_o_proj_torch)
+        return ref_run(step, key_cache, value_cache, x_torch, 
+                       w_layernorm_torch, w_qkv_proj_torch, w_q_norm_torch, w_k_norm_torch, w_cos_torch, w_sin_torch, w_o_proj_torch)
 
     reporter.generate_report(mpk_run, torch_ref, 
                             warnup_iter=100, test_iter=200, 

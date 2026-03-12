@@ -4,7 +4,7 @@ import torch
 import torch.distributed as dist
 import argparse
 import os, json
-from common.pkt_util import TorchRef
+from common.pkt_util import TorchRef, Qwen3Info
 
 DEFAULT_SAVE_DIR = os.path.join("outputs", "qwen3")
 MAX_SAVE_TOKENS = 100
@@ -145,7 +145,7 @@ if __name__ == "__main__":
     print(f"world_size({world_size}) rank({rank})")
     torch.set_default_dtype(torch.bfloat16)
 
-    model, tokenizer = TorchRef.load_model(rank)
+    model, tokenizer = Qwen3Info.load_model(rank)
     total_num_requests = 1 if not args.use_mirage else args.max_num_batched_requests
     # get all model weight tensors
     tokens = torch.full((total_num_requests, args.max_seq_length), 0, dtype=torch.long, device="cuda")
@@ -187,6 +187,7 @@ if __name__ == "__main__":
     prompt_lengths = torch.full((total_num_requests,), model_inputs.input_ids.shape[-1], dtype=torch.int, device="cuda")
     positions = torch.arange(32768).unsqueeze(0).to(model.device)
     position_embeddings = model.model.rotary_emb(positions)
+    # print("aa position_embeddings: ", position_embeddings[0].size(), position_embeddings[1].size()) # torch.Size([1, 32768, 128]) torch.Size([1, 32768, 128])
 
     # get all model weight tensors
     input_tokens = torch.full((args.max_num_batched_tokens, 1), 0, dtype=torch.long, device="cuda")
@@ -198,7 +199,7 @@ if __name__ == "__main__":
     )
     step = torch.full((total_num_requests, ), 0, dtype=torch.int32, device="cuda")
     num_new_tokens = torch.full((total_num_requests, ), 1, dtype=torch.int32, device="cuda")
-
+    print("step: ", step.size())
     # g = torch.cuda.CUDAGraph()
     stream = torch.cuda.Stream()
     warmup = 0
@@ -209,6 +210,7 @@ if __name__ == "__main__":
     prompt_len = prompt_lengths[0].item()
     decode_limit = prompt_len + output_len
     for cur_pos in range(prompt_len, decode_limit):
+        print(cur_pos - 1)
         step.fill_(cur_pos - 1)
         input_ids = tokens[:, prev_pos:cur_pos]
         cos_embeddings = position_embeddings[0][:, prev_pos:cur_pos]
