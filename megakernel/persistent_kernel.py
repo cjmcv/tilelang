@@ -386,6 +386,7 @@ class PersistentKernel:
         output: DTensor,
         sync_mode: tuple,
         layout: tuple,
+        fused_params: list = None, # flag 99, funcid
     ):
         assert q.num_dims == 3
         assert output.num_dims == 3
@@ -405,9 +406,9 @@ class PersistentKernel:
             
             self.kn_graph.customized([q, k_cache, v_cache, edge, mask, output, glse, out_partial], tb_graph)
             if len(layout) == 2:
-                self.kn_graph.register_task("gqa_decode", [0])
+                self.kn_graph.register_task("gqa_decode", [0]+(fused_params if fused_params is not None else []))
             else:
-                self.kn_graph.register_task("gqa_decode", [i//2]) # sub kernel id for combined kernel
+                self.kn_graph.register_task("gqa_decode", [i//2]+(fused_params if fused_params is not None else [])) # sub kernel id for combined kernel
         
     def linear_layer(
         self,

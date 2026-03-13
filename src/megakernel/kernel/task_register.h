@@ -58,7 +58,8 @@ public:
     code.inc_indent();
     code.e("  if (task_desc->bx >= $ && task_desc->by == 0 && task_desc->bz == 0) {", 
       bgraph.grid_dim.x-extra_bx);
-    if (extra_func_id == 0) {
+    // extra_func_id == 0: 对应无参数，只切换逻辑
+    if (extra_func_id == 1) {
       // Update kv result to kvcache
       code.e("  kernel::copy_kernel<bfloat16_t, $>(", bgraph.thread_num);
       code.e("    task_desc->bx-$, task_desc->by, task_desc->bz,", bgraph.grid_dim.x-extra_bx);
@@ -127,7 +128,8 @@ public:
   }
 
   int register_gqa_decode_task(tb::TBGraph const &bgraph, std::vector<int> const &params) {
-    assert(params.size() == 1);
+    int fused_params_start_id = get_fused_start_id(params);
+
     int sub_kernel_id = params[0];
     std::vector<tb::TBOperator *> input_ops;
     std::vector<tb::TBOperator *> output_ops;
@@ -146,7 +148,12 @@ public:
     int batch_size = output_ops[0]->dtensor.dim[0];
     int head = output_ops[0]->dtensor.dim[1];
     int dim = output_ops[0]->dtensor.dim[2];
-    int groups = input_ops[1]->dtensor.dim[2];
+
+    int num_kv_heads_idx = 2; 
+    if (fused_params_start_id != -1) {
+      num_kv_heads_idx = 3; // 4d kvcache [layer, batch, seqlen, num_kv_heads, dim_per_head]
+    }
+    
 
     assert(batch_size == 1);
     // assert(input_ops[0]->dtensor.num_dims == 2);
@@ -154,17 +161,38 @@ public:
     // assert(output_ops[0]->dtensor.dim[1] == input_ops[0]->dtensor.dim[1]);
     megakernel::transpiler::CodeKeeper code;
     code.inc_indent();
-    code.e("kernel::gqa_decode_kernel<bfloat16_t, $, $, $, $, $, $>(",
-      bgraph.thread_num, sub_kernel_id, batch_size, head, groups, dim);
-    code.e("    task_desc->bx, task_desc->by, task_desc->bz,");
-    code.e("    task_desc->input_ptrs[0],");
-    code.e("    task_desc->input_ptrs[1],");
-    code.e("    task_desc->input_ptrs[2],");
-    code.e("    task_desc->input_ptrs[3],");
-    code.e("    runtime_config.step, // task_desc->input_ptrs[4],");
-    code.e("    task_desc->output_ptrs[0],");
-    code.e("    task_desc->output_ptrs[1],");
-    code.e("    task_desc->output_ptrs[2]);");
+    if (fused_params_start_id == -1) {
+      int num_kv_heads = input_ops[1]->dtensor.dim[2]; // 4d kvcache [batch, seqlen, num_kv_heads, dim_per_head]
+      code.e("kernel::gqa_decode_kernel<bfloat16_t, $, $, $, $, $, $>(",
+        bgraph.thread_num, sub_kernel_id, batch_size, head, num_kv_heads, dim);
+      code.e("    task_desc->bx, task_desc->by, task_desc->bz,");
+      code.e("    task_desc->input_ptrs[0],");
+      code.e("    task_desc->input_ptrs[1],");
+      code.e("    task_desc->input_ptrs[2],");
+      code.e("    task_desc->input_ptrs[3],");
+      code.e("    runtime_config.step, // task_desc->input_ptrs[4],");
+      code.e("    task_desc->output_ptrs[0],");
+      code.e("    task_desc->output_ptrs[1],");
+      code.e("    task_desc->output_ptrs[2]);");
+    }
+    else {
+      // 5d kvcache [layer, batch, seqlen, num_kv_heads, dim_per_head]
+      int num_kv_heads = input_ops[1]->dtensor.dim[3];
+
+      int extra_func_id = params[fused_params_start_id];
+      int layer_id = params[fused_params_start_id+1];
+      code.e("kernel::gqa_decode_kernel<bfloat16_t, $, $, $, $, $, $>(",
+        bgraph.thread_num, sub_kernel_id, batch_size, head, num_kv_heads, dim);
+      code.e("    task_desc->bx, task_desc->by, task_desc->bz,");
+      code.e("    task_desc->input_ptrs[0],");
+      code.e("    ((bfloat16_t*)task_desc->input_ptrs[1]) + $ * (*runtime_config.onelayer_size) + (*runtime_config.step) * (*runtime_config.onestep_size), // task_desc->input_ptrs[1]", layer_id);
+      code.e("    ((bfloat16_t*)task_desc->input_ptrs[2]) + $ * (*runtime_config.onelayer_size) + (*runtime_config.step) * (*runtime_config.onestep_size), // task_desc->input_ptrs[2]", layer_id);
+      code.e("    task_desc->input_ptrs[3],");
+      code.e("    runtime_config.step, // task_desc->input_ptrs[4],");
+      code.e("    task_desc->output_ptrs[0],");
+      code.e("    task_desc->output_ptrs[1],");
+      code.e("    task_desc->output_ptrs[2]);");
+    }
     
     return register_task_variant(TASK_GQA_DECODE, code.to_string());
   }

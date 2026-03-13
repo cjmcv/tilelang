@@ -16,9 +16,9 @@ def ref_run(step, key_cache, value_cache, x_torch, w_layernorm_torch, w_qkv_proj
     
     q_dim = num_heads*head_dim
     kv_dim = num_kv_heads*head_dim
-    query_states = qkv_out[:, :q_dim].view(batch, seqlen_q, num_heads, head_dim) 
-    key_states = qkv_out[:, q_dim:q_dim+kv_dim].view(batch, seqlen_q, num_kv_heads, head_dim) 
-    value_states = qkv_out[:, q_dim+kv_dim:].view(batch, seqlen_q, num_kv_heads, head_dim) 
+    query_states = qkv_out[:, :q_dim].view(batch, q_seqlen, num_heads, head_dim) 
+    key_states = qkv_out[:, q_dim:q_dim+kv_dim].view(batch, q_seqlen, num_kv_heads, head_dim) 
+    value_states = qkv_out[:, q_dim+kv_dim:].view(batch, q_seqlen, num_kv_heads, head_dim) 
     
     query_states = TorchRef.rms_norm(query_states, w_q_norm_torch)
     key_states = TorchRef.rms_norm(key_states, w_k_norm_torch)
@@ -31,7 +31,7 @@ def ref_run(step, key_cache, value_cache, x_torch, w_layernorm_torch, w_qkv_proj
     # k_slice.zero_()
     # v_slice.zero_()
     attn_output = TorchRef.attention_sdpa(query_states, k_slice, v_slice, False)
-    attn_output = attn_output.reshape(batch*seqlen_q, q_dim)
+    attn_output = attn_output.reshape(batch*q_seqlen, q_dim)
     final_output = TorchRef.linear(attn_output, w_o_proj_torch) + x_torch # res
     # print("torch", key_states, value_states, final_output)
     # print("torch:", query_states, "\n", key_states, "\n", value_states, "\n", attn_output, "\n", final_output)
@@ -71,7 +71,7 @@ if __name__ == "__main__":
     
     hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim = Qwen3Info.get_basic_params(0.6)
 
-    seqlen_q = 1
+    q_seqlen = 1
     max_kv_seqlen = 8192
     x_torch = torch.randn((batch, hidden_size), dtype=torch.bfloat16, device="cuda")
     w_layernorm_torch = torch.randn((1, hidden_size), dtype=torch.bfloat16, device="cuda")
@@ -81,8 +81,8 @@ if __name__ == "__main__":
     w_k_norm_torch = torch.randn((1, head_dim), dtype=torch.bfloat16, device="cuda")
     w_qk_norm_torch = torch.cat([w_q_norm_torch, w_k_norm_torch], dim=0).contiguous()
     
-    cos_half = torch.randn((batch, seqlen_q, head_dim//2), dtype=torch.bfloat16, device="cuda")
-    sin_half = torch.randn((batch, seqlen_q, head_dim//2), dtype=torch.bfloat16, device="cuda")
+    cos_half = torch.randn((batch, q_seqlen, head_dim//2), dtype=torch.bfloat16, device="cuda")
+    sin_half = torch.randn((batch, q_seqlen, head_dim//2), dtype=torch.bfloat16, device="cuda")
     w_cos_torch = torch.cat((cos_half, cos_half), dim=-1).contiguous()
     w_sin_torch = torch.cat((sin_half, sin_half), dim=-1).contiguous()
     w_o_proj_torch = torch.randn((hidden_size, num_heads*head_dim), dtype=torch.bfloat16, device="cuda")
@@ -97,19 +97,19 @@ if __name__ == "__main__":
     kv_dim = num_kv_heads*head_dim    
     qkv_proj_out_torch = torch.zeros(max_batch_size, q_dim+2*kv_dim, dtype=torch.bfloat16, device="cuda")
     qk_torch = {
-        "2d": qkv_proj_out_torch[:, :q_dim+kv_dim].view(batch*seqlen_q*(num_heads+num_kv_heads), head_dim) 
+        "2d": qkv_proj_out_torch[:, :q_dim+kv_dim].view(batch*q_seqlen*(num_heads+num_kv_heads), head_dim) 
     }
     q_torch = {
-        "2d": qkv_proj_out_torch[:, :q_dim].view(batch*seqlen_q*num_heads, head_dim),
-        "3d": qkv_proj_out_torch[:, :q_dim].view(batch*seqlen_q, num_heads, head_dim),
-        "4d": qkv_proj_out_torch[:, :q_dim].view(batch, seqlen_q, num_heads, head_dim),
+        "2d": qkv_proj_out_torch[:, :q_dim].view(batch*q_seqlen*num_heads, head_dim),
+        "3d": qkv_proj_out_torch[:, :q_dim].view(batch*q_seqlen, num_heads, head_dim),
+        "4d": qkv_proj_out_torch[:, :q_dim].view(batch, q_seqlen, num_heads, head_dim),
     }
     k_torch = {
-        "2d": qkv_proj_out_torch[:, q_dim:q_dim+kv_dim].view(batch*seqlen_q*num_kv_heads, head_dim),
-        "4d": qkv_proj_out_torch[:, q_dim:q_dim+kv_dim].view(batch, seqlen_q, num_kv_heads, head_dim),
+        "2d": qkv_proj_out_torch[:, q_dim:q_dim+kv_dim].view(batch*q_seqlen*num_kv_heads, head_dim),
+        "4d": qkv_proj_out_torch[:, q_dim:q_dim+kv_dim].view(batch, q_seqlen, num_kv_heads, head_dim),
     }
     v_torch = {
-        "4d": qkv_proj_out_torch[:, q_dim+kv_dim:].view(batch, seqlen_q, num_kv_heads, head_dim),
+        "4d": qkv_proj_out_torch[:, q_dim+kv_dim:].view(batch, q_seqlen, num_kv_heads, head_dim),
     }
     
     max_attn_split = 8
@@ -119,13 +119,13 @@ if __name__ == "__main__":
     mask_torch = torch.ones(batch, max_kv_seqlen, num_kv_heads, device="cuda", dtype=torch.uint8)
     
     attn_out_3dim_torch = torch.empty(batch, num_heads, head_dim, device="cuda", dtype=torch.bfloat16)
-    attn_out_2dim_torch = attn_out_3dim_torch.view(batch*seqlen_q, q_dim)
+    attn_out_2dim_torch = attn_out_3dim_torch.view(batch*q_seqlen, q_dim)
     
     out_torch = torch.zeros((max_batch_size, hidden_size), dtype=torch.bfloat16, device="cuda")    
     
     #########################################
     
-    layer_id = 0
+    layer_id = 5
     layers = MpkLayers(0, 1, world_size, rank, max_batch_size, args.trace_name, args.profiling)
     mpk = layers.get_mpk()
 
@@ -153,8 +153,8 @@ if __name__ == "__main__":
     w_sin = mpk.attach_input(torch_tensor=w_sin_torch, name="sin")
     # attn
     attn_in_q = mpk.attach_input(torch_tensor=q_torch["3d"], name="attn_in_q")
-    attn_in_kcache = mpk.attach_input(torch_tensor=key_cache_5dim_torch[layer_id, :, :, :, :], name="attn_in_kcache")
-    attn_in_vcache = mpk.attach_input(torch_tensor=value_cache_5dim_torch[layer_id, :, :, :, :], name="attn_in_vcache")
+    attn_in_kcache = mpk.attach_input(torch_tensor=key_cache_5dim_torch, name="attn_in_kcache")
+    attn_in_vcache = mpk.attach_input(torch_tensor=value_cache_5dim_torch, name="attn_in_vcache")
     edge = mpk.attach_input(torch_tensor=edge_torch, name="edge")
     attn_in_mask = mpk.attach_input(torch_tensor=mask_torch, name="attn_in_mask")
     attn_in_glse = mpk.attach_input(torch_tensor=glse_torch, name="attn_in_glse")
@@ -218,7 +218,7 @@ if __name__ == "__main__":
         k_embed=rope_in_k,
         sync_mode=(0, 0, 0),
         layout=fused_layout,
-        fused_params=[99, 0, *extra_layout, layer_id],
+        fused_params=[99, 1, *extra_layout, layer_id],
     )
     
     # attn    
@@ -233,7 +233,7 @@ if __name__ == "__main__":
         output=attn_out_3dim,
         sync_mode=(0, 0, 0),
         layout=Qwen3MegaConfig.gqa_decode_layout_16,
-        
+        fused_params=[99, 0, layer_id],
     )
     mpk.linear_with_residual_layer(
         input=attn_out_2dim,

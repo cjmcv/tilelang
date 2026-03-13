@@ -1,4 +1,4 @@
-from models.modeling_qwen3 import Qwen3ForCausalLM
+
 from transformers import AutoTokenizer, AutoConfig
 import torch
 import torch.distributed as dist
@@ -286,7 +286,9 @@ class Qwen3Info:
             head_dim            = 128
         return [hidden_size, intermediate_size, num_attention_heads, num_key_value_heads, head_dim]
         
+    @staticmethod
     def load_model(rank):
+        from models.modeling_qwen3 import Qwen3ForCausalLM
         torch.cuda.set_device(rank)
         with torch.device("cuda"):
             model_name = "/home/cjmcv/project/llm_models/Qwen/Qwen3-0.6B"
@@ -294,27 +296,31 @@ class Qwen3Info:
             tokenizer = AutoTokenizer.from_pretrained(model_name) 
         return model, tokenizer
     
-    def get_weight_qwen3_mlp(self, model, layer_id):
+    @staticmethod
+    def get_weight_qwen3_mlp(model, layer_id):
         layer = model.model.layers[layer_id]
         w_rms = layer.post_attention_layernorm.weight
         w_gatedup = torch.cat((layer.mlp.gate_proj.weight, layer.mlp.up_proj.weight), 0).contiguous()
         w_down_proj = layer.mlp.down_proj.weight
         return w_rms, w_gatedup, w_down_proj
 
-    def get_weight_qwen3_attention(self, model, layer_id):
-        num_q_heads = model.config.num_attention_heads
-        num_kv_heads = model.config.num_key_value_heads
+    @staticmethod
+    def get_weight_qwen3_attention(model, layer_id):
+        # num_q_heads = model.config.num_attention_heads
+        # num_kv_heads = model.config.num_key_value_heads
     
         layer = model.model.layers[layer_id]
+        w_input_layernorm = layer.self_attn.input_layernorm.weight
         w_q_norm = layer.self_attn.q_norm.weight
         w_k_norm = layer.self_attn.k_norm.weight
         w_q = layer.self_attn.q_proj.weight
         w_k = layer.self_attn.k_proj.weight
         w_v = layer.self_attn.v_proj.weight
+        w_out_proj = layer.self_attn.out_proj.weight
         
         k_cache = model.model.kv_cache[0][layer_id]
         v_cache = model.model.kv_cache[1][layer_id]
-        return num_q_heads, num_kv_heads, w_q_norm, w_k_norm, w_q, w_k, w_v, k_cache, v_cache
+        return w_input_layernorm, w_q_norm, w_k_norm, w_q, w_k, w_v, w_out_proj, k_cache, v_cache
 class PerfReporter:
 
     def torch_profile(self, func):
