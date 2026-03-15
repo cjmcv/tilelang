@@ -36,28 +36,32 @@ if __name__ == "__main__":
     
     position_embeddings=(all_position_embeddings[0][:, step], all_position_embeddings[1][:, step])
     
-    layer_id = 0
     layers = MpkLayers(instance_id=0, kernel_num=1, world_size=1, rank=0, max_batch_size=1, trace_name=args.trace_name, profiling=args.profiling)
     mpk = layers.get_mpk()
     
-    layer_num = 10
+    layer_num = 2
     max_kv_seqlen = 8192
     layers.qwen3_alloc_io_buffer(model_size, layer_num, batch, 1, max_kv_seqlen)
-    layers.qwen3_create_attn_layer(model, layer_id)
-    layers.qwen3_create_mlp_layer(model, layer_id)
+    for layer_id in range(layer_num):
+        layers.qwen3_create_attn_layer(model, layer_id)
+        layers.qwen3_create_mlp_layer(model, layer_id)
     meta, mpk_attn_out, mpk_mlp_out = layers.fill_meta()
-    layers.compile_load(meta_tensors=meta, is_no_compile=args.nc, output_dir=args.output_dir)
+    layers.compile_load(meta_tensors=meta, is_no_compile=args.nc, output_dir=args.output_dir)  
     
     def torch_ref():
+        torch_io = hidden_states.clone()
         with torch.no_grad():
-            out = model.model.layers[layer_id].forward(hidden_states, attention_mask, position_embeddings, step, stream)
-            return out[0]
+            for layer_id in range(layer_num):
+                out = model.model.layers[layer_id].forward(torch_io, attention_mask, position_embeddings, step, stream)
+                torch_io = out[0]
+            return torch_io
     
     layers.update_step(step0, cos=position_embeddings[0][:, step], sin=position_embeddings[1][:, step])
     def mpk_run():
         layers.attn_layer_io.layer_in.pt.copy_(hidden_states.view(batch*q_seqlen, hidden_size))
         mpk(batch)
-        return mpk_mlp_out
+        return mpk_mlp_out  
+
     
     # print("mpk_out: ", mpk_run())    
     # print("torch_ref: ", torch_ref())

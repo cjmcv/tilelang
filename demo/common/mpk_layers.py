@@ -75,7 +75,7 @@ class MpkLayers:
         
         ##################
         # torch tensor
-        x_torch = torch.randn((batch, hidden_size), dtype=torch.bfloat16, device="cuda")
+        x_torch = torch.empty((batch, hidden_size), dtype=torch.bfloat16, device="cuda")
         
         q_dim = num_heads*head_dim
         kv_dim = num_kv_heads*head_dim    
@@ -144,18 +144,17 @@ class MpkLayers:
         # mlp layer
         # #    rmsnorm (x) -> linear (gateup_proj) -> act (silu_mul) -> linear_res (down_proj)
         # torch tensor
-        mlp_layer_out_torch = torch.zeros((batch, hidden_size), dtype=torch.bfloat16, device="cuda")
+        # mlp_layer_out_torch = torch.zeros((batch, hidden_size), dtype=torch.bfloat16, device="cuda")
         # mpk tensor
         self.mlp_layer_io = SimpleNamespace(
             layer_in = self.attn_layer_io.layer_out,
             layernorm_out = SimpleNamespace(pt=None, mpk=self.mpk.new_tensor(dims=(batch, hidden_size), dtype=mi.bfloat16, name="mlp_rms_out", io_category="cuda_tensor")),
             mlp_mid = SimpleNamespace(pt=None, mpk=self.mpk.new_tensor(dims=(batch, intermediate_size*2), dtype=mi.bfloat16, name="mlp_mid", io_category="cuda_tensor")),
             silu_mul_out = SimpleNamespace(pt=None, mpk=self.mpk.new_tensor(dims=(batch, intermediate_size), dtype=mi.bfloat16, name="silu_mul_out", io_category="cuda_tensor")),
-            layer_out = SimpleNamespace(pt=mlp_layer_out_torch, mpk=self.mpk.attach_input(torch_tensor=mlp_layer_out_torch, name="mlp_layer_out"))
+            layer_out = self.attn_layer_io.layer_in,
         )
         
     def qwen3_create_attn_layer(self, model, layer_id):
-
         w_input_layernorm_torch, w_q_norm_torch, w_k_norm_torch, \
         w_q_torch, w_k_torch, w_v_torch, w_out_proj_torch, \
         k_cache_torch, v_cache_torch = Qwen3Info.get_weight_qwen3_attention(model, layer_id)
@@ -216,7 +215,7 @@ class MpkLayers:
         )
         self.mpk.linear_with_residual_layer(
             input=self.attn_layer_io.attn_out.two_dim.mpk,
-            weight=self.mpk.attach_input(torch_tensor=w_out_proj_torch, name="w_o_proj"),
+            weight=self.mpk.attach_input(torch_tensor=w_out_proj_torch, name="w_o_proj"+layer_id_str),
             residual=self.attn_layer_io.layer_in.mpk,
             output=self.attn_layer_io.layer_out.mpk,
             sync_mode=(0, 0, 0),
@@ -274,9 +273,3 @@ class MpkLayers:
         self.public_pt.cos.copy_(cos)
         self.public_pt.sin.copy_(sin)
         
-        
-        # #######################################################
-        # w_rms_torch, w_gatedup_torch, w_down_proj_torch = Qwen3Info.get_weight_qwen3_mlp(model, layer_id)
-            
-        # ###################################################################################
-    
