@@ -309,7 +309,7 @@ class Qwen3Attention(nn.Module):
             self.key_cache[self.layer_idx, 0, :q_len] = key_states[0]
             self.value_cache[self.layer_idx, 0, :q_len] = value_states[0]
         else:
-            print("torch decode")
+            # print("torch decode")
             self.key_cache[self.layer_idx, 0, step] = key_states[0]
             self.value_cache[self.layer_idx, 0, step] = value_states[0]
 
@@ -436,7 +436,7 @@ class Qwen3DecoderLayer(nn.Module):
             stream=stream,
         )
         hidden_states = residual + hidden_states
-        print("torch self_attn out: ", hidden_states)
+        # print("torch self_attn out: ", hidden_states)
         # print("shape1: ", hidden_states.shape, residual.shape)
         
         # Fully Connected

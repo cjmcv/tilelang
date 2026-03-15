@@ -300,9 +300,11 @@ class Qwen3Info:
     def get_weight_qwen3_mlp(model, layer_id):
         layer = model.model.layers[layer_id]
         w_rms = layer.post_attention_layernorm.weight
-        w_gatedup = torch.cat((layer.mlp.gate_proj.weight, layer.mlp.up_proj.weight), 0).contiguous()
+        w_gate_proj = layer.mlp.gate_proj.weight
+        w_up_proj = layer.mlp.up_proj.weight
+        # w_gatedup = torch.cat((layer.mlp.gate_proj.weight, layer.mlp.up_proj.weight), 0).contiguous()
         w_down_proj = layer.mlp.down_proj.weight
-        return w_rms, w_gatedup, w_down_proj
+        return w_rms, w_gate_proj, w_up_proj, w_down_proj
 
     @staticmethod
     def get_weight_qwen3_attention(model, layer_id):
