@@ -215,6 +215,7 @@ if __name__ == "__main__":
         input_ids = tokens[:, prev_pos:cur_pos]
         cos_embeddings = position_embeddings[0][:, prev_pos:cur_pos]
         sin_embeddings = position_embeddings[1][:, prev_pos:cur_pos]
+        # print("cos_embeddings: ", cos_embeddings.size(), "sin_embeddings: ", sin_embeddings.size()) # torch.Size([1, cur_pos, 128]) torch.Size([1, cur_pos, 128])
         logits = model.forward(
             input_ids=input_ids,
             position_embeddings=(cos_embeddings, sin_embeddings),

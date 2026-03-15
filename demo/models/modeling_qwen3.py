@@ -276,12 +276,13 @@ class Qwen3Attention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
-        # print("hidden_states:", hidden_states.shape)
+        # print("torch in:", hidden_states.shape)
         hidden_states = input_layernorm(hidden_states)
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
+        # print("query_states:", query_states, "\n key_states:", key_states, "\n value_states:", value_states)
         query_states = self.q_norm(
             query_states.view(
                 bsz, q_len, self.num_heads // self.world_size, self.head_dim
@@ -303,16 +304,19 @@ class Qwen3Attention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb_triton(
             query_states, key_states, cos, sin, unsqueeze_dim=2
         )
-
+        # print("torch query_states: ", query_states)
         if q_len > 1:
             self.key_cache[self.layer_idx, 0, :q_len] = key_states[0]
             self.value_cache[self.layer_idx, 0, :q_len] = value_states[0]
         else:
+            print("torch decode")
             self.key_cache[self.layer_idx, 0, step] = key_states[0]
             self.value_cache[self.layer_idx, 0, step] = value_states[0]
 
+        
         q = query_states[0] # Shape: [q_len, num_q_heads, head_dim]
-
+        # print("q:", q)
+        
         if q_len > 1:
             attn_output = naive_attention(
                 q,
@@ -324,6 +328,8 @@ class Qwen3Attention(nn.Module):
                 True
             )
         else:
+            # print("self.key_cache:", self.key_cache[self.layer_idx, 0, step])
+            # print("self.value_cache:", self.value_cache[self.layer_idx, 0, step])
             kv_seq_len = step.item() + 1
             attn_output = naive_attention(
                 q,
@@ -336,7 +342,7 @@ class Qwen3Attention(nn.Module):
             )
 
         attn_output = attn_output.reshape(bsz, q_len, self.local_qkv_size)
-
+        # print("o_proj in: ", attn_output)
         attn_output = self.o_proj(attn_output)
         # print("self.o_proj: ", self.o_proj.weight.shape)
         # print("attn_output.shape: ", attn_output.shape)
@@ -419,7 +425,7 @@ class Qwen3DecoderLayer(nn.Module):
         # print("shape0: ", residual.shape)
 
         # hidden_states = self.input_layernorm(hidden_states)
-
+        # print("torch in: ", hidden_states)
         # Self Attention
         hidden_states = self.self_attn(
             input_layernorm=self.input_layernorm,
@@ -430,6 +436,7 @@ class Qwen3DecoderLayer(nn.Module):
             stream=stream,
         )
         hidden_states = residual + hidden_states
+        print("torch self_attn out: ", hidden_states)
         # print("shape1: ", hidden_states.shape, residual.shape)
         
         # Fully Connected

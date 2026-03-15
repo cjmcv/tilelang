@@ -287,7 +287,7 @@ class Qwen3Info:
         return [hidden_size, intermediate_size, num_attention_heads, num_key_value_heads, head_dim]
         
     @staticmethod
-    def load_model(rank):
+    def load_model(rank, model_size=0.6):
         from models.modeling_qwen3 import Qwen3ForCausalLM
         torch.cuda.set_device(rank)
         with torch.device("cuda"):
@@ -310,13 +310,13 @@ class Qwen3Info:
         # num_kv_heads = model.config.num_key_value_heads
     
         layer = model.model.layers[layer_id]
-        w_input_layernorm = layer.self_attn.input_layernorm.weight
+        w_input_layernorm = layer.input_layernorm.weight
         w_q_norm = layer.self_attn.q_norm.weight
         w_k_norm = layer.self_attn.k_norm.weight
         w_q = layer.self_attn.q_proj.weight
         w_k = layer.self_attn.k_proj.weight
         w_v = layer.self_attn.v_proj.weight
-        w_out_proj = layer.self_attn.out_proj.weight
+        w_out_proj = layer.self_attn.o_proj.weight
         
         k_cache = model.model.kv_cache[0][layer_id]
         v_cache = model.model.kv_cache[1][layer_id]

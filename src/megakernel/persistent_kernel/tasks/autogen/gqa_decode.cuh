@@ -33,7 +33,7 @@ __device__ __forceinline__ void gqa_decode_kernel(const int bx, const int by, co
   if constexpr (M == 1) { 
     if constexpr (HEAD == 16) {
       if constexpr (SUB_KERNEL_ID == 0) {
-        if (step > 0 && step <= 16) {
+        if (step >= 0 && step <= 16) {
           flashattn_kernel_1_8192_16_16_8_128<T, THREAD_NUM, SUB_KERNEL_ID, M, HEAD, GROUPS, DIM>(bx, by, bz, q, k, v, edge_ptr, mask_ptr, output_ptr, glse_ptr, output_partial_ptr);
         }
         else if (step > 16 && step <= 32) {
