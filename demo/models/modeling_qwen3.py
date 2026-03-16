@@ -149,6 +149,8 @@ class Qwen3MLP(nn.Module):
         self.down_proj = nn.Linear(self.part_inter_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
+        self.fused_weight = None
+        
     def fuse_weights(self):
         self.fused_weight = torch.transpose(
             torch.cat((self.gate_proj.weight, self.up_proj.weight), 0), 0, 1
@@ -156,12 +158,17 @@ class Qwen3MLP(nn.Module):
 
     def forward(self, input_layernorm, hidden_state, stream: torch.cuda.Stream = None):
         hidden_state = input_layernorm(hidden_state)
-        # output = torch.matmul(hidden_state, self.fused_weight)
-        # gate_output, up_output = torch.chunk(output, 2, -1)
-        # output = self.down_proj(self.act_fn(gate_output) * up_output)
-        output = self.down_proj(
-            self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state)
-        )
+        
+        if 1:
+            if (self.fused_weight is None):
+                self.fuse_weights()
+            output = torch.matmul(hidden_state, self.fused_weight)
+            gate_output, up_output = torch.chunk(output, 2, -1)
+            output = self.down_proj(self.act_fn(gate_output) * up_output)
+        else:
+            output = self.down_proj(
+                self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state)
+            )
         if self.world_size > 1:
             dist.all_reduce(output)
 
@@ -263,6 +270,8 @@ class Qwen3Attention(nn.Module):
             self.head_dim, eps=config.rms_norm_eps
         )  # thus post q_norm does not need reshape
 
+        self.fused_qkv_proj_weight = None
+        
         self.rotary_emb = Qwen3RotaryEmbedding(config=self.config)
 
     def forward(
@@ -278,9 +287,22 @@ class Qwen3Attention(nn.Module):
 
         # print("torch in:", hidden_states.shape)
         hidden_states = input_layernorm(hidden_states)
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
+        
+        if 1:
+            if (self.fused_qkv_proj_weight is None):
+                self.fused_qkv_proj_weight = torch.cat([self.q_proj.weight, self.k_proj.weight, self.v_proj.weight], dim=0).contiguous()
+            output = torch.nn.functional.linear(hidden_states, self.fused_qkv_proj_weight)
+            
+            q_dim = self.num_heads*self.head_dim
+            kv_dim = self.num_key_value_heads*self.head_dim  
+            query_states = output[:, :, :q_dim]
+            key_states   = output[:, :, q_dim:q_dim+kv_dim]
+            value_states = output[:, :, q_dim+kv_dim:]
+            # print(query_states.size(), key_states.size(), value_states.size())
+        else:
+            query_states = self.q_proj(hidden_states)
+            key_states = self.k_proj(hidden_states)
+            value_states = self.v_proj(hidden_states)
 
         # print("query_states:", query_states, "\n key_states:", key_states, "\n value_states:", value_states)
         query_states = self.q_norm(

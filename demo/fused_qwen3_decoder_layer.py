@@ -62,6 +62,8 @@ if __name__ == "__main__":
         mpk(batch)
         return mpk_mlp_out  
 
+    mpk_run()
+    torch_ref()
     
     # print("mpk_out: ", mpk_run())    
     # print("torch_ref: ", torch_ref())

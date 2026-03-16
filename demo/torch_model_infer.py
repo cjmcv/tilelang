@@ -210,7 +210,7 @@ if __name__ == "__main__":
     prompt_len = prompt_lengths[0].item()
     decode_limit = prompt_len + output_len
     for cur_pos in range(prompt_len, decode_limit):
-        print(cur_pos - 1)
+        # print(cur_pos - 1)
         step.fill_(cur_pos - 1)
         input_ids = tokens[:, prev_pos:cur_pos]
         cos_embeddings = position_embeddings[0][:, prev_pos:cur_pos]
