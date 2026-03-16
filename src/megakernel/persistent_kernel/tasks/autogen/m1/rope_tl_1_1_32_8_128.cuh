@@ -17,7 +17,7 @@ template <typename T,
           int NUM_HEADS_Q,
           int NUM_HEADS_K,
           int HEAD_DIM>
-__device__ __forceinline__ void rope_kernel_1_1_16_8_128(const int bx, const int by, const int bz,
+__device__ __forceinline__ void rope_kernel_1_1_32_8_128(const int bx, const int by, const int bz,
                                                    const void* __restrict__ q, 
                                                    const void* __restrict__ k, 
                                                    const void* __restrict__ cos_ptr,
@@ -26,8 +26,8 @@ __device__ __forceinline__ void rope_kernel_1_1_16_8_128(const int bx, const int
                                                    void* __restrict__ k_embed_ptr) {
   static_assert(THREAD_NUM==128);
   static_assert(BATCH==1); static_assert(SEQLEN==1); 
-  static_assert(NUM_HEADS_Q==16); static_assert(NUM_HEADS_K==8); static_assert(HEAD_DIM==128);
-  if (bx >= 24 || by >= 1 || bz >= 1) { return; }
+  static_assert(NUM_HEADS_Q==32); static_assert(NUM_HEADS_K==8); static_assert(HEAD_DIM==128);
+  if (bx >= 40 || by >= 1 || bz >= 1) { return; }
   
   const bfloat16_t* __restrict__ Q = static_cast<const bfloat16_t*>(q);
   const bfloat16_t* __restrict__ K = static_cast<const bfloat16_t*>(k);
@@ -37,19 +37,19 @@ __device__ __forceinline__ void rope_kernel_1_1_16_8_128(const int bx, const int
   bfloat16_t* __restrict__ K_embed = static_cast<bfloat16_t*>(k_embed_ptr);
   
   extern __shared__ __align__(1024) uchar buf_dyn_shmem[];
-  if (((int)bx) < 16) {
+  if (((int)bx) < 32) {
     if (((int)threadIdx.x) < 64) {
-      ((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 256)] = cos[((int)threadIdx.x)];
+      ((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 320)] = cos[((int)threadIdx.x)];
       tl::__sync_thread_partial<3, 64>();
-      ((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 320)] = sin[((int)threadIdx.x)];
+      ((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 256)] = sin[((int)threadIdx.x)];
     }
     ((bfloat16_t*)buf_dyn_shmem)[((int)threadIdx.x)] = Q[((((int)bx) * 128) + ((int)threadIdx.x))];
     __syncthreads();
     if (((int)threadIdx.x) < 64) {
       float a = ((float)((bfloat16_t*)buf_dyn_shmem)[((int)threadIdx.x)]);
       float b = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 64)]);
-      float cos_val = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 256)]);
-      float sin_val = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 320)]);
+      float cos_val = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 320)]);
+      float sin_val = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 256)]);
       float out_first = ((a * cos_val) - (b * sin_val));
       float out_second = ((b * cos_val) + (a * sin_val));
       Q_embed[((((int)bx) * 128) + ((int)threadIdx.x))] = ((bfloat16_t)out_first);
@@ -57,31 +57,31 @@ __device__ __forceinline__ void rope_kernel_1_1_16_8_128(const int bx, const int
     }
   } else {
     if (((int)threadIdx.x) < 64) {
-      ((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 256)] = cos[((int)threadIdx.x)];
+      ((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 320)] = cos[((int)threadIdx.x)];
       tl::__sync_thread_partial<3, 64>();
-      ((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 320)] = sin[((int)threadIdx.x)];
+      ((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 256)] = sin[((int)threadIdx.x)];
     }
-    ((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 128)] = K[(((((int)bx) * 128) + ((int)threadIdx.x)) - 2048)];
+    ((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 128)] = K[(((((int)bx) * 128) + ((int)threadIdx.x)) - 4096)];
     __syncthreads();
     if (((int)threadIdx.x) < 64) {
       float a_1 = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 128)]);
       float b_1 = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 192)]);
-      float cos_val_1 = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 256)]);
-      float sin_val_1 = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 320)]);
+      float cos_val_1 = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 320)]);
+      float sin_val_1 = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 256)]);
       float out_first_1 = ((a_1 * cos_val_1) - (b_1 * sin_val_1));
       float out_second_1 = ((b_1 * cos_val_1) + (a_1 * sin_val_1));
-      K_embed[(((((int)bx) * 128) + ((int)threadIdx.x)) - 2048)] = ((bfloat16_t)out_first_1);
-      K_embed[(((((int)bx) * 128) + ((int)threadIdx.x)) - 1984)] = ((bfloat16_t)out_second_1);
+      K_embed[(((((int)bx) * 128) + ((int)threadIdx.x)) - 4096)] = ((bfloat16_t)out_first_1);
+      K_embed[(((((int)bx) * 128) + ((int)threadIdx.x)) - 4032)] = ((bfloat16_t)out_second_1);
     }
   }
 }
 
 
 } // kernel
-// Strategy: rope_tl_1_1_16_8_128
+// Strategy: rope_tl_1_1_32_8_128
 // selected_hparams: [0, 1, 1, 1, 128].
 // smem: 768 bytes.
 // use_cooperative_groups: 0.
-// layout: (24, 1, 1), (1, 1, 1)
+// layout: (40, 1, 1), (1, 1, 1)
 // block_dim=(128, 1, 1).
-// latency: 0.00435 ms vs [ref-0.00513 sim-1.0], idx: 0
+// latency: 0.00454 ms vs [ref-0.00519 sim-1.0], idx: -1

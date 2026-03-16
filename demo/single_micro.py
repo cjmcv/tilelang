@@ -195,7 +195,8 @@ def test_rope(num_heads, num_kv_heads, head_dim):
     profile(target_func, triton_ref)
 
 if __name__ == "__main__":
-    hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim = Qwen3Info.get_basic_params(0.6)  
+    model_tag = "qwen3_4b"
+    hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim = Qwen3Info.get_basic_params(model_tag)  
     
     # test_silu_mul()
     # test_rms_norm()
@@ -207,9 +208,9 @@ if __name__ == "__main__":
     # test_gqa_decode(num_heads, num_kv_heads, head_dim)
     # test_rope(num_heads, num_kv_heads, head_dim)
 
-    gen = MicroAutoGen(batch_size=1, hidden_size=hidden_size, intermediate_size=intermediate_size, 
+    gen = MicroAutoGen(model_tag, batch_size=1, hidden_size=hidden_size, intermediate_size=intermediate_size, 
                        max_kv_seqlen=8192, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim)
-    gen.gen_qwen3_ops(layer_id=99, mode=HparamSelectMode.TUNED) # HEURISTIC, TUNING, TUNED
+    gen.gen_qwen3_ops(layer_id=99, mode=HparamSelectMode.HEURISTIC) # HEURISTIC, TUNING, TUNED
     # print(">> Finish gen_qwen3_ops.")
     # print("Test single_micro completed.")
     

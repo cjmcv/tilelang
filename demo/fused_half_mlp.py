@@ -32,7 +32,7 @@ if __name__ == "__main__":
     # model, tokenizer = reporter.memory_footprint_simulation(rank)
     # w_rms_torch, w_gatedup_torch, w_down_proj_torch = reporter.get_weight_qwen3_mlp(layer_id=0)
     
-    layers = MpkLayers(0, 1, world_size, rank, max_batch_size, args.trace_name, args.profiling)
+    layers = MpkLayers("qwen3_06b", 0, 1, world_size, rank, max_batch_size, args.trace_name, args.profiling)
     mpk = layers.get_mpk()
     
     splitk = 1 # 8

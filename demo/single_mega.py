@@ -9,9 +9,8 @@ from common.mpk_layers import MpkLayers
 
 from common.micro_base import HparamSelectMode
 from common.micro_autogen import MicroAutoGen
-from common.autogen.qwen3_mega_config import Qwen3MegaConfig
 
-def test_parallel_rms_norm(mpk, max_batch_size, batch_size, hidden_size):
+def test_parallel_rms_norm(mpk, layout, max_batch_size, batch_size, hidden_size):
     M = 16
     M2 = 8
     head_dim = 128
@@ -27,7 +26,7 @@ def test_parallel_rms_norm(mpk, max_batch_size, batch_size, hidden_size):
         weight=w_rms_norm,
         output=rms_out,
         sync_mode=(0, 0, 0),
-        layout=Qwen3MegaConfig.merge_q_k_norm_layout,
+        layout=layout.merge_q_k_norm_layout,
     )
     
     layers.compile_load(is_no_compile=args.nc, output_dir=args.output_dir)
@@ -53,7 +52,7 @@ def test_parallel_rms_norm(mpk, max_batch_size, batch_size, hidden_size):
                             warnup_iter=100, test_iter=100, 
                             allclose_iter=5, print_mode=1)
     
-def test_rms_norm(mpk, max_batch_size, batch_size, hidden_size):
+def test_rms_norm(mpk, layout, max_batch_size, batch_size, hidden_size):
     x_torch = torch.randn((max_batch_size, hidden_size), dtype=torch.bfloat16, device="cuda")
     w_rms_norm_torch = torch.randn((1, hidden_size), dtype=torch.bfloat16, device="cuda")
     out_torch = torch.randn((max_batch_size, hidden_size), dtype=torch.bfloat16, device="cuda")
@@ -66,7 +65,7 @@ def test_rms_norm(mpk, max_batch_size, batch_size, hidden_size):
         weight=w_rms_norm,
         output=rms_out,
         sync_mode=(0, 0, 0),
-        layout=Qwen3MegaConfig.rmsnorm_layout,
+        layout=layout.rmsnorm_layout,
     )
     layers.compile_load(is_no_compile=args.nc, output_dir=args.output_dir)
 
@@ -81,7 +80,7 @@ def test_rms_norm(mpk, max_batch_size, batch_size, hidden_size):
                             warnup_iter=100, test_iter=100, 
                             allclose_iter=5, print_mode=1)
 
-def test_linear(mpk, max_batch_size, batch_size, N, K, layout):
+def test_linear(mpk, max_batch_size, batch_size, N, K, spec_layout):
     x_torch = torch.randn((max_batch_size, K), dtype=torch.bfloat16, device="cuda")
     # w_torch = w_gatedup_torch 
     w_torch = torch.randn((N, K), dtype=torch.bfloat16, device="cuda")
@@ -99,7 +98,7 @@ def test_linear(mpk, max_batch_size, batch_size, N, K, layout):
         weight=w,
         output=linear_out,
         sync_mode=(0, 0, 0),
-        layout=layout,
+        layout=spec_layout,
     )
     layers.compile_load(is_no_compile=args.nc, output_dir=args.output_dir)
     
@@ -116,7 +115,7 @@ def test_linear(mpk, max_batch_size, batch_size, N, K, layout):
                             warnup_iter=100, test_iter=100, 
                             allclose_iter=5, print_mode=1)
 
-def test_silu_mul(mpk, max_batch_size, batch_size, intermediate_size):
+def test_silu_mul(mpk, layout, max_batch_size, batch_size, intermediate_size):
     x_torch = torch.randn((max_batch_size, intermediate_size*2), dtype=torch.bfloat16, device="cuda")
     out_torch = torch.zeros((max_batch_size, intermediate_size), dtype=torch.bfloat16, device="cuda")
     
@@ -126,7 +125,7 @@ def test_silu_mul(mpk, max_batch_size, batch_size, intermediate_size):
         input=x,
         output=silu_mul_out,
         sync_mode=(0, 0, 0), # (2, 0, 0)
-        layout=Qwen3MegaConfig.silu_mul_layout,
+        layout=layout.silu_mul_layout,
     )
     layers.compile_load(is_no_compile=args.nc, output_dir=args.output_dir)
 
@@ -143,7 +142,7 @@ def test_silu_mul(mpk, max_batch_size, batch_size, intermediate_size):
                             warnup_iter=100, test_iter=100, 
                             allclose_iter=5, print_mode=1)
     
-def test_linear_residual(mpk, max_batch_size, batch_size, N, K, layout):
+def test_linear_residual(mpk, max_batch_size, batch_size, N, K, spec_layout):
     x_residual_torch = torch.randn((max_batch_size, N), dtype=torch.bfloat16, device="cuda")
     x_torch = torch.randn((max_batch_size, K), dtype=torch.bfloat16, device="cuda")
     w_down_proj_torch = torch.randn((N, K), dtype=torch.bfloat16, device="cuda")
@@ -160,7 +159,7 @@ def test_linear_residual(mpk, max_batch_size, batch_size, N, K, layout):
         residual=x_residual,
         output=mlp_out,
         sync_mode=(0, 0, 0),
-        layout=layout,
+        layout=spec_layout,
     )
     layers.compile_load(is_no_compile=args.nc, output_dir=args.output_dir)
     
@@ -177,7 +176,7 @@ def test_linear_residual(mpk, max_batch_size, batch_size, N, K, layout):
                             warnup_iter=100, test_iter=100, 
                             allclose_iter=5, print_mode=1)
    
-def test_rope(mpk, max_batch_size, batch, num_heads, num_kv_heads, head_dim):
+def test_rope(mpk, layout, max_batch_size, batch, num_heads, num_kv_heads, head_dim):
     seqlen = 1
     q_torch = torch.randn(batch, seqlen, num_heads, head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen=1, H=num_heads,  D=head_dim]
     k_torch = torch.randn(batch, seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)   # [B, N=seqlen=1, H=num_kv_heads, D=head_dim]
@@ -204,7 +203,7 @@ def test_rope(mpk, max_batch_size, batch, num_heads, num_kv_heads, head_dim):
         q_embed=q_out,
         k_embed=k_out,
         sync_mode=(0, 0, 0),
-        layout=Qwen3MegaConfig.rope_layout,
+        layout=layout.rope_layout,
     )
     layers.compile_load(is_no_compile=args.nc, output_dir=args.output_dir)
     
@@ -234,7 +233,7 @@ def test_rope(mpk, max_batch_size, batch, num_heads, num_kv_heads, head_dim):
                             warnup_iter=100, test_iter=100, 
                             allclose_iter=5, print_mode=1)
      
-def test_rope_fused(mpk, max_batch_size, batch, num_heads, num_kv_heads, head_dim):
+def test_rope_fused(mpk, layout, max_batch_size, batch, num_heads, num_kv_heads, head_dim):
     seqlen = 1
     q_torch = torch.randn(batch, seqlen, num_heads, head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen=1, H=num_heads,  D=head_dim]
     k_torch = torch.randn(batch, seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)   # [B, N=seqlen=1, H=num_kv_heads, D=head_dim]
@@ -263,7 +262,7 @@ def test_rope_fused(mpk, max_batch_size, batch, num_heads, num_kv_heads, head_di
     layer_id = 5
     step = 100
     extra_layout = (2, 0, 0)
-    fused_layout = tuple(a + b for a, b in zip(Qwen3MegaConfig.rope_layout[0], extra_layout)), Qwen3MegaConfig.rope_layout[1]
+    fused_layout = tuple(a + b for a, b in zip(layout.rope_layout[0], extra_layout)), layout.rope_layout[1]
     mpk.rope_layer(
         q=q,
         k=k,
@@ -310,7 +309,7 @@ def test_rope_fused(mpk, max_batch_size, batch, num_heads, num_kv_heads, head_di
                             warnup_iter=100, test_iter=100, 
                             allclose_iter=5, print_mode=0)
 
-def test_gqa_decode(mpk, max_batch_size, batch, num_heads, num_kv_heads, seqlen_kv, head_dim):
+def test_gqa_decode(mpk, layout, max_batch_size, batch, num_heads, num_kv_heads, seqlen_kv, head_dim):
     # 1）两个图切换，以适配两个gqa配置？
     # 2）两个gqa布局，按多的配置，部分block可空跑。！！优先尝试
     #    生成代码时，添加优先主动退出条件(如有生成的时split的kernel则进入，不split的blockz直接退出。)
@@ -352,7 +351,7 @@ def test_gqa_decode(mpk, max_batch_size, batch, num_heads, num_kv_heads, seqlen_
         out_partial=out_partial,
         output=attn_out,
         sync_mode=(0, 0, 0),
-        layout=Qwen3MegaConfig.gqa_decode_layout_64,
+        layout=layout.gqa_decode_layout_64,
         # layout=((1, 8, 8), (64, 64, 8), (16, 1, 1), (64, 64, 8))
     )
     layers.compile_load(meta_tensors=[edge_torch], is_no_compile=args.nc, output_dir=args.output_dir)
@@ -385,7 +384,7 @@ def test_gqa_decode(mpk, max_batch_size, batch, num_heads, num_kv_heads, seqlen_
                             warnup_iter=100, test_iter=100, 
                             allclose_iter=5, print_mode=0)
 
-def test_gqa_decode_multi_instance(mpk, max_batch_size, batch, num_heads, num_kv_heads, seqlen_kv, head_dim):
+def test_gqa_decode_multi_instance(mpk, layout, max_batch_size, batch, num_heads, num_kv_heads, seqlen_kv, head_dim):
     split = 8 # TODO 自动配置
     glse_torch = torch.empty(batch, num_heads, split, device="cuda", dtype=torch.bfloat16)
     out_partial_torch = torch.empty(batch, num_heads, split, head_dim, device="cuda", dtype=torch.bfloat16)
@@ -418,14 +417,14 @@ def test_gqa_decode_multi_instance(mpk, max_batch_size, batch, num_heads, num_kv
         out_partial=out_partial,
         output=attn_out,
         sync_mode=(0, 0, 0),
-        layout=Qwen3MegaConfig.gqa_decode_layout_64,
+        layout=layout.gqa_decode_layout_64,
         # layout=((1, 8, 8), (64, 64, 8), (16, 1, 1), (64, 64, 8))
     )
     layers.compile_load(meta_tensors=[edge_torch], is_no_compile=args.nc, output_dir=args.output_dir)
     
     ###########################################################################
     
-    layers2 = MpkLayers(1, 1, world_size, rank, max_batch_size, args.trace_name, args.profiling)
+    layers2 = MpkLayers("qwen3_06b", 1, 1, world_size, rank, max_batch_size, args.trace_name, args.profiling)
     mpk2 = layers2.get_mpk()
     q = mpk2.attach_input(torch_tensor=q_torch, name="q")
     k = mpk2.attach_input(torch_tensor=k_torch, name="k")
@@ -446,7 +445,7 @@ def test_gqa_decode_multi_instance(mpk, max_batch_size, batch, num_heads, num_kv
         out_partial=out_partial,
         output=attn_out,
         sync_mode=(0, 0, 0),
-        layout=Qwen3MegaConfig.gqa_decode_layout_1024,
+        layout=layout.gqa_decode_layout_1024,
         # layout=((1, 8, 8), (64, 64, 8), (16, 1, 1), (64, 64, 8))
     )
     layers2.compile_load(meta_tensors=[edge_torch], is_no_compile=args.nc, output_dir=args.output_dir+"2")
@@ -502,28 +501,29 @@ if __name__ == "__main__":
     # model, tokenizer = reporter.memory_footprint_simulation(rank)
     # w_rms_torch, w_gatedup_torch, w_down_proj_torch = reporter.get_weight_qwen3_mlp(layer_id=0)
     
-    layers = MpkLayers(0, 1, world_size, rank, max_batch_size, args.trace_name, args.profiling)
+    model_tag = "qwen3_06b"
+    layers = MpkLayers(model_tag, 0, 1, world_size, rank, max_batch_size, args.trace_name, args.profiling)
     mpk = layers.get_mpk()
+    layout = layers.get_layout()
     
-    hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim = Qwen3Info.get_basic_params(0.6)
+    hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim = Qwen3Info.get_basic_params(model_tag)
     seqlen_kv=2048
     
-    # test_rms_norm(mpk, max_batch_size, batch_size, hidden_size)
-    # test_linear(mpk, max_batch_size, batch_size, intermediate_size*2, hidden_size, Qwen3MegaConfig.linear1_layout)
-    # test_silu_mul(mpk, max_batch_size, batch_size, intermediate_size) # 5us vs 2us，需要加速
-    # test_linear_residual(mpk, max_batch_size, batch_size, hidden_size, intermediate_size, Qwen3MegaConfig.linear2_layout)
+    # test_rms_norm(mpk, layout, max_batch_size, batch_size, hidden_size)
+    # test_linear(mpk, max_batch_size, batch_size, intermediate_size*2, hidden_size, layout.linear1_layout)
+    # test_silu_mul(mpk, layout, max_batch_size, batch_size, intermediate_size) # 5us vs 2us，需要加速
+    # test_linear_residual(mpk, max_batch_size, batch_size, hidden_size, intermediate_size, layout.linear2_layout)
     
 
-    # test_linear(mpk, max_batch_size, batch_size, (num_heads+2*num_kv_heads)*head_dim, hidden_size, Qwen3MegaConfig.qkv_proj_layout)
-    test_rope(mpk, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim)
-    # test_gqa_decode(mpk, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, seqlen_kv=seqlen_kv, head_dim=head_dim)
-    # test_linear_residual(mpk, max_batch_size, batch_size, hidden_size, num_heads*head_dim, Qwen3MegaConfig.o_proj_layout)
-    # test_gqa_decode_multi_instance(mpk, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, seqlen_kv=seqlen_kv, head_dim=head_dim)
-        
-        
+    # test_linear(mpk, max_batch_size, batch_size, (num_heads+2*num_kv_heads)*head_dim, hidden_size, layout.qkv_proj_layout)
+    # test_rope(mpk, layout, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim)
+    # test_gqa_decode(mpk, layout, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, seqlen_kv=seqlen_kv, head_dim=head_dim)
+    # test_linear_residual(mpk, max_batch_size, batch_size, hidden_size, num_heads*head_dim, layout.o_proj_layout)
+    
     #######################################
-    # test_parallel_rms_norm(mpk, max_batch_size, batch_size, hidden_size)
-    # test_rope_fused(mpk, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim)
+    # test_gqa_decode_multi_instance(mpk, layout, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, seqlen_kv=seqlen_kv, head_dim=head_dim)
+    # test_parallel_rms_norm(mpk, layout, max_batch_size, batch_size, hidden_size)
+    test_rope_fused(mpk, layout, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim)
     
     print("Test single_mega completed.")
     # ncu --set full --section "SpeedOfLight_RooflineChart" -k "kernel" -o my_profile python demo/single_linear.py --nc

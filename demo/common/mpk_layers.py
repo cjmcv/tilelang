@@ -3,10 +3,10 @@ import torch
 from types import SimpleNamespace
 import megakernel as mi
 from common.pkt_util import Qwen3Info
-from common.autogen.qwen3_mega_config import Qwen3MegaConfig
 
+# model_tag:  "qwen3_06b" / "qwen3_4b"
 class MpkLayers:
-    def __init__(self, instance_id, kernel_num, world_size, rank, max_batch_size, trace_name, profiling):
+    def __init__(self, model_tag, instance_id, kernel_num, world_size, rank, max_batch_size, trace_name, profiling):
         self.profiler_tensor = None
         if profiling:
             self.profiler_tensor = torch.zeros(3000 * 128, dtype=torch.uint64, device="cuda").contiguous()
@@ -28,16 +28,26 @@ class MpkLayers:
             meta_tensors={}, #  meta_tensors={"qo_indptr_buffer": self.qo_indptr_buffer,},
             profiler_tensor=self.profiler_tensor,
             trace_name=trace_name,
-            use_cutlass_kernel=True,
+            model_tag=model_tag,
         )
         self.max_batch_size = max_batch_size
         self.w_qkv_proj_torch = []
         self.w_qk_norm_torch = []
         self.w_mlp_gateup_proj = []
         
+        self.Qwen3MegaConfig = None
+        if (model_tag == "qwen3_4b"):
+            from common.autogen.qwen3_4b_mega_config import Qwen3MegaConfig4b
+            self.Qwen3MegaConfig = Qwen3MegaConfig4b
+        elif (model_tag == "qwen3_06b"):
+            from common.autogen.qwen3_06b_mega_config import Qwen3MegaConfig06b
+            self.Qwen3MegaConfig = Qwen3MegaConfig06b
+            
     def get_mpk(self):
         return self.mpk
-
+    def get_layout(self):
+        return self.Qwen3MegaConfig
+    
     def compile_load(self, meta_tensors=list(), is_no_compile=False, output_dir="./gen"):
         if is_no_compile is True:
             module_path = output_dir + "/test.cpython-38-x86_64-linux-gnu.so"
@@ -47,8 +57,8 @@ class MpkLayers:
             print("module_path: ", module_path)
             self.mpk.load_module(module_path, meta_tensors)
 
-    def qwen3_alloc_io_buffer(self, model_size, layer_num, batch, q_seqlen, max_kv_seqlen):
-        hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim = Qwen3Info.get_basic_params(model_size)
+    def qwen3_alloc_io_buffer(self, model_tag, layer_num, batch, q_seqlen, max_kv_seqlen):
+        hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim = Qwen3Info.get_basic_params(model_tag)
         
         self.batch = batch
         self.q_seqlen = q_seqlen
@@ -168,25 +178,25 @@ class MpkLayers:
             weight = self.mpk.attach_input(torch_tensor=w_input_layernorm_torch, name="w_layernorm"+layer_id_str),
             output = self.attn_layer_io.layernorm_out.mpk,
             sync_mode = (0, 0, 0),
-            layout = Qwen3MegaConfig.rmsnorm_layout,
+            layout = self.Qwen3MegaConfig.rmsnorm_layout,
         )
         self.mpk.linear_layer(
             input  = self.attn_layer_io.layernorm_out.mpk,
             weight = self.mpk.attach_input(torch_tensor=self.w_qkv_proj_torch[layer_id], name="w_qkv_proj"+layer_id_str),
             output = self.attn_layer_io.qkv_proj_out.mpk,
             sync_mode = (0, 0, 0),
-            layout = Qwen3MegaConfig.qkv_proj_layout,
+            layout = self.Qwen3MegaConfig.qkv_proj_layout,
         )
         self.mpk.rmsnorm_layer(
-            input=self.attn_layer_io.qk_norm_states.mpk,
-            weight=self.mpk.attach_input(torch_tensor=self.w_qk_norm_torch[layer_id], name="w_qk_norm"+layer_id_str),
-            output=self.attn_layer_io.qk_norm_states.mpk,
+            input  = self.attn_layer_io.qk_norm_states.mpk,
+            weight = self.mpk.attach_input(torch_tensor=self.w_qk_norm_torch[layer_id], name="w_qk_norm"+layer_id_str),
+            output = self.attn_layer_io.qk_norm_states.mpk,
             sync_mode=(0, 0, 0),
-            layout=Qwen3MegaConfig.merge_q_k_norm_layout,
+            layout = self.Qwen3MegaConfig.merge_q_k_norm_layout,
         )
         # rope
         extra_layout = (2, 0, 0)
-        fused_layout = tuple(a + b for a, b in zip(Qwen3MegaConfig.rope_layout[0], extra_layout)), Qwen3MegaConfig.rope_layout[1]
+        fused_layout = tuple(a + b for a, b in zip(self.Qwen3MegaConfig.rope_layout[0], extra_layout)), self.Qwen3MegaConfig.rope_layout[1]
         self.mpk.rope_layer(
             q=self.attn_layer_io.rope_io.q.mpk,
             k=self.attn_layer_io.rope_io.k.mpk,
@@ -210,7 +220,7 @@ class MpkLayers:
             out_partial=self.attn_layer_io.attn_in.out_partial.mpk,
             output=self.attn_layer_io.attn_out.three_dim.mpk,
             sync_mode=(0, 0, 0),
-            layout=Qwen3MegaConfig.gqa_decode_layout_16,    # todo
+            layout=self.Qwen3MegaConfig.gqa_decode_layout_16,    # todo
             fused_params=[99, 0, layer_id],
         )
         self.mpk.linear_with_residual_layer(
@@ -219,7 +229,7 @@ class MpkLayers:
             residual=self.attn_layer_io.layer_in.mpk,
             output=self.attn_layer_io.layer_out.mpk,
             sync_mode=(0, 0, 0),
-            layout=Qwen3MegaConfig.linear2_layout,
+            layout=self.Qwen3MegaConfig.linear2_layout,
         )
     
     def qwen3_create_mlp_layer(self, model, layer_id):
@@ -232,20 +242,20 @@ class MpkLayers:
             weight = self.mpk.attach_input(torch_tensor=w_rms_norm_torch, name="w_norm"+layer_id_str),
             output = self.mlp_layer_io.layernorm_out.mpk,
             sync_mode=(0, 0, 0),
-            layout=Qwen3MegaConfig.rmsnorm_layout,
+            layout=self.Qwen3MegaConfig.rmsnorm_layout,
         )
         self.mpk.linear_layer(
             input  = self.mlp_layer_io.layernorm_out.mpk,
             weight = self.mpk.attach_input(torch_tensor=self.w_mlp_gateup_proj[layer_id], name="w_gatedup"+layer_id_str),
             output = self.mlp_layer_io.mlp_mid.mpk,
             sync_mode=(0, 0, 0),
-            layout=Qwen3MegaConfig.linear1_layout,
+            layout = self.Qwen3MegaConfig.linear1_layout,
         )
         self.mpk.silu_mul_layer(
             input  = self.mlp_layer_io.mlp_mid.mpk,
             output = self.mlp_layer_io.silu_mul_out.mpk,
             sync_mode=(2, 0, 0),
-            layout=Qwen3MegaConfig.silu_mul_layout,
+            layout = self.Qwen3MegaConfig.silu_mul_layout,
         )
         self.mpk.linear_with_residual_layer(
             input    = self.mlp_layer_io.silu_mul_out.mpk,
@@ -253,7 +263,7 @@ class MpkLayers:
             residual = self.mlp_layer_io.layer_in.mpk,
             output   = self.mlp_layer_io.layer_out.mpk,
             sync_mode=(0, 0, 0),
-            layout=Qwen3MegaConfig.linear2_layout,
+            layout   = self.Qwen3MegaConfig.linear2_layout,
         )
         
     def fill_meta(self):

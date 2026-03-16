@@ -65,8 +65,9 @@ class _GqaDecodeStrategy:
     
     def get_heuristic_hparams(self):
         # block_N=128, block_H=64, num_split=1, num_stages=0, threads=128
+        if (self.target_kv_seqlen > 64):
+            return [64, 64, 2, 1, 128]
         return [16, 64, 1, 1, 128]
-        # return [64, 64, 2, 1, 128] 
     
     def gen_test_data(self, selected_hparams):
         import torch

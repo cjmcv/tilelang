@@ -5,7 +5,6 @@ import megakernel as mi
 
 from common.pkt_util import TorchRef, PerfReporter, Qwen3Info
 from common.mpk_layers import MpkLayers
-from common.autogen.qwen3_mega_config import Qwen3MegaConfig
 
 # w_cos_torch, w_sin_torch针对step，每个step一份，所有层共享
 def ref_run(step, key_cache, value_cache, x_torch, w_layernorm_torch, w_qkv_proj_torch, w_q_norm_torch, w_k_norm_torch, w_cos_torch, w_sin_torch, w_o_proj_torch):
@@ -60,7 +59,8 @@ if __name__ == "__main__":
     # model_name = args.model
     torch.set_default_dtype(torch.bfloat16)
 
-    layers = MpkLayers(0, 1, world_size, rank, max_batch_size, args.trace_name, args.profiling)
+    model_tag = "qwen3_4b"
+    layers = MpkLayers(model_tag, 0, 1, world_size, rank, max_batch_size, args.trace_name, args.profiling)
     mpk = layers.get_mpk()
     reporter = PerfReporter() 
     # reporter.memory_footprint_simulation(rank)
@@ -69,7 +69,7 @@ if __name__ == "__main__":
     # v_proj: torch.Size([1024, 1024])
     # o_proj: torch.Size([1024, 2048])
     
-    hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim = Qwen3Info.get_basic_params(0.6)
+    hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim = Qwen3Info.get_basic_params(model_tag)
 
     q_seqlen = 1
     max_kv_seqlen = 8192
@@ -126,8 +126,9 @@ if __name__ == "__main__":
     #########################################
     
     layer_id = 5
-    layers = MpkLayers(0, 1, world_size, rank, max_batch_size, args.trace_name, args.profiling)
+    layers = MpkLayers(model_tag, 0, 1, world_size, rank, max_batch_size, args.trace_name, args.profiling)
     mpk = layers.get_mpk()
+    layout = layers.get_layout()
 
     x = mpk.attach_input(torch_tensor=x_torch, name="in")
     #    rmsnorm (x) -> linear (qkv proj) -> rmsnorm (q/k) -> rope (q/k) -> attn -> linear_res
@@ -172,14 +173,14 @@ if __name__ == "__main__":
         weight=w_layernorm,
         output=layernorm_out,
         sync_mode=(0, 0, 0),
-        layout=Qwen3MegaConfig.rmsnorm_layout,
+        layout=layout.rmsnorm_layout,
     )
     mpk.linear_layer(
         input=layernorm_out,
         weight=w_qkv_proj,
         output=qkv_proj_out,
         sync_mode=(0, 0, 0),
-        layout=Qwen3MegaConfig.qkv_proj_layout,
+        layout=layout.qkv_proj_layout,
     )
     
     if 1:
@@ -188,7 +189,7 @@ if __name__ == "__main__":
             weight=w_qk_norm,
             output=qk_states,
             sync_mode=(0, 0, 0),
-            layout=Qwen3MegaConfig.merge_q_k_norm_layout,
+            layout=layout.merge_q_k_norm_layout,
         )
     else:
         mpk.rmsnorm_layer(
@@ -196,19 +197,19 @@ if __name__ == "__main__":
             weight=w_q_norm,
             output=query_states,
             sync_mode=(0, 0, 0),
-            layout=Qwen3MegaConfig.q_norm_layout,
+            layout=layout.q_norm_layout,
         )
         mpk.rmsnorm_layer(
             input=key_states,
             weight=w_k_norm,
             output=key_states,
             sync_mode=(0, 0, 0),
-            layout=Qwen3MegaConfig.k_norm_layout,
+            layout=layout.k_norm_layout,
         )
     
     # rope
     extra_layout = (2, 0, 0)
-    fused_layout = tuple(a + b for a, b in zip(Qwen3MegaConfig.rope_layout[0], extra_layout)), Qwen3MegaConfig.rope_layout[1]
+    fused_layout = tuple(a + b for a, b in zip(layout.rope_layout[0], extra_layout)), layout.rope_layout[1]
     mpk.rope_layer(
         q=rope_in_q,
         k=rope_in_k,
@@ -232,7 +233,7 @@ if __name__ == "__main__":
         out_partial=attn_out_partial,
         output=attn_out_3dim,
         sync_mode=(0, 0, 0),
-        layout=Qwen3MegaConfig.gqa_decode_layout_16,
+        layout=layout.gqa_decode_layout_16,
         fused_params=[99, 0, layer_id],
     )
     mpk.linear_with_residual_layer(
@@ -241,7 +242,7 @@ if __name__ == "__main__":
         residual=x,
         output=o_proj_res_out,
         sync_mode=(0, 0, 0),
-        layout=Qwen3MegaConfig.linear2_layout,
+        layout=layout.linear2_layout,
     )
     
     step = 15

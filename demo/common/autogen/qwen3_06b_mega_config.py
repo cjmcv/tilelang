@@ -1,4 +1,4 @@
-class Qwen3MegaConfig:
+class Qwen3MegaConfig06b:
     rmsnorm_layout = (1, 1, 1), (1, 1, 1)
     linear1_layout = (96, 1, 1), (64, 16, 64)
     silu_mul_layout = (48, 1, 1), (64, 16, 1)

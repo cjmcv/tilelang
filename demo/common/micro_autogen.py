@@ -15,8 +15,9 @@ from .micro_gqa_decode import MicroGqaDecode
 from common.micro_rope import MicroRope
 
 class MicroAutoGen:
-    def __init__(self, batch_size, hidden_size, intermediate_size, max_kv_seqlen, num_heads, num_kv_heads, head_dim):
+    def __init__(self, model_tag, batch_size, hidden_size, intermediate_size, max_kv_seqlen, num_heads, num_kv_heads, head_dim):
         print(tilelang.__version__) # 预先加载完成FFI的静态初始化，以免初始化发生在tuning的多线程场景导致崩溃
+        self.model_tag = model_tag
         self.batch_size = batch_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
@@ -58,8 +59,8 @@ class MicroAutoGen:
         # silu_mul_layout = (48, 1, 1), (64, 16, 1)
         # linear2_layout = (32, 1, 1), (32, 16, 128)
     
-        with open(config_path+"qwen3_mega_config.py", "w", encoding="utf-8") as config_file:
-            config_file.write(f"class Qwen3MegaConfig:\n")
+        with open(config_path+f"{self.model_tag}_mega_config.py", "w", encoding="utf-8") as config_file:
+            config_file.write(f"class Qwen3MegaConfig{self.model_tag.split('_')[1]}:\n")
             if (layer_id == 0 or layer_id == 99):
                 kernel = MicroRmsNorm(self.batch_size, self.hidden_size, dtype=self.dtype, accum_dtype=self.accum_dtype)
                 self._save_target_info(kernel, mode, code_dir, config_file, "rmsnorm_layout")

@@ -5,8 +5,10 @@
 #include "m1/rms_norm_tl_24_128.cuh"
 
 #ifdef ENABLE_QWEN3_4B
+// mlp
 #include "m1/rms_norm_tl_1_2560.cuh"
-#include "m32/rms_norm_tl_32_2560.cuh"
+// attn
+#include "m1/rms_norm_tl_40_128.cuh"
 #endif
 namespace kernel {
 
@@ -33,16 +35,6 @@ __device__ __forceinline__ void rms_norm_kernel(const int bx, const int by, cons
       rms_norm_kernel_16_8_128<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M,N>(bx, by, bz, input_ptr, weight_ptr, output_ptr, eps); return;
     }
   }
-  // else if constexpr (M == 8) { 
-  //   if constexpr (N == 128) {
-  //     rms_norm_kernel_8_128<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M,N>(bx, by, bz, input_ptr, weight_ptr, output_ptr, eps); return;
-  //   }
-  // }
-  // else if constexpr (M == 16) { 
-  //   if constexpr (N == 128) {
-  //     rms_norm_kernel_16_128<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M,N>(bx, by, bz, input_ptr, weight_ptr, output_ptr, eps); return;
-  //   }
-  // }
 #endif
   
 #ifdef ENABLE_QWEN3_4B
@@ -51,9 +43,9 @@ __device__ __forceinline__ void rms_norm_kernel(const int bx, const int by, cons
       rms_norm_kernel_1_2560<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M,N>(bx, by, bz, input_ptr, weight_ptr, output_ptr, eps); return;
     }
   }
-  else if constexpr (M == 32) { 
-    if constexpr (N == 2560) {
-      rms_norm_kernel_32_2560<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M,N>(bx, by, bz, input_ptr, weight_ptr, output_ptr, eps);
+  else if constexpr (M == 40) { 
+    if constexpr (N == 128) {
+      rms_norm_kernel_32_8_128<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M,N>(bx, by, bz, input_ptr, weight_ptr, output_ptr, eps); return;
     }
   }
 #endif

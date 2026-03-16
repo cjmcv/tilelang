@@ -18,11 +18,11 @@ if __name__ == "__main__":
     
     torch.set_default_dtype(torch.bfloat16)
 
-    model_size = 0.6
+    model_tag = "qwen3_06b"
     batch = 1
     q_seqlen = 1
-    hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim = Qwen3Info.get_basic_params(0.6)
-    model, tokenizer = Qwen3Info.load_model(0, model_size)
+    hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim = Qwen3Info.get_basic_params(model_tag)
+    model, tokenizer = Qwen3Info.load_model(0, model_tag)
     
     positions = torch.arange(32768).unsqueeze(0).to(model.device)
     all_position_embeddings = model.model.rotary_emb(positions)
@@ -36,12 +36,12 @@ if __name__ == "__main__":
     
     position_embeddings=(all_position_embeddings[0][:, step], all_position_embeddings[1][:, step])
     
-    layers = MpkLayers(instance_id=0, kernel_num=1, world_size=1, rank=0, max_batch_size=1, trace_name=args.trace_name, profiling=args.profiling)
+    layers = MpkLayers("qwen3_06b", instance_id=0, kernel_num=1, world_size=1, rank=0, max_batch_size=1, trace_name=args.trace_name, profiling=args.profiling)
     mpk = layers.get_mpk()
     
     layer_num = 2
     max_kv_seqlen = 8192
-    layers.qwen3_alloc_io_buffer(model_size, layer_num, batch, 1, max_kv_seqlen)
+    layers.qwen3_alloc_io_buffer(model_tag, layer_num, batch, 1, max_kv_seqlen)
     for layer_id in range(layer_num):
         layers.qwen3_create_attn_layer(model, layer_id)
         layers.qwen3_create_mlp_layer(model, layer_id)

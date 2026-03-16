@@ -26,6 +26,20 @@ __device__ __forceinline__ void silu_mul_kernel(const int bx, const int by, cons
                                            void const *input_ptr,
                                            void *output_ptr,
                                            int num_active_tokens) {
+
+#ifdef ENABLE_QWEN3_06B
+  if constexpr (M == 1) { 
+    if constexpr (N == 3072) {
+      silu_mul_kernel_1_3072<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M,N,I_STRIDE,O_STRIDE>(bx, by, bz, input_ptr, output_ptr, num_active_tokens);return;
+    }
+  }
+  else if constexpr (M == 32) {           
+    if constexpr (N == 3072) {
+      silu_mul_kernel_32_3072<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M,N,I_STRIDE,O_STRIDE>(bx, by, bz, input_ptr, output_ptr, num_active_tokens);return;
+    }
+  }
+#endif // ENABLE_QWEN3_06B
+
 #ifdef ENABLE_QWEN3_4B
   if constexpr (M == 1) { 
     if constexpr (N == 9728) {
@@ -37,18 +51,8 @@ __device__ __forceinline__ void silu_mul_kernel(const int bx, const int by, cons
       silu_mul_kernel_32_9728<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M,N,I_STRIDE,O_STRIDE>(bx, by, bz, input_ptr, output_ptr, num_active_tokens);return;
     }
   }
-#endif
+#endif // ENABLE_QWEN3_4B
 
-  if constexpr (M == 1) { 
-    if constexpr (N == 3072) {
-      silu_mul_kernel_1_3072<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M,N,I_STRIDE,O_STRIDE>(bx, by, bz, input_ptr, output_ptr, num_active_tokens);return;
-    }
-  }
-  else if constexpr (M == 32) {           
-    if constexpr (N == 3072) {
-      silu_mul_kernel_32_3072<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M,N,I_STRIDE,O_STRIDE>(bx, by, bz, input_ptr, output_ptr, num_active_tokens);return;
-    }
-  }
   printf("Error: [silu_mul_kernel_%d_%d] There is no suitable microkernel!\n", M,N);
 }
 

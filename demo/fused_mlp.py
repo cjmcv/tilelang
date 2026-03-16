@@ -3,9 +3,8 @@ import torch
 import argparse
 import megakernel as mi
 
-from common.pkt_util import TorchRef, PerfReporter
+from common.pkt_util import TorchRef, PerfReporter, Qwen3Info
 from common.mpk_layers import MpkLayers
-from common.autogen.qwen3_mega_config import Qwen3MegaConfig
 
 WITH_RMS_NORM = 1
 WITH_RESIDUAL = 1
@@ -32,16 +31,16 @@ if __name__ == "__main__":
     # model_name = args.model
     torch.set_default_dtype(torch.bfloat16)
 
-    layers = MpkLayers(0, 1, world_size, rank, max_batch_size, args.trace_name, args.profiling)
+    model_tag = "qwen3_4b"
+    layers = MpkLayers(model_tag, 0, 1, world_size, rank, max_batch_size, args.trace_name, args.profiling)
     mpk = layers.get_mpk()
+    layout = layers.get_layout()
     reporter = PerfReporter() 
     # reporter.memory_footprint_simulation(rank)
     
+    hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim = Qwen3Info.get_basic_params(model_tag)
     splitk = 1 # 8
-    # hidden_size = 2560
-    # intermediate_size = 9728
-    hidden_size = 1024
-    intermediate_size = 3072
+    
     x_torch = torch.randn((max_batch_size, hidden_size), dtype=torch.bfloat16, device="cuda")
     w_rms_norm_torch = torch.randn((1, hidden_size), dtype=torch.bfloat16, device="cuda")
     w_gatedup_torch = torch.randn((intermediate_size*2, hidden_size), dtype=torch.bfloat16, device="cuda")
@@ -62,7 +61,7 @@ if __name__ == "__main__":
             weight=w_rms_norm,
             output=rms_out,
             sync_mode=(0, 0, 0),
-            layout=Qwen3MegaConfig.rmsnorm_layout,
+            layout=layout.rmsnorm_layout,
         )
         x = rms_out
         
@@ -74,7 +73,7 @@ if __name__ == "__main__":
         weight=w_gatedup,
         output=mlp_mid,
         sync_mode=(0, 0, 0),
-        layout=Qwen3MegaConfig.linear1_layout,
+        layout=layout.linear1_layout,
     )
     
     if 1:
@@ -86,7 +85,7 @@ if __name__ == "__main__":
             input=mlp_mid,
             output=silu_mul_out,
             sync_mode=(2, 0, 0),
-            layout=Qwen3MegaConfig.silu_mul_layout,
+            layout=layout.silu_mul_layout,
             # grid_dim=(2, 4, 1), tile_dim=(128, 1, 1),
             # sync_mode=(2, 0, 0),
         )
@@ -97,7 +96,7 @@ if __name__ == "__main__":
                 residual=x_residual,
                 output=mlp_out,
                 sync_mode=(0, 0, 0),
-                layout=Qwen3MegaConfig.linear2_layout,
+                layout=layout.linear2_layout,
             )
         else:
             mpk.linear_layer(
@@ -105,7 +104,7 @@ if __name__ == "__main__":
                 weight=w_down_proj,
                 output=mlp_out,
                 sync_mode=(0, 0, 0),
-                layout=Qwen3MegaConfig.inear2_layout,
+                layout=layout.inear2_layout,
             )
     else:
         mpk.silu_mul_linear_layer(
@@ -140,6 +139,6 @@ if __name__ == "__main__":
         return out_torch[:batch_size]
     
     if not args.profiling:
-        reporter.generate_report(target_func, target_func,
+        reporter.generate_report(target_func, torch_ref,
                                 warnup_iter=100, test_iter=200, 
                                 allclose_iter=5, print_mode=1)

@@ -1,5 +1,5 @@
 
-#define ENABLE_QWEN3_06B
+// #define ENABLE_QWEN3_06B
 // #define ENABLE_QWEN3_4B
 
 #include "linear.cuh"

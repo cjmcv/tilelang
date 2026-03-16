@@ -262,15 +262,15 @@ class TorchRef:
   
 class Qwen3Info:
     @staticmethod
-    def get_basic_params(model_size):
-        if (model_size == 8):
+    def get_basic_params(model_tag):
+        if (model_tag == "qwen3-8b"):
             # https://huggingface.co/Qwen/Qwen3-8B/blob/main/config.json
             hidden_size         = 4096        # K
             intermediate_size   = 12288 # torch.randn / ones / TestUtil.create_matrix_arange_col /
             num_attention_heads = 32
             num_key_value_heads = 8
             head_dim            = 128
-        elif (model_size == 4):
+        elif (model_tag == "qwen3_4b"):
             # https://huggingface.co/Qwen/Qwen3-4B/blob/main/config.json
             hidden_size         = 2560        
             intermediate_size   = 9728 
@@ -278,6 +278,7 @@ class Qwen3Info:
             num_key_value_heads = 8
             head_dim            = 128
         else:
+            # "qwen3_06b"
             # https://huggingface.co/Qwen/Qwen3-0.6B/blob/main/config.json
             hidden_size         = 1024
             intermediate_size   = 3072
@@ -287,11 +288,16 @@ class Qwen3Info:
         return [hidden_size, intermediate_size, num_attention_heads, num_key_value_heads, head_dim]
         
     @staticmethod
-    def load_model(rank, model_size=0.6):
+    def load_model(rank, model_tag):
         from models.modeling_qwen3 import Qwen3ForCausalLM
         torch.cuda.set_device(rank)
         with torch.device("cuda"):
-            model_name = "/home/cjmcv/project/llm_models/Qwen/Qwen3-0.6B"
+            if model_tag == "qwen3_06b":
+                model_name = "/home/cjmcv/project/llm_models/Qwen/Qwen3-0.6B"
+            elif model_tag == "qwen3_4b":
+                model_name = "/data/team/cjm/Qwen/Qwen3-4B"
+            else:
+                print("!! Do not support model: ", model_tag)
             model = Qwen3ForCausalLM.from_pretrained(model_name, world_size=1, max_num_pages=16, page_size=4096).to("cuda")
             tokenizer = AutoTokenizer.from_pretrained(model_name) 
         return model, tokenizer
