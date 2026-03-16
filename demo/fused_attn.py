@@ -59,7 +59,7 @@ if __name__ == "__main__":
     # model_name = args.model
     torch.set_default_dtype(torch.bfloat16)
 
-    model_tag = "qwen3_4b"
+    model_tag = "qwen3_06b"
     layers = MpkLayers(model_tag, 0, 1, world_size, rank, max_batch_size, args.trace_name, args.profiling)
     mpk = layers.get_mpk()
     reporter = PerfReporter() 

@@ -195,7 +195,7 @@ def test_rope(num_heads, num_kv_heads, head_dim):
     profile(target_func, triton_ref)
 
 if __name__ == "__main__":
-    model_tag = "qwen3_4b"
+    model_tag = "qwen3_06b" # "qwen3_4b"
     hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim = Qwen3Info.get_basic_params(model_tag)  
     
     # test_silu_mul()

@@ -293,7 +293,7 @@ class Qwen3Info:
         torch.cuda.set_device(rank)
         with torch.device("cuda"):
             if model_tag == "qwen3_06b":
-                model_name = "/home/cjmcv/project/llm_models/Qwen/Qwen3-0.6B"
+                model_name = "/home/cjmcv/project/llm_models/Qwen/Qwen3-0.6B" # "/data/team/cjm/Qwen/Qwen3-0.6B"
             elif model_tag == "qwen3_4b":
                 model_name = "/data/team/cjm/Qwen/Qwen3-4B"
             else:

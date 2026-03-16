@@ -36,7 +36,7 @@ if __name__ == "__main__":
     
     position_embeddings=(all_position_embeddings[0][:, step], all_position_embeddings[1][:, step])
     
-    layers = MpkLayers("qwen3_06b", instance_id=0, kernel_num=1, world_size=1, rank=0, max_batch_size=1, trace_name=args.trace_name, profiling=args.profiling)
+    layers = MpkLayers(model_tag, instance_id=0, kernel_num=1, world_size=1, rank=0, max_batch_size=1, trace_name=args.trace_name, profiling=args.profiling)
     mpk = layers.get_mpk()
     
     layer_num = 2
@@ -62,13 +62,16 @@ if __name__ == "__main__":
         mpk(batch)
         return mpk_mlp_out  
 
+    for i in range(10):
+        torch_ref()
+    
+    torch_ref()    
     mpk_run()
-    torch_ref()
     
     # print("mpk_out: ", mpk_run())    
     # print("torch_ref: ", torch_ref())
     
-    reporter = PerfReporter() 
-    reporter.generate_report(mpk_run, torch_ref, 
-                            warnup_iter=100, test_iter=200, 
-                            allclose_iter=5, print_mode=1)
+    # reporter = PerfReporter() 
+    # reporter.generate_report(mpk_run, torch_ref, 
+    #                         warnup_iter=100, test_iter=200, 
+    #                         allclose_iter=5, print_mode=1)
