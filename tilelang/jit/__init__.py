@@ -43,6 +43,9 @@ _KP = ParamSpec("_KP")
 _T = TypeVar("_T")
 _Ret = TypeVar("_Ret")
 
+# <NT> compile
+# out_idx: 表示参数中哪些tensor是输出tensor，下标从0开始。如 @tilelang.jit(out_idx=[1])，对应 @T.prim_func 中
+#          def main(A: T.Tensor((length,), dtype),B: T.Tensor((length,), dtype),) 的1号位tensor，即 B 会是输出tensor。
 
 def compile(
     func: PrimFunc[_KP, _T] = None,
