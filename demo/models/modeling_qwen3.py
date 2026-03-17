@@ -352,7 +352,7 @@ class Qwen3Attention(nn.Module):
         else:
             # print("self.key_cache:", self.key_cache[self.layer_idx, 0, step])
             # print("self.value_cache:", self.value_cache[self.layer_idx, 0, step])
-            kv_seq_len = step.item() + 1
+            kv_seq_len = step + 1 # 1
             attn_output = naive_attention(
                 q,
                 self.key_cache,

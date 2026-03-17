@@ -262,10 +262,15 @@ if __name__ == "__main__":
     
     key_cache = torch.zeros(batch, max_kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
     value_cache = torch.zeros(batch, max_kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)
-    def torch_ref():
+    def torch_ref_tmp():
         return ref_run(step, key_cache, value_cache, x_torch, 
                        w_layernorm_torch, w_qkv_proj_torch, w_q_norm_torch, w_k_norm_torch, w_cos_torch, w_sin_torch, w_o_proj_torch)
 
+    graph, ref_output = TorchRef.compile_capture(torch_ref_tmp, is_compile=True)
+    def torch_ref():
+        graph.replay()
+        return ref_output
+    
     reporter.generate_report(mpk_run, torch_ref, 
                             warnup_iter=100, test_iter=200, 
                             allclose_iter=5, print_mode=1)

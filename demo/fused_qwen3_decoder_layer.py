@@ -48,13 +48,6 @@ if __name__ == "__main__":
     meta, mpk_attn_out, mpk_mlp_out = layers.fill_meta()
     layers.compile_load(meta_tensors=meta, is_no_compile=args.nc, output_dir=args.output_dir)  
     
-    def torch_ref():
-        torch_io = hidden_states.clone()
-        with torch.no_grad():
-            for layer_id in range(layer_num):
-                out = model.model.layers[layer_id].forward(torch_io, attention_mask, position_embeddings, step, stream)
-                torch_io = out[0]
-            return torch_io
     
     layers.update_step(step0, cos=position_embeddings[0][:, step], sin=position_embeddings[1][:, step])
     def mpk_run():
@@ -62,6 +55,24 @@ if __name__ == "__main__":
         mpk(batch)
         return mpk_mlp_out  
 
+
+    def torch_ref_tmp():
+        torch_io = hidden_states.clone()
+        with torch.no_grad():
+            for layer_id in range(layer_num):
+                out = model.model.layers[layer_id].forward(torch_io, attention_mask, position_embeddings, step, stream)
+                torch_io = out[0]
+            return torch_io
+        
+    if 0:
+        graph, ref_output = TorchRef.compile_capture(torch_ref_tmp, is_compile=False) # 搜 “kv_seq_len = step + 1” 改成=> 1
+        def torch_ref():
+            graph.replay()
+            return ref_output
+    else:
+        def torch_ref():
+            return torch_ref_tmp()
+    
     for i in range(10):
         torch_ref()
     
@@ -71,7 +82,7 @@ if __name__ == "__main__":
     # print("mpk_out: ", mpk_run())    
     # print("torch_ref: ", torch_ref())
     
-    # reporter = PerfReporter() 
-    # reporter.generate_report(mpk_run, torch_ref, 
-    #                         warnup_iter=100, test_iter=200, 
-    #                         allclose_iter=5, print_mode=1)
+    reporter = PerfReporter() 
+    reporter.generate_report(mpk_run, torch_ref, 
+                            warnup_iter=100, test_iter=200, 
+                            allclose_iter=5, print_mode=1)
