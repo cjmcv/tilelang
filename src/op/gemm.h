@@ -38,6 +38,9 @@ inline const char *GemmWarpPolicyTypeToString(GemmWarpPolicyType type) {
   }
 }
 
+// <NT> MMA对应sm70/sm80/sm89, wgmma对应sm90, tcgen05(即UMMA)对应sm100/sm120. mfma是AMD显卡的指令。
+// 其中缺了wmma，wmma底层本质属于mma，只是多包装了一层使更容易使用，所以不在tilelang的抽象范围内。
+// wmma封装了加载-计算-存储，而TileLang要分别控制，自己拼凑的ldmatrix + mma可以超越WMMA的性能。
 // Target GEMM instruction
 enum class GemmInst : uint8_t { kMMA, kWGMMA, kTCGEN5MMA, kMFMA, kScalar };
 

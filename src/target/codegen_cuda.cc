@@ -4108,6 +4108,38 @@ void CodeGenTileLangCUDA::PrintFunctionSignature(const String &function_name,
   }
 }
 
+// <NT> AddFunction 流程，由外部 BuildTileLangCUDA 函数调用
+// 1. 打印函数签名 PrintFuncPrefix, PrintType, PrintExtraAttrs
+// 2. 打印函数名和参数列表
+//    stream << " " << global_symbol << "(";
+//    for (param : params) {
+//     // 打印参数类型和名称
+//    }
+//    stream << ") {\n";
+// 3. 调用 PreFunctionBody（可选准备）
+// 4. 开始新的作用域 BeginScope()
+// 5. **关键：遍历函数体并生成代码**
+//    PrintStmt(f->body)  // ← 从这里开始递归访问
+//       ↓                    ↓
+//   VisitStmt_(...)     VisitExpr_(...)
+//       ↓                    ↓
+//    递归遍历所有节点   生成表达式代码
+//       ↓
+// 6. 结束作用域 EndScope()
+// 7. 打印函数结束符 stream << "}\n\n";
+//
+// 其中 PrintStmt 基本内容如下:
+//   void CodeGenC::PrintStmt(const Stmt& stmt) {
+//   if (auto* for_node = stmt.as<ForNode>()) {
+//       VisitStmt_(for_node);  // 调用派生类CodeGenTileLangCUDA的重写版本，VisitExpr_亦然。
+//     } else if (auto* block = stmt.as<BlockNode>()) {
+//       VisitStmt_(block);
+//     } else if (auto* evaluate = stmt.as<EvaluateNode>()) {
+//       VisitStmt_(evaluate);  // ← TileLang重写了这个
+//     }
+//     // ... 其他节点类型
+//   }
+
 void CodeGenTileLangCUDA::AddFunction(const GlobalVar &gvar,
                                       const PrimFunc &f) {
   // If the function has already been forward-declared, this is a
