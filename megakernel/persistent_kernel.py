@@ -269,8 +269,7 @@ class PersistentKernel:
 
         self.target_cc = torch.cuda.get_device_properties(0).major * 10 + torch.cuda.get_device_properties(0).minor
         # For the reuse of instance
-        self.basic_weight_names = None
-        self.replaceable_weight_names = []
+        self.replaceable_weight_mapping = None
 
     def attach_input(self, torch_tensor: torch.Tensor, name: str = None) -> DTensor:
         dims = tuple([d for d in torch_tensor.shape])
@@ -545,30 +544,28 @@ class PersistentKernel:
         self.kn_graph.customized([input, weight, residual, output], tb_graph)
         self.kn_graph.register_task("silu_mul_linear_with_residual")
 
-    def mark_basic_weights(self, weight_names):
-        self.basic_weight_names = weight_names
-        
-    def append_replaceable_weights(self, kernel_id, weight_names):
-        assert self.basic_weight_names is not None
-        self.replaceable_weight_names.append((kernel_id, weight_names))
-        assert len(self.replaceable_weight_names) < self.kernel_num 
+    def append_replaceable_weights(self, weight_mapping):
+        self.replaceable_weight_mapping = weight_mapping
+        # print("len(self.replaceable_weight_mapping), ", len(self.replaceable_weight_mapping), self.kernel_num)
+        assert len(self.replaceable_weight_mapping) < self.kernel_num 
         
     def gen_plugin_code(self):
         plugin_code = "// Plugin \n"
         
         # replace weights
         func_str = "void adjust_params_with_kernel_id(int kernel_id, std::map<std::string, void*> &all_tensors) {\n"
-        
-        if self.basic_weight_names is not None:
-            for w_group in self.replaceable_weight_names:
-                kernel_id = w_group[0]
-                weight_names = w_group[1]
-                t_str = "  if (kernel_id == {0}) {{\n".format(str(kernel_id))
-                for w_base, w_replace in zip(self.basic_weight_names, weight_names):
-                    t_str += "    all_tensors[\"{0}\"] = all_tensors[\"{1}\"];\n".format(w_base, w_replace)
+
+        if self.replaceable_weight_mapping is not None:
+            sorted_kernel_ids = sorted(self.replaceable_weight_mapping.keys())
+            for idx, kernel_id in enumerate(sorted_kernel_ids):
+                t_str = f"  {'if' if idx == 0 else 'else if'} (kernel_id == {kernel_id}) {{\n"
+                
+                weight_pairs = self.replaceable_weight_mapping[kernel_id]
+                for base_weight, target_weight in weight_pairs:
+                    t_str += "    all_tensors[\"{0}\"] = all_tensors[\"{1}\"];\n".format(base_weight, target_weight)
                 t_str += "  }\n"
-            func_str += t_str
-        
+                func_str += t_str
+                
         func_str += "}\n"
         
         plugin_code += func_str

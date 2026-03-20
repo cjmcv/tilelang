@@ -493,9 +493,11 @@ def test_replace_weight(mpk, max_batch_size, batch_size, N, K, spec_layout):
         layout=spec_layout,
     )
     
-    mpk.mark_basic_weights(["w1"])
-    mpk.append_replaceable_weights(1, ["w2"])
-    
+    weight_mapping = {
+        1: [("w1", "w2"), ("w3", "w4")],
+        2: [("w1", "w7"), ("w3", "w8")]
+    }
+    mpk.append_replaceable_weights(weight_mapping)
     layers.compile_load(is_no_compile=args.nc, output_dir=args.output_dir)
     
     def torch_ref():
@@ -553,7 +555,7 @@ if __name__ == "__main__":
     # w_rms_torch, w_gatedup_torch, w_down_proj_torch = reporter.get_weight_qwen3_mlp(layer_id=0)
     
     model_tag = "qwen3_06b"
-    layers = MpkLayers(model_tag, 0, 2, world_size, rank, max_batch_size, args.trace_name, args.profiling)
+    layers = MpkLayers(model_tag, 0, 10, world_size, rank, max_batch_size, args.trace_name, args.profiling)
     mpk = layers.get_mpk()
     layout = layers.get_layout()
     

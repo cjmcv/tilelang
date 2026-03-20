@@ -556,7 +556,7 @@ void print_smem_size() {
 // Entry point for C/C++
 // TODO: change launch config
 extern "C" void launch_persistent_kernel(int kernel_id, int batch_size) {
-  printf("launch_persistent_kernel: %d.\n", kernel_id);
+  // printf("launch_persistent_kernel: %d.\n", kernel_id);
   // int device;
   // cudaGetDevice(&device);
   // int sm_count;
