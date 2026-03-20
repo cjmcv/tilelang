@@ -5,7 +5,7 @@ import megakernel as mi
 from common.pkt_util import Qwen3Info
 
 # model_tag:  "qwen3_06b" / "qwen3_4b"
-class MpkLayers:
+class MkLayers:
     def __init__(self, model_tag, instance_id, kernel_num, world_size, rank, max_batch_size, trace_name, profiling):
         self.profiler_tensor = None
         if profiling:
@@ -16,7 +16,7 @@ class MpkLayers:
         print("num_workers: ", num_workers)
         print("num_schedulers: ", num_schedulers)
         
-        self.mpk = mi.PersistentKernel(
+        self.mk = mi.PersistentKernel(
             instance_id=instance_id,
             kernel_num=kernel_num,
             mode="offline",
@@ -42,29 +42,25 @@ class MpkLayers:
         elif (model_tag == "qwen3_06b"):
             from common.autogen.qwen3_06b_mega_config import Qwen3MegaConfig06b
             self.Qwen3MegaConfig = Qwen3MegaConfig06b
-            
-        self.replaceable_weight_mapping = {}
-        
-    def get_mpk(self):
-        return self.mpk
+
+    def get_mk(self):
+        return self.mk
     def get_layout(self):
         return self.Qwen3MegaConfig
     
-    def add_weight_pair(self, kernel_id, base_weight, target_weight):
-        if kernel_id not in self.replaceable_weight_mapping:
-            self.replaceable_weight_mapping[kernel_id] = []
-        self.replaceable_weight_mapping[kernel_id].append((base_weight, target_weight))
+    def append_repl_weight_pair(self, kernel_id, base_weight, target_weight):
+        if kernel_id not in self.mk.repl_weight_mapping:
+            self.mk.repl_weight_mapping[kernel_id] = []
+        self.mk.repl_weight_mapping[kernel_id].append((base_weight, target_weight))
         
     def compile_load(self, meta_tensors=list(), is_no_compile=False, output_dir="./gen"):
-        self.mpk.append_replaceable_weights(self.replaceable_weight_mapping)
-        
         if is_no_compile is True:
             module_path = output_dir + "/test.cpython-38-x86_64-linux-gnu.so"
-            self.mpk.load_module(module_path, meta_tensors)
+            self.mk.load_module(module_path, meta_tensors)
         else:
-            module_path = self.mpk.compile(output_dir=output_dir)
+            module_path = self.mk.compile(output_dir=output_dir)
             print("module_path: ", module_path)
-            self.mpk.load_module(module_path, meta_tensors)
+            self.mk.load_module(module_path, meta_tensors)
 
     def qwen3_alloc_io_buffer(self, model_tag, layer_num, batch, q_seqlen, max_kv_seqlen):
         hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim = Qwen3Info.get_basic_params(model_tag)
@@ -129,34 +125,34 @@ class MpkLayers:
         }
         o_proj_res_out_torch = torch.zeros((batch, hidden_size), dtype=torch.bfloat16, device="cuda") # x_torch
 
-        # mpk tensor
+        # mk tensor
         self.attn_layer_io = SimpleNamespace(
-            layer_in = SimpleNamespace(pt=x_torch, mpk=self.mpk.attach_input(torch_tensor=x_torch, name="attn_layer_in")),
-            layernorm_out = SimpleNamespace(pt=None, mpk=self.mpk.new_tensor(dims=(batch, hidden_size), dtype=mi.bfloat16, name="layernorm_out", io_category="cuda_tensor")),
-            qkv_proj_out = SimpleNamespace(pt=qkv_proj_out_torch, mpk=self.mpk.attach_input(torch_tensor=qkv_proj_out_torch, name="qkv_proj_out")),
-            qk_norm_states = SimpleNamespace(pt=None, mpk=self.mpk.attach_input(torch_tensor=qk_torch["2d"], name="qk_norm_states")),
+            layer_in = SimpleNamespace(pt=x_torch, mk=self.mk.attach_input(torch_tensor=x_torch, name="attn_layer_in")),
+            layernorm_out = SimpleNamespace(pt=None, mk=self.mk.new_tensor(dims=(batch, hidden_size), dtype=mi.bfloat16, name="layernorm_out", io_category="cuda_tensor")),
+            qkv_proj_out = SimpleNamespace(pt=qkv_proj_out_torch, mk=self.mk.attach_input(torch_tensor=qkv_proj_out_torch, name="qkv_proj_out")),
+            qk_norm_states = SimpleNamespace(pt=None, mk=self.mk.attach_input(torch_tensor=qk_torch["2d"], name="qk_norm_states")),
             rope_io = SimpleNamespace(
-                q = SimpleNamespace(pt=q_torch["4d"], mpk=self.mpk.attach_input(torch_tensor=q_torch["4d"], name="rope_io_q")),
-                k = SimpleNamespace(pt=k_torch["4d"], mpk=self.mpk.attach_input(torch_tensor=k_torch["4d"], name="rope_io_k"))
+                q = SimpleNamespace(pt=q_torch["4d"], mk=self.mk.attach_input(torch_tensor=q_torch["4d"], name="rope_io_q")),
+                k = SimpleNamespace(pt=k_torch["4d"], mk=self.mk.attach_input(torch_tensor=k_torch["4d"], name="rope_io_k"))
             ),
             kv_curstep = SimpleNamespace(
-                k = SimpleNamespace(pt=k_torch["4d"], mpk=self.mpk.attach_input(torch_tensor=k_torch["4d"], name="k_curstep")),
-                v = SimpleNamespace(pt=v_torch["4d"], mpk=self.mpk.attach_input(torch_tensor=v_torch["4d"], name="v_curstep")),
+                k = SimpleNamespace(pt=k_torch["4d"], mk=self.mk.attach_input(torch_tensor=k_torch["4d"], name="k_curstep")),
+                v = SimpleNamespace(pt=v_torch["4d"], mk=self.mk.attach_input(torch_tensor=v_torch["4d"], name="v_curstep")),
             ),
             attn_in = SimpleNamespace(
-                q = SimpleNamespace(pt=q_torch["3d"], mpk=self.mpk.attach_input(torch_tensor=q_torch["3d"], name="attn_in_q")),
-                kcache = SimpleNamespace(pt=self.public_pt.key_cache_5d, mpk=self.mpk.attach_input(torch_tensor=self.public_pt.key_cache_5d, name="attn_in_kcache")),
-                vcache = SimpleNamespace(pt=self.public_pt.value_cache_5d, mpk=self.mpk.attach_input(torch_tensor=self.public_pt.value_cache_5d, name="attn_in_vcache")),
-                edge = SimpleNamespace(pt=edge_torch, mpk=self.mpk.attach_input(torch_tensor=edge_torch, name="edge")),
-                mask = SimpleNamespace(pt=mask_torch, mpk=self.mpk.attach_input(torch_tensor=mask_torch, name="attn_in_mask")),
-                glse = SimpleNamespace(pt=glse_torch, mpk=self.mpk.attach_input(torch_tensor=glse_torch, name="attn_in_glse")),
-                out_partial = SimpleNamespace(pt=out_partial_torch, mpk=self.mpk.attach_input(torch_tensor=out_partial_torch, name="attn_out_partial"))
+                q = SimpleNamespace(pt=q_torch["3d"], mk=self.mk.attach_input(torch_tensor=q_torch["3d"], name="attn_in_q")),
+                kcache = SimpleNamespace(pt=self.public_pt.key_cache_5d, mk=self.mk.attach_input(torch_tensor=self.public_pt.key_cache_5d, name="attn_in_kcache")),
+                vcache = SimpleNamespace(pt=self.public_pt.value_cache_5d, mk=self.mk.attach_input(torch_tensor=self.public_pt.value_cache_5d, name="attn_in_vcache")),
+                edge = SimpleNamespace(pt=edge_torch, mk=self.mk.attach_input(torch_tensor=edge_torch, name="edge")),
+                mask = SimpleNamespace(pt=mask_torch, mk=self.mk.attach_input(torch_tensor=mask_torch, name="attn_in_mask")),
+                glse = SimpleNamespace(pt=glse_torch, mk=self.mk.attach_input(torch_tensor=glse_torch, name="attn_in_glse")),
+                out_partial = SimpleNamespace(pt=out_partial_torch, mk=self.mk.attach_input(torch_tensor=out_partial_torch, name="attn_out_partial"))
             ),
             attn_out = SimpleNamespace(
-                three_dim = SimpleNamespace(pt=attn_out_torch["3d"], mpk=self.mpk.attach_input(torch_tensor=attn_out_torch["3d"], name="attn_out_3dim")),
-                two_dim = SimpleNamespace(pt=attn_out_torch["2d"], mpk=self.mpk.attach_input(torch_tensor=attn_out_torch["2d"], name="attn_out_2dim")),
+                three_dim = SimpleNamespace(pt=attn_out_torch["3d"], mk=self.mk.attach_input(torch_tensor=attn_out_torch["3d"], name="attn_out_3dim")),
+                two_dim = SimpleNamespace(pt=attn_out_torch["2d"], mk=self.mk.attach_input(torch_tensor=attn_out_torch["2d"], name="attn_out_2dim")),
             ),
-            layer_out = SimpleNamespace(pt=o_proj_res_out_torch, mpk=self.mpk.attach_input(torch_tensor=o_proj_res_out_torch, name="attn_layer_out"))
+            layer_out = SimpleNamespace(pt=o_proj_res_out_torch, mk=self.mk.attach_input(torch_tensor=o_proj_res_out_torch, name="attn_layer_out"))
         )
         
         #############################################################################        
@@ -164,12 +160,12 @@ class MpkLayers:
         # #    rmsnorm (x) -> linear (gateup_proj) -> act (silu_mul) -> linear_res (down_proj)
         # torch tensor
         # mlp_layer_out_torch = torch.zeros((batch, hidden_size), dtype=torch.bfloat16, device="cuda")
-        # mpk tensor
+        # mk tensor
         self.mlp_layer_io = SimpleNamespace(
             layer_in = self.attn_layer_io.layer_out,
-            layernorm_out = SimpleNamespace(pt=None, mpk=self.mpk.new_tensor(dims=(batch, hidden_size), dtype=mi.bfloat16, name="mlp_rms_out", io_category="cuda_tensor")),
-            mlp_mid = SimpleNamespace(pt=None, mpk=self.mpk.new_tensor(dims=(batch, intermediate_size*2), dtype=mi.bfloat16, name="mlp_mid", io_category="cuda_tensor")),
-            silu_mul_out = SimpleNamespace(pt=None, mpk=self.mpk.new_tensor(dims=(batch, intermediate_size), dtype=mi.bfloat16, name="silu_mul_out", io_category="cuda_tensor")),
+            layernorm_out = SimpleNamespace(pt=None, mk=self.mk.new_tensor(dims=(batch, hidden_size), dtype=mi.bfloat16, name="mlp_rms_out", io_category="cuda_tensor")),
+            mlp_mid = SimpleNamespace(pt=None, mk=self.mk.new_tensor(dims=(batch, intermediate_size*2), dtype=mi.bfloat16, name="mlp_mid", io_category="cuda_tensor")),
+            silu_mul_out = SimpleNamespace(pt=None, mk=self.mk.new_tensor(dims=(batch, intermediate_size), dtype=mi.bfloat16, name="silu_mul_out", io_category="cuda_tensor")),
             layer_out = self.attn_layer_io.layer_in,
         )
     
@@ -183,72 +179,72 @@ class MpkLayers:
         
         if (reuse_instance == True):
             layer_id_str = "_" + str(layer_id)
-            self.mpk.attach_input(torch_tensor=w_input_layernorm_torch, name="w_layernorm"+layer_id_str)
-            self.mpk.attach_input(torch_tensor=self.w_qkv_proj_torch[layer_id], name="w_qkv_proj"+layer_id_str)
-            self.mpk.attach_input(torch_tensor=self.w_qk_norm_torch[layer_id], name="w_qk_norm"+layer_id_str)
-            self.mpk.attach_input(torch_tensor=w_out_proj_torch, name="w_o_proj"+layer_id_str)
+            self.mk.attach_input(torch_tensor=w_input_layernorm_torch, name="w_layernorm"+layer_id_str)
+            self.mk.attach_input(torch_tensor=self.w_qkv_proj_torch[layer_id], name="w_qkv_proj"+layer_id_str)
+            self.mk.attach_input(torch_tensor=self.w_qk_norm_torch[layer_id], name="w_qk_norm"+layer_id_str)
+            self.mk.attach_input(torch_tensor=w_out_proj_torch, name="w_o_proj"+layer_id_str)
             
-            self.add_weight_pair(layer_id, "w_layernorm", "w_layernorm"+layer_id_str)
-            self.add_weight_pair(layer_id, "w_qkv_proj", "w_qkv_proj"+layer_id_str)
-            self.add_weight_pair(layer_id, "w_qk_norm", "w_qk_norm"+layer_id_str)
-            self.add_weight_pair(layer_id, "w_o_proj", "w_o_proj"+layer_id_str)
+            self.append_repl_weight_pair(layer_id, "w_layernorm", "w_layernorm"+layer_id_str)
+            self.append_repl_weight_pair(layer_id, "w_qkv_proj", "w_qkv_proj"+layer_id_str)
+            self.append_repl_weight_pair(layer_id, "w_qk_norm", "w_qk_norm"+layer_id_str)
+            self.append_repl_weight_pair(layer_id, "w_o_proj", "w_o_proj"+layer_id_str)
             return 
         
-        self.mpk.rmsnorm_layer(
-            input  = self.attn_layer_io.layer_in.mpk,
-            weight = self.mpk.attach_input(torch_tensor=w_input_layernorm_torch, name="w_layernorm"),
-            output = self.attn_layer_io.layernorm_out.mpk,
+        self.mk.rmsnorm_layer(
+            input  = self.attn_layer_io.layer_in.mk,
+            weight = self.mk.attach_input(torch_tensor=w_input_layernorm_torch, name="w_layernorm"),
+            output = self.attn_layer_io.layernorm_out.mk,
             sync_mode = (0, 0, 0),
             layout = self.Qwen3MegaConfig.rmsnorm_layout,
         )
-        self.mpk.linear_layer(
-            input  = self.attn_layer_io.layernorm_out.mpk,
-            weight = self.mpk.attach_input(torch_tensor=self.w_qkv_proj_torch[layer_id], name="w_qkv_proj"),
-            output = self.attn_layer_io.qkv_proj_out.mpk,
+        self.mk.linear_layer(
+            input  = self.attn_layer_io.layernorm_out.mk,
+            weight = self.mk.attach_input(torch_tensor=self.w_qkv_proj_torch[layer_id], name="w_qkv_proj"),
+            output = self.attn_layer_io.qkv_proj_out.mk,
             sync_mode = (0, 0, 0),
             layout = self.Qwen3MegaConfig.qkv_proj_layout,
         )
-        self.mpk.rmsnorm_layer(
-            input  = self.attn_layer_io.qk_norm_states.mpk,
-            weight = self.mpk.attach_input(torch_tensor=self.w_qk_norm_torch[layer_id], name="w_qk_norm"),
-            output = self.attn_layer_io.qk_norm_states.mpk,
+        self.mk.rmsnorm_layer(
+            input  = self.attn_layer_io.qk_norm_states.mk,
+            weight = self.mk.attach_input(torch_tensor=self.w_qk_norm_torch[layer_id], name="w_qk_norm"),
+            output = self.attn_layer_io.qk_norm_states.mk,
             sync_mode=(0, 0, 0),
             layout = self.Qwen3MegaConfig.merge_q_k_norm_layout,
         )
         # rope
         extra_layout = (2, 0, 0)
         fused_layout = tuple(a + b for a, b in zip(self.Qwen3MegaConfig.rope_layout[0], extra_layout)), self.Qwen3MegaConfig.rope_layout[1]
-        self.mpk.rope_layer(
-            q=self.attn_layer_io.rope_io.q.mpk,
-            k=self.attn_layer_io.rope_io.k.mpk,
-            cos=self.mpk.attach_input(torch_tensor=self.public_pt.cos, name="cos"), # 所有层共享，不需要替换
-            sin=self.mpk.attach_input(torch_tensor=self.public_pt.sin, name="sin"),
-            q_embed=self.attn_layer_io.rope_io.q.mpk,
-            k_embed=self.attn_layer_io.rope_io.k.mpk,
+        self.mk.rope_layer(
+            q=self.attn_layer_io.rope_io.q.mk,
+            k=self.attn_layer_io.rope_io.k.mk,
+            cos=self.mk.attach_input(torch_tensor=self.public_pt.cos, name="cos"), # 所有层共享，不需要替换
+            sin=self.mk.attach_input(torch_tensor=self.public_pt.sin, name="sin"),
+            q_embed=self.attn_layer_io.rope_io.q.mk,
+            k_embed=self.attn_layer_io.rope_io.k.mk,
             sync_mode=(0, 0, 0),
             layout=fused_layout,
             fused_params=[99, 1, *extra_layout, layer_id],
         )
         
         # attn    
-        self.mpk.gqa_decode_layer(
-            q=self.attn_layer_io.attn_in.q.mpk,
-            k_cache=self.attn_layer_io.attn_in.kcache.mpk,
-            v_cache=self.attn_layer_io.attn_in.vcache.mpk,
-            edge=self.attn_layer_io.attn_in.edge.mpk,
-            mask=self.attn_layer_io.attn_in.mask.mpk,
-            glse=self.attn_layer_io.attn_in.glse.mpk,
-            out_partial=self.attn_layer_io.attn_in.out_partial.mpk,
-            output=self.attn_layer_io.attn_out.three_dim.mpk,
+        self.mk.gqa_decode_layer(
+            q=self.attn_layer_io.attn_in.q.mk,
+            k_cache=self.attn_layer_io.attn_in.kcache.mk,
+            v_cache=self.attn_layer_io.attn_in.vcache.mk,
+            edge=self.attn_layer_io.attn_in.edge.mk,
+            mask=self.attn_layer_io.attn_in.mask.mk,
+            glse=self.attn_layer_io.attn_in.glse.mk,
+            out_partial=self.attn_layer_io.attn_in.out_partial.mk,
+            output=self.attn_layer_io.attn_out.three_dim.mk,
             sync_mode=(0, 0, 0),
             layout=self.Qwen3MegaConfig.gqa_decode_layout_16,    # todo
             fused_params=[99, 0, layer_id],
         )
-        self.mpk.linear_with_residual_layer(
-            input=self.attn_layer_io.attn_out.two_dim.mpk,
-            weight=self.mpk.attach_input(torch_tensor=w_out_proj_torch, name="w_o_proj"),
-            residual=self.attn_layer_io.layer_in.mpk,
-            output=self.attn_layer_io.layer_out.mpk,
+        self.mk.linear_with_residual_layer(
+            input=self.attn_layer_io.attn_out.two_dim.mk,
+            weight=self.mk.attach_input(torch_tensor=w_out_proj_torch, name="w_o_proj"),
+            residual=self.attn_layer_io.layer_in.mk,
+            output=self.attn_layer_io.layer_out.mk,
             sync_mode=(0, 0, 0),
             layout=self.Qwen3MegaConfig.linear2_layout,
         )
@@ -259,40 +255,40 @@ class MpkLayers:
         
         if (reuse_instance == True):
             layer_id_str = "_" + str(layer_id)
-            self.mpk.attach_input(torch_tensor=w_rms_norm_torch, name="w_norm"+layer_id_str)
-            self.mpk.attach_input(torch_tensor=self.w_mlp_gateup_proj[layer_id], name="w_gatedup"+layer_id_str)
-            self.mpk.attach_input(torch_tensor=w_down_proj_torch, name="w_down_proj"+layer_id_str)
+            self.mk.attach_input(torch_tensor=w_rms_norm_torch, name="w_norm"+layer_id_str)
+            self.mk.attach_input(torch_tensor=self.w_mlp_gateup_proj[layer_id], name="w_gatedup"+layer_id_str)
+            self.mk.attach_input(torch_tensor=w_down_proj_torch, name="w_down_proj"+layer_id_str)
             
-            self.add_weight_pair(layer_id, "w_norm", "w_norm"+layer_id_str)
-            self.add_weight_pair(layer_id, "w_gatedup", "w_gatedup"+layer_id_str)
-            self.add_weight_pair(layer_id, "w_down_proj", "w_down_proj"+layer_id_str)
+            self.append_repl_weight_pair(layer_id, "w_norm", "w_norm"+layer_id_str)
+            self.append_repl_weight_pair(layer_id, "w_gatedup", "w_gatedup"+layer_id_str)
+            self.append_repl_weight_pair(layer_id, "w_down_proj", "w_down_proj"+layer_id_str)
             return 
         
-        self.mpk.rmsnorm_layer(
-            input = self.mlp_layer_io.layer_in.mpk,
-            weight = self.mpk.attach_input(torch_tensor=w_rms_norm_torch, name="w_norm"),
-            output = self.mlp_layer_io.layernorm_out.mpk,
+        self.mk.rmsnorm_layer(
+            input = self.mlp_layer_io.layer_in.mk,
+            weight = self.mk.attach_input(torch_tensor=w_rms_norm_torch, name="w_norm"),
+            output = self.mlp_layer_io.layernorm_out.mk,
             sync_mode=(0, 0, 0),
             layout=self.Qwen3MegaConfig.rmsnorm_layout,
         )
-        self.mpk.linear_layer(
-            input  = self.mlp_layer_io.layernorm_out.mpk,
-            weight = self.mpk.attach_input(torch_tensor=self.w_mlp_gateup_proj[layer_id], name="w_gatedup"),
-            output = self.mlp_layer_io.mlp_mid.mpk,
+        self.mk.linear_layer(
+            input  = self.mlp_layer_io.layernorm_out.mk,
+            weight = self.mk.attach_input(torch_tensor=self.w_mlp_gateup_proj[layer_id], name="w_gatedup"),
+            output = self.mlp_layer_io.mlp_mid.mk,
             sync_mode=(0, 0, 0),
             layout = self.Qwen3MegaConfig.linear1_layout,
         )
-        self.mpk.silu_mul_layer(
-            input  = self.mlp_layer_io.mlp_mid.mpk,
-            output = self.mlp_layer_io.silu_mul_out.mpk,
+        self.mk.silu_mul_layer(
+            input  = self.mlp_layer_io.mlp_mid.mk,
+            output = self.mlp_layer_io.silu_mul_out.mk,
             sync_mode=(2, 0, 0),
             layout = self.Qwen3MegaConfig.silu_mul_layout,
         )
-        self.mpk.linear_with_residual_layer(
-            input    = self.mlp_layer_io.silu_mul_out.mpk,
-            weight   = self.mpk.attach_input(torch_tensor=w_down_proj_torch, name="w_down_proj"),
-            residual = self.mlp_layer_io.layer_in.mpk,
-            output   = self.mlp_layer_io.layer_out.mpk,
+        self.mk.linear_with_residual_layer(
+            input    = self.mlp_layer_io.silu_mul_out.mk,
+            weight   = self.mk.attach_input(torch_tensor=w_down_proj_torch, name="w_down_proj"),
+            residual = self.mlp_layer_io.layer_in.mk,
+            output   = self.mlp_layer_io.layer_out.mk,
             sync_mode=(0, 0, 0),
             layout   = self.Qwen3MegaConfig.linear2_layout,
         )

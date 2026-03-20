@@ -5,7 +5,7 @@ import torch.distributed as dist
 import argparse
 import os, json
 from common.pkt_util import TorchRef, PerfReporter, Qwen3Info
-from common.mpk_layers import MpkLayers
+from common.mk_layers import MkLayers
     
 
 if __name__ == "__main__":
@@ -36,8 +36,8 @@ if __name__ == "__main__":
     
     position_embeddings=(all_position_embeddings[0][:, step], all_position_embeddings[1][:, step])
     
-    layers = MpkLayers(model_tag, instance_id=0, kernel_num=10, world_size=1, rank=0, max_batch_size=1, trace_name=args.trace_name, profiling=args.profiling)
-    mpk = layers.get_mpk()
+    layers = MkLayers(model_tag, instance_id=0, kernel_num=10, world_size=1, rank=0, max_batch_size=1, trace_name=args.trace_name, profiling=args.profiling)
+    mk = layers.get_mk()
     
     layer_num = 10
     max_kv_seqlen = 8192
@@ -49,17 +49,17 @@ if __name__ == "__main__":
             reuse_instance = True
         layers.qwen3_create_attn_layer(model, layer_id, reuse_instance)
         layers.qwen3_create_mlp_layer(model, layer_id, reuse_instance)
-    meta, mpk_attn_out, mpk_mlp_out = layers.fill_meta()
+    meta, mk_attn_out, mk_mlp_out = layers.fill_meta()
     layers.compile_load(meta_tensors=meta, is_no_compile=args.nc, output_dir=args.output_dir)  
     
     
     layers.update_step(step0, cos=position_embeddings[0][:, step], sin=position_embeddings[1][:, step])
-    def mpk_run():
-        mpk_mlp_out.copy_(hidden_states.view(batch*q_seqlen, hidden_size))
+    def mk_run():
+        mk_mlp_out.copy_(hidden_states.view(batch*q_seqlen, hidden_size))
         for layer_id in range(layer_num):
-            layers.attn_layer_io.layer_in.pt.copy_(mpk_mlp_out)
-            mpk(batch, layer_id)
-        return mpk_mlp_out  
+            layers.attn_layer_io.layer_in.pt.copy_(mk_mlp_out)
+            mk(batch, layer_id)
+        return mk_mlp_out  
 
 
     def torch_ref_tmp():
@@ -83,12 +83,12 @@ if __name__ == "__main__":
         torch_ref()
     
     torch_ref()    
-    mpk_run()
+    mk_run()
     
-    # print("mpk_out: ", mpk_run())    
+    # print("mk_out: ", mk_run())    
     # print("torch_ref: ", torch_ref())
     
     reporter = PerfReporter() 
-    reporter.generate_report(mpk_run, torch_ref, 
+    reporter.generate_report(mk_run, torch_ref, 
                             warnup_iter=100, test_iter=200, 
                             allclose_iter=5, print_mode=1)

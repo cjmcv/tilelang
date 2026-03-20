@@ -34,7 +34,7 @@ from .configuration_qwen3 import Qwen3Config
 import time
 
 import megakernel as mi
-from common.mpk_layers import MpkLayers
+from common.mk_layers import MkLayers
 
 from .rope import apply_rotary_pos_emb_triton
 
@@ -546,7 +546,7 @@ class Qwen3Model(Qwen3PreTrainedModel):
         if ENABLE_MPK:
             global g_mpk, g_mpk_x_torch, g_mpk_out_torch
             
-            self.mpk_layers = MpkLayers(instance_id=0, kernel_num=20, world_size=1, rank=0, max_batch_size=1, trace_name="qwen3", profiling=False)
+            self.mpk_layers = MkLayers(instance_id=0, kernel_num=20, world_size=1, rank=0, max_batch_size=1, trace_name="qwen3", profiling=False)
             g_mpk = self.mpk_layers.get_mpk()
             gridsize = [1, 48, 24, 16] # 1024 3072
             

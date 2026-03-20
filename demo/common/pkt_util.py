@@ -432,9 +432,9 @@ class PerfReporter:
         self.check_allclose_ret(target_run, torch_run, allclose_iter, print_mode)
 
         # self.time_cuda_event_record("torch_ref", torch_run, test_iter)   
-        # self.time_cuda_event_record("mpk", target_run, test_iter)
+        # self.time_cuda_event_record("mk", target_run, test_iter)
         # self.time_cpu_record("torch_ref", torch_run, test_iter)   
-        # self.time_cpu_record("mpk", target_run, test_iter)
+        # self.time_cpu_record("mk", target_run, test_iter)
         
         self.torch_profile(target_run)
         self.torch_profile(torch_run)

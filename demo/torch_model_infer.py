@@ -101,7 +101,7 @@ if __name__ == "__main__":
         default=None,
         help=(
             "Optionally dump first N generated token_ids, text, and latency to JSON. "
-            "If path omitted, saves to outputs/qwen3/{torch_output.json|mpk_output.json}."
+            "If path omitted, saves to outputs/qwen3/{torch_output.json|mk_output.json}."
         ),
     )
     parser.add_argument("--prompt",
@@ -127,7 +127,7 @@ if __name__ == "__main__":
 
     if args.save_tokens:
         if args.save_tokens == "auto":
-            filename = "mpk_output.json" if args.use_mirage else "torch_output.json"
+            filename = "mk_output.json" if args.use_mirage else "torch_output.json"
             save_path = os.path.join(DEFAULT_SAVE_DIR, filename)
         else:
             save_path = args.save_tokens

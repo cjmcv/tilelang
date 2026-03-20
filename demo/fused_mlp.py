@@ -4,7 +4,7 @@ import argparse
 import megakernel as mi
 
 from common.pkt_util import TorchRef, PerfReporter, Qwen3Info
-from common.mpk_layers import MpkLayers
+from common.mk_layers import MkLayers
 
 WITH_RMS_NORM = 1
 WITH_RESIDUAL = 1
@@ -32,8 +32,8 @@ if __name__ == "__main__":
     torch.set_default_dtype(torch.bfloat16)
 
     model_tag = "qwen3_4b"
-    layers = MpkLayers(model_tag, 0, 1, world_size, rank, max_batch_size, args.trace_name, args.profiling)
-    mpk = layers.get_mpk()
+    layers = MkLayers(model_tag, 0, 1, world_size, rank, max_batch_size, args.trace_name, args.profiling)
+    mk = layers.get_mk()
     layout = layers.get_layout()
     reporter = PerfReporter() 
     # reporter.memory_footprint_simulation(rank)
@@ -47,16 +47,16 @@ if __name__ == "__main__":
     w_down_proj_torch = torch.randn((hidden_size, intermediate_size), dtype=torch.bfloat16, device="cuda")
     out_torch = torch.zeros((max_batch_size, hidden_size), dtype=torch.bfloat16, device="cuda")
     
-    x = mpk.attach_input(torch_tensor=x_torch, name="in")
-    w_rms_norm = mpk.attach_input(torch_tensor=w_rms_norm_torch, name="w_norm")
-    w_gatedup = mpk.attach_input(torch_tensor=w_gatedup_torch, name="w_gatedup")
-    w_down_proj = mpk.attach_input(torch_tensor=w_down_proj_torch, name="w_down_proj")
-    mlp_out = mpk.attach_input(torch_tensor=out_torch, name="mlp_out")
+    x = mk.attach_input(torch_tensor=x_torch, name="in")
+    w_rms_norm = mk.attach_input(torch_tensor=w_rms_norm_torch, name="w_norm")
+    w_gatedup = mk.attach_input(torch_tensor=w_gatedup_torch, name="w_gatedup")
+    w_down_proj = mk.attach_input(torch_tensor=w_down_proj_torch, name="w_down_proj")
+    mlp_out = mk.attach_input(torch_tensor=out_torch, name="mlp_out")
     
     x_residual = x
     if WITH_RMS_NORM:
-        rms_out = mpk.new_tensor(dims=(max_batch_size, hidden_size), dtype=mi.bfloat16, name="rms_out", io_category="cuda_tensor")
-        mpk.rmsnorm_layer(
+        rms_out = mk.new_tensor(dims=(max_batch_size, hidden_size), dtype=mi.bfloat16, name="rms_out", io_category="cuda_tensor")
+        mk.rmsnorm_layer(
             input=x,
             weight=w_rms_norm,
             output=rms_out,
@@ -66,9 +66,9 @@ if __name__ == "__main__":
         x = rms_out
         
     # mlp_mid_torch = torch.zeros((max_batch_size, intermediate_size*2), dtype=torch.bfloat16, device="cuda")
-    # mlp_mid = mpk.attach_input(torch_tensor=mlp_mid_torch, name="mlp_mid")
-    mlp_mid = mpk.new_tensor(dims=(max_batch_size, intermediate_size*2), dtype=mi.bfloat16, name="mlp_mid", io_category="cuda_tensor")
-    mpk.linear_layer(
+    # mlp_mid = mk.attach_input(torch_tensor=mlp_mid_torch, name="mlp_mid")
+    mlp_mid = mk.new_tensor(dims=(max_batch_size, intermediate_size*2), dtype=mi.bfloat16, name="mlp_mid", io_category="cuda_tensor")
+    mk.linear_layer(
         input=x,
         weight=w_gatedup,
         output=mlp_mid,
@@ -78,10 +78,10 @@ if __name__ == "__main__":
     
     if 1:
         # silu_mul_out_torch = torch.zeros((max_batch_size, intermediate_size), dtype=torch.bfloat16, device="cuda")
-        # silu_mul_out = mpk.attach_input(torch_tensor=silu_mul_out_torch, name="silu_mul_out")
+        # silu_mul_out = mk.attach_input(torch_tensor=silu_mul_out_torch, name="silu_mul_out")
         # mlp_out_torch = silu_mul_out_torch
-        silu_mul_out = mpk.new_tensor(dims=(max_batch_size, intermediate_size), dtype=mi.bfloat16, name="silu_mul_out", io_category="cuda_tensor")
-        mpk.silu_mul_layer(
+        silu_mul_out = mk.new_tensor(dims=(max_batch_size, intermediate_size), dtype=mi.bfloat16, name="silu_mul_out", io_category="cuda_tensor")
+        mk.silu_mul_layer(
             input=mlp_mid,
             output=silu_mul_out,
             sync_mode=(2, 0, 0),
@@ -90,7 +90,7 @@ if __name__ == "__main__":
             # sync_mode=(2, 0, 0),
         )
         if WITH_RESIDUAL:
-            mpk.linear_with_residual_layer(
+            mk.linear_with_residual_layer(
                 input=silu_mul_out,
                 weight=w_down_proj,
                 residual=x_residual,
@@ -99,7 +99,7 @@ if __name__ == "__main__":
                 layout=layout.linear2_layout,
             )
         else:
-            mpk.linear_layer(
+            mk.linear_layer(
                 input=silu_mul_out,
                 weight=w_down_proj,
                 output=mlp_out,
@@ -107,7 +107,7 @@ if __name__ == "__main__":
                 layout=layout.inear2_layout,
             )
     else:
-        mpk.silu_mul_linear_layer(
+        mk.silu_mul_linear_layer(
             input=mlp_mid,
             weight=w_down_proj,
             output=mlp_out,
@@ -135,7 +135,7 @@ if __name__ == "__main__":
         return ref_output
 
     def target_func():
-        mpk(batch_size)
+        mk(batch_size)
         return out_torch[:batch_size]
     
     if not args.profiling:
