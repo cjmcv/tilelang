@@ -60,8 +60,6 @@ if __name__ == "__main__":
     
     ###########################################################
     
-    
-    
     # # ###
     def ref_run1():
         return TorchRef.linear(x_torch[:batch_size], w_torch1)
@@ -71,7 +69,8 @@ if __name__ == "__main__":
     def mpk_run1():
         mpk(batch_size, 0)
     def mpk_run2():
-        mpk(batch_size, 1)         
+        mpk(batch_size, 1)
+        
     # for _ in range(10):
     #     print("Run1")
     #     mpk1(batch_size)

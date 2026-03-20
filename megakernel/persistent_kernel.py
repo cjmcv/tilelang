@@ -739,6 +739,7 @@ class PersistentKernel:
             self.profiler_tensor.data_ptr() if self.profiler_tensor is not None else 0
         )
         # print("meta_tensors_ptr ", len(meta_tensors), len(meta_tensors_ptr))
+        print("kernel_num: ", self.kernel_num)
         for kernel_id in range(self.kernel_num):
             self.init_func(
                 self.instance_id*self.max_kernel_num_per_instance + kernel_id,

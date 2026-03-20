@@ -470,7 +470,58 @@ def test_gqa_decode_multi_instance(mpk, layout, max_batch_size, batch, num_heads
     reporter.generate_report(target_func, torch_ref, 
                             warnup_iter=100, test_iter=100, 
                             allclose_iter=5, print_mode=0)
+   
+def test_replace_weight(mpk, max_batch_size, batch_size, N, K, spec_layout):
+    x_torch = torch.randn((max_batch_size, K), dtype=torch.bfloat16, device="cuda")
     
+    w_torch = torch.randn((N, K), dtype=torch.bfloat16, device="cuda")
+    w_torch2 = torch.randn((N, K), dtype=torch.bfloat16, device="cuda")
+    
+    out_torch = torch.zeros((max_batch_size, N), dtype=torch.bfloat16, device="cuda")
+    print("x: ", x_torch.data_ptr(), "w: ", w_torch.data_ptr(), "o: ", out_torch.data_ptr())
+    
+    x = mpk.attach_input(torch_tensor=x_torch, name="in")
+    w = mpk.attach_input(torch_tensor=w_torch, name="w1")
+    w2 = mpk.attach_input(torch_tensor=w_torch2, name="w2")
+    linear_out = mpk.attach_input(torch_tensor=out_torch, name="linear_out")
+
+    mpk.linear_layer(
+        input=x,
+        weight=w,
+        output=linear_out,
+        sync_mode=(0, 0, 0),
+        layout=spec_layout,
+    )
+    
+    mpk.mark_basic_weights(["w1"])
+    mpk.append_replaceable_weights(1, ["w2"])
+    
+    layers.compile_load(is_no_compile=args.nc, output_dir=args.output_dir)
+    
+    def torch_ref():
+        return TorchRef.linear(x_torch[:batch_size], w_torch)
+    def torch_ref2():
+        return TorchRef.linear(x_torch[:batch_size], w_torch2)
+        
+    def target_func():
+        mpk(batch_size, 0)
+        return out_torch[:batch_size]
+    def target_func2():
+        mpk(batch_size, 1)
+        return out_torch[:batch_size]   
+     
+    print("mpk1: ", target_func())
+    print("torch1: ", torch_ref())
+    
+    print("mpk2: ", target_func2())
+    print("torch2: ", torch_ref2())
+    
+    print("mpk1: ", target_func())
+    print("torch1: ", torch_ref())
+    # reporter.generate_report(target_func, torch_ref, 
+    #                         warnup_iter=100, test_iter=100, 
+    #                         allclose_iter=5, print_mode=1)
+ 
 if __name__ == "__main__":
     max_batch_size = 1
     batch_size = 1
@@ -502,7 +553,7 @@ if __name__ == "__main__":
     # w_rms_torch, w_gatedup_torch, w_down_proj_torch = reporter.get_weight_qwen3_mlp(layer_id=0)
     
     model_tag = "qwen3_06b"
-    layers = MpkLayers(model_tag, 0, 1, world_size, rank, max_batch_size, args.trace_name, args.profiling)
+    layers = MpkLayers(model_tag, 0, 2, world_size, rank, max_batch_size, args.trace_name, args.profiling)
     mpk = layers.get_mpk()
     layout = layers.get_layout()
     
@@ -514,16 +565,16 @@ if __name__ == "__main__":
     # test_silu_mul(mpk, layout, max_batch_size, batch_size, intermediate_size) # 5us vs 2us，需要加速
     # test_linear_residual(mpk, max_batch_size, batch_size, hidden_size, intermediate_size, layout.linear2_layout)
     
-
     # test_linear(mpk, max_batch_size, batch_size, (num_heads+2*num_kv_heads)*head_dim, hidden_size, layout.qkv_proj_layout)
     # test_rope(mpk, layout, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim)
     # test_gqa_decode(mpk, layout, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, seqlen_kv=seqlen_kv, head_dim=head_dim)
     # test_linear_residual(mpk, max_batch_size, batch_size, hidden_size, num_heads*head_dim, layout.o_proj_layout)
     
     #######################################
+    test_replace_weight(mpk, max_batch_size, batch_size, intermediate_size*2, hidden_size, layout.linear1_layout)
     # test_gqa_decode_multi_instance(mpk, layout, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, seqlen_kv=seqlen_kv, head_dim=head_dim)
     # test_parallel_rms_norm(mpk, layout, max_batch_size, batch_size, hidden_size)
-    test_rope_fused(mpk, layout, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim)
+    # test_rope_fused(mpk, layout, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim)
     
     print("Test single_mega completed.")
     # ncu --set full --section "SpeedOfLight_RooflineChart" -k "kernel" -o my_profile python demo/single_linear.py --nc

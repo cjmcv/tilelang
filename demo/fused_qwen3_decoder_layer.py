@@ -39,7 +39,7 @@ if __name__ == "__main__":
     layers = MpkLayers(model_tag, instance_id=0, kernel_num=1, world_size=1, rank=0, max_batch_size=1, trace_name=args.trace_name, profiling=args.profiling)
     mpk = layers.get_mpk()
     
-    layer_num = 2
+    layer_num = 1
     max_kv_seqlen = 8192
     layers.qwen3_alloc_io_buffer(model_tag, layer_num, batch, 1, max_kv_seqlen)
     for layer_id in range(layer_num):
