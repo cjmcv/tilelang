@@ -352,7 +352,8 @@ class Qwen3Attention(nn.Module):
         else:
             # print("self.key_cache:", self.key_cache[self.layer_idx, 0, step])
             # print("self.value_cache:", self.value_cache[self.layer_idx, 0, step])
-            kv_seq_len = step + 1 # 1
+            kv_seq_len = step + 1
+            # kv_seq_len = 1
             attn_output = naive_attention(
                 q,
                 self.key_cache,
@@ -375,9 +376,7 @@ class Qwen3Attention(nn.Module):
 
 
 ENABLE_MPK = False
-g_mpk = None
-g_mpk_x_torch = None
-g_mpk_out_torch = None
+
 class Qwen3DecoderLayer(nn.Module):
     def __init__(
         self,
@@ -413,36 +412,6 @@ class Qwen3DecoderLayer(nn.Module):
     ) -> Tuple[
         torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]
     ]:
-        # print("forward: ", hidden_states.size(), attention_mask, position_embeddings[0].size(), position_embeddings[1].size(), step)
-        if (ENABLE_MPK and self.layer_idx == 0 and hidden_states.shape[1] == 1):
-
-            residual = hidden_states
-            # print("shape0: ", residual.shape)
-
-            # Self Attention
-            hidden_states = self.self_attn(
-                input_layernorm=self.input_layernorm,
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                position_embeddings=position_embeddings,
-                step=step,
-                stream=stream,
-            )
-            hidden_states = residual + hidden_states
-            
-            #
-            
-            # print("shape1: ", hidden_states.shape, residual.shape)
-            batch_size = hidden_states.shape[1]
-            g_mpk_x_torch[:batch_size, :].copy_(hidden_states.squeeze(0))
-            g_mpk(batch_size, self.layer_idx)
-            hidden_states = g_mpk_out_torch[:batch_size, :].unsqueeze(0)
-            print("mpk outputs", hidden_states.shape)
-            outputs = (hidden_states,)
-            return outputs
-            
-        ###########################################################
-        
         residual = hidden_states
         # print("shape0: ", residual.shape)
 

@@ -21,25 +21,30 @@ if __name__ == "__main__":
     model_tag = "qwen3_06b"
     batch = 1
     q_seqlen = 1
-    hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim = Qwen3Info.get_basic_params(model_tag)
+    hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim, num_hidden_layers \
+        = Qwen3Info.get_basic_params(model_tag)
     model, tokenizer = Qwen3Info.load_model(0, model_tag)
     
     positions = torch.arange(32768).unsqueeze(0).to(model.device)
     all_position_embeddings = model.model.rotary_emb(positions)
  
+    step_value = 0 # 0
+    if (step_value >= 511):
+        is_long_kv = True
+    else:
+        is_long_kv = False
     hidden_states = torch.randn((batch, q_seqlen, hidden_size), dtype=torch.bfloat16, device="cuda")
     attention_mask = None    
-    step0 = 0 # todo
-    step = torch.full((1, ), 0, dtype=torch.int32, device="cuda")
+    step = torch.full((1, ), step_value, dtype=torch.int32, device="cuda")
     stream = None
     print("before forward", hidden_states)
     
     position_embeddings=(all_position_embeddings[0][:, step], all_position_embeddings[1][:, step])
-    
-    layers = MkLayers(model_tag, instance_id=0, kernel_num=10, world_size=1, rank=0, max_batch_size=1, trace_name=args.trace_name, profiling=args.profiling)
+
+    layer_num = num_hidden_layers
+    layers = MkLayers(model_tag, instance_id=0, kernel_num=layer_num, world_size=1, rank=0, max_batch_size=1, trace_name=args.trace_name, profiling=args.profiling)
     mk = layers.get_mk()
     
-    layer_num = 10
     max_kv_seqlen = 8192
     layers.qwen3_alloc_io_buffer(model_tag, layer_num, batch, 1, max_kv_seqlen)
     for layer_id in range(layer_num):
@@ -47,20 +52,17 @@ if __name__ == "__main__":
             reuse_instance = False
         else:
             reuse_instance = True
-        layers.qwen3_create_attn_layer(model, layer_id, reuse_instance)
+        layers.qwen3_create_attn_layer(model, layer_id, is_long_kv, reuse_instance)
         layers.qwen3_create_mlp_layer(model, layer_id, reuse_instance)
     meta, mk_attn_out, mk_mlp_out = layers.fill_meta()
     layers.compile_load(meta_tensors=meta, is_no_compile=args.nc, output_dir=args.output_dir)  
     
-    
-    layers.update_step(step0, cos=position_embeddings[0][:, step], sin=position_embeddings[1][:, step])
+    layers.update_step(step[0], cos=position_embeddings[0][:, step], sin=position_embeddings[1][:, step])
     def mk_run():
-        mk_mlp_out.copy_(hidden_states.view(batch*q_seqlen, hidden_size))
+        layers.attn_layer_io.layer_in.pt.copy_(hidden_states.view(batch*q_seqlen, hidden_size))
         for layer_id in range(layer_num):
-            layers.attn_layer_io.layer_in.pt.copy_(mk_mlp_out)
-            mk(batch, layer_id)
+            mk(batch, layer_id) # attn的输入与mlp的输出是同一个tensor
         return mk_mlp_out  
-
 
     def torch_ref_tmp():
         torch_io = hidden_states.clone()

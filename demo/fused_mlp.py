@@ -38,7 +38,8 @@ if __name__ == "__main__":
     reporter = PerfReporter() 
     # reporter.memory_footprint_simulation(rank)
     
-    hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim = Qwen3Info.get_basic_params(model_tag)
+    hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim, num_hidden_layers \
+        = Qwen3Info.get_basic_params(model_tag)
     splitk = 1 # 8
     
     x_torch = torch.randn((max_batch_size, hidden_size), dtype=torch.bfloat16, device="cuda")

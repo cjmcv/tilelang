@@ -270,6 +270,7 @@ class Qwen3Info:
             num_attention_heads = 32
             num_key_value_heads = 8
             head_dim            = 128
+            num_hidden_layers   = 36
         elif (model_tag == "qwen3_4b"):
             # https://huggingface.co/Qwen/Qwen3-4B/blob/main/config.json
             hidden_size         = 2560        
@@ -277,6 +278,7 @@ class Qwen3Info:
             num_attention_heads = 32
             num_key_value_heads = 8
             head_dim            = 128
+            num_hidden_layers   = 36
         else:
             # "qwen3_06b"
             # https://huggingface.co/Qwen/Qwen3-0.6B/blob/main/config.json
@@ -285,7 +287,8 @@ class Qwen3Info:
             num_attention_heads = 16
             num_key_value_heads = 8
             head_dim            = 128
-        return [hidden_size, intermediate_size, num_attention_heads, num_key_value_heads, head_dim]
+            num_hidden_layers   = 28
+        return [hidden_size, intermediate_size, num_attention_heads, num_key_value_heads, head_dim, num_hidden_layers]
         
     @staticmethod
     def load_model(rank, model_tag):

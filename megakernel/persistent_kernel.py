@@ -247,7 +247,7 @@ class PersistentKernel:
         self.model_tag = model_tag
         self.instance_id = instance_id
         self.kernel_num = kernel_num
-        self.max_kernel_num_per_instance = 10
+        self.max_kernel_num_per_instance = 50
         
         self.__finalized__ = False
         self._is_compiled = False

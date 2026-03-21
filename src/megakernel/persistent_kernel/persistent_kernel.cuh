@@ -249,7 +249,7 @@ static void _init_persistent_kernel(int kernel_id,
                                     int my_gpu_id);
 
 static int used_kernel_num = 0;
-static RuntimeConfig global_runtime_config[20];
+static RuntimeConfig global_runtime_config[100];
 
 extern "C" void init_persistent_kernel(int kernel_id,
                                        std::vector<void *> meta_tensors,
@@ -561,10 +561,7 @@ extern "C" void launch_persistent_kernel(int kernel_id, int batch_size) {
   // cudaGetDevice(&device);
   // int sm_count;
   // cudaDeviceGetAttribute(&sm_count, cudaDevAttrMultiProcessorCount, device);
-  global_runtime_config[kernel_id].batch_size = batch_size;
-
-  int num_schedulers = global_runtime_config[kernel_id].num_local_schedulers +
-                       global_runtime_config[kernel_id].num_remote_schedulers;
+  // global_runtime_config[kernel_id].batch_size = batch_size;
 
   cudaMemset(global_runtime_config[kernel_id].all_event_counters, 0, 
     sizeof(EventCounter) * global_runtime_config[kernel_id].num_events);

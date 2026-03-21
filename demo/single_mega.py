@@ -558,7 +558,8 @@ if __name__ == "__main__":
     mk = layers.get_mk()
     layout = layers.get_layout()
     
-    hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim = Qwen3Info.get_basic_params(model_tag)
+    hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim, num_hidden_layers \
+        = Qwen3Info.get_basic_params(model_tag)
     seqlen_kv=2048
     
     # test_rms_norm(mk, layout, max_batch_size, batch_size, hidden_size)
@@ -572,8 +573,8 @@ if __name__ == "__main__":
     # test_linear_residual(mk, max_batch_size, batch_size, hidden_size, num_heads*head_dim, layout.o_proj_layout)
     
     #######################################
-    # test_replace_weight(mk, max_batch_size, batch_size, intermediate_size*2, hidden_size, layout.linear1_layout)
-    test_gqa_decode_multi_instance(mk, layout, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, seqlen_kv=seqlen_kv, head_dim=head_dim)
+    test_replace_weight(mk, max_batch_size, batch_size, intermediate_size*2, hidden_size, layout.linear1_layout)
+    # test_gqa_decode_multi_instance(mk, layout, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, seqlen_kv=seqlen_kv, head_dim=head_dim)
     # test_parallel_rms_norm(mk, layout, max_batch_size, batch_size, hidden_size)
     # test_rope_fused(mk, layout, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim)
     

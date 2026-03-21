@@ -69,7 +69,8 @@ if __name__ == "__main__":
     # v_proj: torch.Size([1024, 1024])
     # o_proj: torch.Size([1024, 2048])
     
-    hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim = Qwen3Info.get_basic_params(model_tag)
+    hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim, num_hidden_layers \
+        = Qwen3Info.get_basic_params(model_tag)
 
     q_seqlen = 1
     max_kv_seqlen = 8192

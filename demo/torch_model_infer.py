@@ -145,7 +145,8 @@ if __name__ == "__main__":
     print(f"world_size({world_size}) rank({rank})")
     torch.set_default_dtype(torch.bfloat16)
 
-    model, tokenizer = Qwen3Info.load_model(rank)
+    model_tag = "qwen3_06b"
+    model, tokenizer = Qwen3Info.load_model(rank, model_tag)
     total_num_requests = 1 if not args.use_mirage else args.max_num_batched_requests
     # get all model weight tensors
     tokens = torch.full((total_num_requests, args.max_seq_length), 0, dtype=torch.long, device="cuda")
@@ -199,7 +200,7 @@ if __name__ == "__main__":
     )
     step = torch.full((total_num_requests, ), 0, dtype=torch.int32, device="cuda")
     num_new_tokens = torch.full((total_num_requests, ), 1, dtype=torch.int32, device="cuda")
-    print("step: ", step.size())
+    # print("step: ", step.size())
     # g = torch.cuda.CUDAGraph()
     stream = torch.cuda.Stream()
     warmup = 0

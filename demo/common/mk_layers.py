@@ -63,7 +63,8 @@ class MkLayers:
             self.mk.load_module(module_path, meta_tensors)
 
     def qwen3_alloc_io_buffer(self, model_tag, layer_num, batch, q_seqlen, max_kv_seqlen):
-        hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim = Qwen3Info.get_basic_params(model_tag)
+        hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim, num_hidden_layers \
+            = Qwen3Info.get_basic_params(model_tag)
         
         self.batch = batch
         self.q_seqlen = q_seqlen
@@ -169,7 +170,7 @@ class MkLayers:
             layer_out = self.attn_layer_io.layer_in,
         )
     
-    def qwen3_create_attn_layer(self, model, layer_id, reuse_instance = False):
+    def qwen3_create_attn_layer(self, model, layer_id, is_long_kv = False, reuse_instance = False):
         w_input_layernorm_torch, w_q_norm_torch, w_k_norm_torch, \
         w_q_torch, w_k_torch, w_v_torch, w_out_proj_torch, \
         k_cache_torch, v_cache_torch = Qwen3Info.get_weight_qwen3_attention(model, layer_id)
@@ -227,6 +228,10 @@ class MkLayers:
         )
         
         # attn    
+        if is_long_kv == True:
+            gqa_decode_layout = self.Qwen3MegaConfig.gqa_decode_layout_512
+        else:
+            gqa_decode_layout = self.Qwen3MegaConfig.gqa_decode_layout_16
         self.mk.gqa_decode_layer(
             q=self.attn_layer_io.attn_in.q.mk,
             k_cache=self.attn_layer_io.attn_in.kcache.mk,
@@ -237,7 +242,7 @@ class MkLayers:
             out_partial=self.attn_layer_io.attn_in.out_partial.mk,
             output=self.attn_layer_io.attn_out.three_dim.mk,
             sync_mode=(0, 0, 0),
-            layout=self.Qwen3MegaConfig.gqa_decode_layout_16,    # todo
+            layout=gqa_decode_layout,
             fused_params=[99, 0, layer_id],
         )
         self.mk.linear_with_residual_layer(
