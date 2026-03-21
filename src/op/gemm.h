@@ -22,6 +22,11 @@ enum class GemmWarpPolicyType : uint8_t {
   kFree = 3,
 };
 
+// <NT> Warp 级别的 GEMM 并行策略
+// 1. kSquare - 方形划分: 每个 warp 处理一个方形 tile，如 16x16，每个线程负责一个 8x8 的子 tile
+// 2. kFullRow - 整行划分: 每个 warp 处理一个长条形的 tile，如 128x8，每个线程负责整行的多个元素。访问行连续
+// 3. kFullCol - 整列划分: warp 处理一个长条形的 tile，如 8x128，每个线程负责整列的多个元素。访问列连续
+// 4. kFree - 自由选择: 编译器根据上下文自动选择最佳策略 或者 留给后续优化pass决定
 /// Convert GemmWarpPolicyType enum to string for debugging
 inline const char *GemmWarpPolicyTypeToString(GemmWarpPolicyType type) {
   switch (type) {
