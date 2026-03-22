@@ -312,6 +312,7 @@ class MkLayers:
     def update_step(self, step, cos, sin):
         edge_torch = self.attn_layer_io.attn_in.edge.pt
         edge_torch[0].fill_(step) # kv_seqlen
+        print("step", step, self.public_pt.cos.size(), cos.size())
         self.public_pt.cos.copy_(cos)
         self.public_pt.sin.copy_(sin)
         

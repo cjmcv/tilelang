@@ -28,20 +28,22 @@ if __name__ == "__main__":
     positions = torch.arange(32768).unsqueeze(0).to(model.device)
     all_position_embeddings = model.model.rotary_emb(positions)
  
-    step_value = 0 # 0
-    if (step_value >= 511):
+    cur_pos = 1900
+    prev_pos = cur_pos - 1
+    if (cur_pos >= 511):
         is_long_kv = True
     else:
         is_long_kv = False
     hidden_states = torch.randn((batch, q_seqlen, hidden_size), dtype=torch.bfloat16, device="cuda")
     attention_mask = None    
-    step = torch.full((1, ), step_value, dtype=torch.int32, device="cuda")
+    step = torch.full((1, ), 0, dtype=torch.int32, device="cuda")
+    step.fill_(cur_pos - 1)
     stream = None
     print("before forward", hidden_states)
     
-    position_embeddings=(all_position_embeddings[0][:, step], all_position_embeddings[1][:, step])
+    position_embeddings=(all_position_embeddings[0][:, prev_pos:cur_pos], all_position_embeddings[1][:, prev_pos:cur_pos])
 
-    layer_num = num_hidden_layers
+    layer_num = 1 #num_hidden_layers
     layers = MkLayers(model_tag, instance_id=0, kernel_num=layer_num, world_size=1, rank=0, max_batch_size=1, trace_name=args.trace_name, profiling=args.profiling)
     mk = layers.get_mk()
     
@@ -57,7 +59,7 @@ if __name__ == "__main__":
     meta, mk_attn_out, mk_mlp_out = layers.fill_meta()
     layers.compile_load(meta_tensors=meta, is_no_compile=args.nc, output_dir=args.output_dir)  
     
-    layers.update_step(step[0], cos=position_embeddings[0][:, step], sin=position_embeddings[1][:, step])
+    layers.update_step(cur_pos - 1, cos=position_embeddings[0], sin=position_embeddings[1])
     def mk_run():
         layers.attn_layer_io.layer_in.pt.copy_(hidden_states.view(batch*q_seqlen, hidden_size))
         for layer_id in range(layer_num):
@@ -84,11 +86,11 @@ if __name__ == "__main__":
     for i in range(10):
         torch_ref()
     
-    torch_ref()    
-    mk_run()
+    # torch_ref()    
+    # mk_run()
     
-    # print("mk_out: ", mk_run())    
-    # print("torch_ref: ", torch_ref())
+    print("mk_out: ", mk_run())    
+    print("torch_ref: ", torch_ref())
     
     reporter = PerfReporter() 
     reporter.generate_report(mk_run, torch_ref, 
