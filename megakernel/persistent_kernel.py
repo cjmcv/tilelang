@@ -247,7 +247,6 @@ class PersistentKernel:
         self.model_tag = model_tag
         self.instance_id = instance_id
         self.kernel_num = kernel_num
-        self.max_kernel_num_per_instance = 50
         
         self.__finalized__ = False
         self._is_compiled = False
@@ -735,7 +734,7 @@ class PersistentKernel:
         print("kernel_num: ", self.kernel_num)
         for kernel_id in range(self.kernel_num):
             self.init_func(
-                self.instance_id*self.max_kernel_num_per_instance + kernel_id,
+                self.instance_id*self.kernel_num + kernel_id,
                 meta_tensors_ptr,
                 profiler_buffer_ptr,
                 self.mpi_rank,
@@ -752,7 +751,7 @@ class PersistentKernel:
         # stream = kwargs.get("stream", None)
         # if stream is None:
         #    stream = torch.cuda.default_stream()
-        self.launch_func(self.instance_id*self.max_kernel_num_per_instance + kernel_id, batch_size)
+        self.launch_func(self.instance_id*self.kernel_num + kernel_id, batch_size)
         if self.profiler_tensor is not None:
             from .profiler_persistent import export_to_perfetto_trace
             

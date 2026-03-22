@@ -170,6 +170,8 @@ class MkLayers:
             layer_out = self.attn_layer_io.layer_in,
         )
     
+    # def qwen3_share_io_buffer(self):
+        
     def qwen3_create_attn_layer(self, model, layer_id, is_long_kv = False, reuse_instance = False):
         w_input_layernorm_torch, w_q_norm_torch, w_k_norm_torch, \
         w_q_torch, w_k_torch, w_v_torch, w_out_proj_torch, \
@@ -312,7 +314,42 @@ class MkLayers:
     def update_step(self, step, cos, sin):
         edge_torch = self.attn_layer_io.attn_in.edge.pt
         edge_torch[0].fill_(step) # kv_seqlen
-        print("step", step, self.public_pt.cos.size(), cos.size())
+        # print("step", step, self.public_pt.cos.size(), cos.size())
         self.public_pt.cos.copy_(cos)
         self.public_pt.sin.copy_(sin)
+        
+    def qwen3_create_decoder_layer(self, model_tag, model, layer_num, batch, is_long_kv, is_no_compile, output_dir):
+        self.batch = batch
+        self.layer_num = layer_num
+        max_kv_seqlen = 8192
+        self.qwen3_alloc_io_buffer(model_tag, layer_num, batch, 1, max_kv_seqlen)
+        for layer_id in range(layer_num):
+            if (layer_id == 0):
+                reuse_instance = False
+            else:
+                reuse_instance = True
+            self.qwen3_create_attn_layer(model, layer_id, is_long_kv, reuse_instance)
+            self.qwen3_create_mlp_layer(model, layer_id, reuse_instance)
+        meta, mk_attn_out, mk_mlp_out = self.fill_meta()
+        self.compile_load(meta_tensors=meta, is_no_compile=is_no_compile, output_dir=output_dir)  
+        
+    def __call__(self, cur_pos, position_embeddings, hidden_states):
+        self.update_step(cur_pos - 1, cos=position_embeddings[0], sin=position_embeddings[1])
+        self.attn_layer_io.layer_in.pt.copy_(hidden_states)
+        for layer_id in range(self.layer_num):
+            self.mk(self.batch, layer_id)  # attn的输入与mlp的输出是同一个tensor
+        return self.mlp_layer_io.layer_out.pt
+    
+# class MkLayersHybridLayout:
+#     def __init__(self, model_tag, instance_num, kernel_num, world_size, rank, max_batch_size, trace_name, profiling):
+#         self.instance_num = instance_num
+#         self.mk_layers = []
+#         for i in range(self.instance_num):
+#             layers = MkLayers(model_tag, instance_id=i, kernel_num=kernel_num, world_size=1, rank=0, max_batch_size=1, trace_name=trace_name, profiling=profiling)
+#             self.mk_layers.append(layers)
+            
+#     def qwen3_create_decoder_layer(self, model_tag, model, kernel_num, batch, is_no_compile, output_dir):
+#         self.mk_layers[0].qwen3_create_decoder_layer(model_tag, model, kernel_num, batch, False, is_no_compile, output_dir)
+#         self.mk_layers[1].qwen3_create_decoder_layer(model_tag, model, kernel_num, batch, True, is_no_compile, output_dir+"longkv")
+        
         
