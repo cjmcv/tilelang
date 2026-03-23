@@ -43,11 +43,11 @@ __device__ __forceinline__ void rope_kernel_1_1_32_8_128(const int bx, const int
       tl::__sync_thread_partial<3, 64>();
       ((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 256)] = sin[((int)threadIdx.x)];
     }
-    ((bfloat16_t*)buf_dyn_shmem)[((int)threadIdx.x)] = Q[((((int)bx) * 128) + ((int)threadIdx.x))];
+    ((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 128)] = Q[((((int)bx) * 128) + ((int)threadIdx.x))];
     __syncthreads();
     if (((int)threadIdx.x) < 64) {
-      float a = ((float)((bfloat16_t*)buf_dyn_shmem)[((int)threadIdx.x)]);
-      float b = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 64)]);
+      float a = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 128)]);
+      float b = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 192)]);
       float cos_val = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 320)]);
       float sin_val = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 256)]);
       float out_first = ((a * cos_val) - (b * sin_val));
@@ -61,11 +61,11 @@ __device__ __forceinline__ void rope_kernel_1_1_32_8_128(const int bx, const int
       tl::__sync_thread_partial<3, 64>();
       ((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 256)] = sin[((int)threadIdx.x)];
     }
-    ((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 128)] = K[(((((int)bx) * 128) + ((int)threadIdx.x)) - 4096)];
+    ((bfloat16_t*)buf_dyn_shmem)[((int)threadIdx.x)] = K[(((((int)bx) * 128) + ((int)threadIdx.x)) - 4096)];
     __syncthreads();
     if (((int)threadIdx.x) < 64) {
-      float a_1 = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 128)]);
-      float b_1 = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 192)]);
+      float a_1 = ((float)((bfloat16_t*)buf_dyn_shmem)[((int)threadIdx.x)]);
+      float b_1 = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 64)]);
       float cos_val_1 = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 320)]);
       float sin_val_1 = ((float)((bfloat16_t*)buf_dyn_shmem)[(((int)threadIdx.x) + 256)]);
       float out_first_1 = ((a_1 * cos_val_1) - (b_1 * sin_val_1));
@@ -84,4 +84,4 @@ __device__ __forceinline__ void rope_kernel_1_1_32_8_128(const int bx, const int
 // use_cooperative_groups: 0.
 // layout: (40, 1, 1), (1, 1, 1)
 // block_dim=(128, 1, 1).
-// latency: 0.00454 ms vs [ref-0.00519 sim-1.0], idx: -1
+// latency: 0.00305 ms vs [ref-0.00319 sim-1.0], idx: -1

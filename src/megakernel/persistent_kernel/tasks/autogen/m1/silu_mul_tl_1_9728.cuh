@@ -118,4 +118,4 @@ __device__ __forceinline__ void silu_mul_kernel_1_9728(const int bx, const int b
 // use_cooperative_groups: 0.
 // layout: (152, 1, 1), (64, 32, 1)
 // block_dim=(128, 1, 1).
-// latency: 0.00705 ms vs [ref-0.0 sim-1.0], idx: -1
+// latency: 0.00879 ms vs [ref-0.0 sim-1.0], idx: -1

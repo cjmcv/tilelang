@@ -28,8 +28,7 @@ if __name__ == "__main__":
     positions = torch.arange(32768).unsqueeze(0).to(model.device)
     all_position_embeddings = model.model.rotary_emb(positions)
  
-    cur_pos = 1900
-    prev_pos = cur_pos - 1
+    cur_pos = 1
     if (cur_pos >= 511):
         is_long_kv = True
     else:
@@ -37,13 +36,10 @@ if __name__ == "__main__":
     hidden_states = torch.randn((batch, q_seqlen, hidden_size), dtype=torch.bfloat16, device="cuda")
     attention_mask = None    
     step = torch.full((1, ), 0, dtype=torch.int32, device="cuda")
-    step.fill_(cur_pos - 1)
     stream = None
     print("before forward", hidden_states)
     
-    position_embeddings=(all_position_embeddings[0][:, prev_pos:cur_pos], all_position_embeddings[1][:, prev_pos:cur_pos])
-
-    layer_num = 1#num_hidden_layers
+    layer_num = num_hidden_layers
     # layers = MkLayers(model_tag, instance_id=0, kernel_num=layer_num, world_size=1, rank=0, max_batch_size=1, trace_name=args.trace_name, profiling=args.profiling)
     # params, io_pt, public_pt = MkLayers.qwen3_alloc_torch_buffer(model_tag, layer_num, batch, q_seqlen=1, max_kv_seqlen=8192)   
     # layers.qwen3_create_decoder_layer(model, layer_num, params, io_pt, public_pt, is_long_kv=is_long_kv, is_no_compile=args.nc, output_dir=args.output_dir)
@@ -51,18 +47,48 @@ if __name__ == "__main__":
     layers = MkLayersHybridLayout(model_tag, instance_num=2, kernel_num=layer_num, world_size=1, rank=0, max_batch_size=1, trace_name=args.trace_name, profiling=args.profiling)
     layers.qwen3_create_decoder_layer(model_tag, model, layer_num, batch, is_no_compile=args.nc, output_dir=args.output_dir)
 
-    # mk_out = layers(cur_pos, position_embeddings, hidden_states.view(batch*q_seqlen, hidden_size))
-    def mk_run():
+    #####################################
+    position_embeddings=(all_position_embeddings[0][:, cur_pos-1:cur_pos], all_position_embeddings[1][:, cur_pos-1:cur_pos])
+    def mk_run_one_step():
         return layers(cur_pos, position_embeddings, hidden_states.view(batch*q_seqlen, hidden_size))
 
-    def torch_ref_tmp():
+    def torch_ref_tmp_one_step():
+        step.fill_(cur_pos - 1)
         torch_io = hidden_states.clone()
         with torch.no_grad():
             for layer_id in range(layer_num):
                 out = model.model.layers[layer_id].forward(torch_io, attention_mask, position_embeddings, step, stream)
                 torch_io = out[0]
             return torch_io
-        
+    ######################################
+    start_pos = 1
+    decode_limit = 4
+    def mk_run_multi_step():
+        mk_io = hidden_states.view(batch*q_seqlen, hidden_size).clone()
+        for cur_pos in range(start_pos, decode_limit):
+            position_embeddings=(all_position_embeddings[0][:, cur_pos-1:cur_pos], all_position_embeddings[1][:, cur_pos-1:cur_pos])
+            mk_out = layers(cur_pos, position_embeddings, mk_io)
+            mk_io.copy_(mk_out)
+        return mk_out
+
+    def torch_ref_tmp_multi_step():
+        torch_io = hidden_states.clone()    
+        with torch.no_grad():
+            for cur_pos in range(start_pos, decode_limit):
+                step.fill_(cur_pos - 1)
+                position_embeddings=(all_position_embeddings[0][:, cur_pos-1:cur_pos], all_position_embeddings[1][:, cur_pos-1:cur_pos])
+                for layer_id in range(layer_num):
+                    out = model.model.layers[layer_id].forward(torch_io, attention_mask, position_embeddings, step, stream)
+                    torch_io = out[0]
+            return torch_io
+    ######################################
+    
+    mk_run = mk_run_one_step
+    torch_ref_tmp = torch_ref_tmp_one_step
+    
+    # mk_run = mk_run_multi_step
+    # torch_ref_tmp = torch_ref_tmp_multi_step
+    
     if 0:
         graph, ref_output = TorchRef.compile_capture(torch_ref_tmp, is_compile=False) # 搜 “kv_seq_len = step + 1” 改成=> 1
         def torch_ref():

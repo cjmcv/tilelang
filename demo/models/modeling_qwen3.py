@@ -335,7 +335,7 @@ class Qwen3Attention(nn.Module):
             self.key_cache[self.layer_idx, 0, step] = key_states[0]
             self.value_cache[self.layer_idx, 0, step] = value_states[0]
 
-        
+        # print("step: ", step)
         q = query_states[0] # Shape: [q_len, num_q_heads, head_dim]
         # print("q:", q)
         
