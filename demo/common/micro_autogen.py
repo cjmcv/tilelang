@@ -1,6 +1,7 @@
 import os
 import shutil
 from pathlib import Path
+import re
 
 import torch
 import tilelang
@@ -34,6 +35,38 @@ class MicroAutoGen:
         print(file_name, info)
         shutil.copy2(file_name, code_dir)
         config_file.write(f"    {name} = {info}\n")
+    
+    def _save_target_dict_info(self, micro, mode: HparamSelectMode, code_dir, config_file, seqlen, split_point, max_longkv, max_shortkv):
+        kernel, file_name, info = micro.get_kernel(mode)
+        print(file_name, info)
+        shutil.copy2(file_name, code_dir)
+        config_file.write(f"        {seqlen}: ({info}),\n")
+        
+        numbers = re.findall(r'\d+', info)
+        if (len(numbers) == 6):
+            grid = tuple(map(int, numbers[:3]))
+            tile = tuple(map(int, numbers[3:]))
+            if (grid > max_shortkv[0]):
+                max_shortkv[0] = grid
+                max_shortkv[1] = tile
+            if (seqlen > split_point):
+                split_point = seqlen # 取非split的最长长度
+        else:
+            grid1 = tuple(map(int, numbers[:3]))
+            tile1 = tuple(map(int, numbers[3:6]))
+            grid2 = tuple(map(int, numbers[6:9]))
+            tile2 = tuple(map(int, numbers[9:12]))
+            if (grid1 > max_longkv[0]):
+                max_longkv[0] = grid1
+                max_longkv[1] = tile1
+            if (grid2 > max_longkv[2]):
+                max_longkv[2] = grid2
+                max_longkv[3] = tile2
+            if (seqlen < split_point): 
+                print("[seqlen < split_point] Check the thread layout of GQA to determine \
+                    why short sequences undergo splitting whereas long sequences do not.")
+                assert(0)
+        return split_point, max_longkv, max_shortkv
         
     def gen_qwen3_ops(self, layer_id: int, mode: HparamSelectMode):
         
@@ -89,9 +122,18 @@ class MicroAutoGen:
                 # for target_kv_seqlen in list(range(1, 17)): # 
                 #     kernel = MicroGqaDecode(self.batch_size, self.max_kv_seqlen, target_kv_seqlen, self.num_heads, self.num_kv_heads, self.head_dim, False, dtype=self.dtype, accum_dtype=self.accum_dtype)
                 #     self._save_target_info(kernel, HparamSelectMode.HEURISTIC, code_dir, config_file, "gqa_decode_layout_"+str(target_kv_seqlen))
+                
+                split_point = 0
+                max_shortkv = [(1, 1, 1), (1, 1, 1)]
+                max_longkv = [(1, 1, 1), (1, 1, 1), (1, 1, 1), (1, 1, 1)]
+                config_file.write(f"    gqa_decode_layouts = {{\n")
                 for target_kv_seqlen in [16, 32, 64, 128, 256, 512, 1024, 2048]: # 
                     kernel = MicroGqaDecode(self.batch_size, self.max_kv_seqlen, target_kv_seqlen, self.num_heads, self.num_kv_heads, self.head_dim, False, dtype=self.dtype, accum_dtype=self.accum_dtype)
-                    self._save_target_info(kernel, mode, code_dir, config_file, "gqa_decode_layout_"+str(target_kv_seqlen))
+                    split_point, max_longkv, max_shortkv = self._save_target_dict_info(kernel, mode, code_dir, config_file, target_kv_seqlen, split_point, max_longkv, max_shortkv)
+                config_file.write(f"    }}\n")
+                config_file.write(f"    gqa_decode_layout_shortkv = {tuple(max_shortkv)}\n")
+                config_file.write(f"    gqa_decode_layout_longkv  = {tuple(max_longkv)}\n")
+                config_file.write(f"    gqa_decode_layout_split_point = {split_point}\n")
             if (layer_id == 8 or layer_id == 99):
                 kernel = MicroLinear(MicroLinearStrategy.GEMM_ADD, self.batch_size, self.hidden_size, self.num_heads*self.head_dim, dtype=self.dtype, accum_dtype=self.accum_dtype)
                 self._save_target_info(kernel, mode, code_dir, config_file, "o_proj_layout")

@@ -251,9 +251,9 @@ class MkLayers:
         
         # attn    
         if is_long_kv == True:
-            gqa_decode_layout = self.Qwen3MegaConfig.gqa_decode_layout_512
+            gqa_decode_layout = self.Qwen3MegaConfig.gqa_decode_layout_longkv
         else:
-            gqa_decode_layout = self.Qwen3MegaConfig.gqa_decode_layout_16
+            gqa_decode_layout = self.Qwen3MegaConfig.gqa_decode_layout_shortkv
         self.mk.gqa_decode_layer(
             q=self.attn_layer_io.attn_in.q.mk,
             k_cache=self.attn_layer_io.attn_in.kcache.mk,
@@ -372,7 +372,8 @@ class MkLayersHybridLayout:
         self.mk_layers[1].qwen3_create_decoder_layer(model, layer_num, params, io_pt, public_pt, True, is_no_compile, output_dir+"longkv")
         
     def __call__(self, cur_pos, position_embeddings, hidden_states):
-        if cur_pos < 512:
+        # cur_pos == kv_seqlen; step = cur_pos - 1
+        if cur_pos <= self.mk_layers[0].Qwen3MegaConfig.gqa_decode_layout_split_point:
             return self.mk_layers[0](cur_pos, position_embeddings, hidden_states)
         else:
             return self.mk_layers[1](cur_pos, position_embeddings, hidden_states)
