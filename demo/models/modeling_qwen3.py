@@ -20,6 +20,7 @@
 """PyTorch Qwen3 model."""
 
 import math
+import os
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -34,7 +35,7 @@ from .configuration_qwen3 import Qwen3Config
 import time
 
 import megakernel as mi
-from common.mk_layers import MkLayers
+from common.mk_layers import MkLayers, MkLayersHybridLayout
 
 from .rope import apply_rotary_pos_emb_triton
 
@@ -511,34 +512,6 @@ class Qwen3Model(Qwen3PreTrainedModel):
 
         self.kv_last_page_len = torch.tensor([0], dtype=torch.int32, device="cuda")
         
-        #######################
-        if ENABLE_MPK:
-            global g_mpk, g_mpk_x_torch, g_mpk_out_torch
-            
-            self.mpk_layers = MkLayers(instance_id=0, kernel_num=20, world_size=1, rank=0, max_batch_size=1, trace_name="qwen3", profiling=False)
-            g_mpk = self.mpk_layers.get_mpk()
-            gridsize = [1, 48, 24, 16] # 1024 3072
-            
-            layer_idx = 0
-            layer = self.layers[layer_idx]
-            self.w_gatedup = torch.cat((layer.mlp.gate_proj.weight, layer.mlp.up_proj.weight), 0).contiguous()
-            g_mpk_x_torch, g_mpk_out_torch = self.mpk_layers.create_qwen3_norm_mlp(
-                                                            gridsize, layer.mlp.hidden_size, layer.mlp.intermediate_size, 
-                                                            w_rms_torch = layer.post_attention_layernorm.weight, 
-                                                            w_gatedup_torch = self.w_gatedup,
-                                                            w_down_proj_torch = layer.mlp.down_proj.weight)
-            print(layer.mlp.gate_proj.weight, layer.mlp.up_proj.weight, layer.post_attention_layernorm.weight, layer.mlp.down_proj.weight)
-            self.mpk_layers.compile_load(False, "./gen/"+str(layer_idx))
-            
-            # for layer_id in range(len(self.layers)):
-            #     layer = self.layers[layer_id]
-            #     w_rms = layer.post_attention_layernorm.weight
-            #     w_gatedup = torch.cat((layer.mlp.gate_proj.weight, layer.mlp.up_proj.weight), 0).contiguous()
-            #     w_down_proj = layer.mlp.down_proj.weight
-                
-            #     w2 = self.mpk.attach_input(torch_tensor=w_torch2, name="w2")
-            
-            
     def get_input_embeddings(self):
         return self.embed_tokens
 
@@ -547,6 +520,8 @@ class Qwen3Model(Qwen3PreTrainedModel):
 
     def forward(
         self,
+        mk_layers,
+        cur_pos: int = 1,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
@@ -564,17 +539,27 @@ class Qwen3Model(Qwen3PreTrainedModel):
         next_decoder_cache = None
         self.kv_last_page_len.copy_(step + 1)
 
-        for decoder_layer in self.layers:
-            layer_outputs = decoder_layer(
-                hidden_states,
-                attention_mask=causal_mask,
-                position_embeddings=position_embeddings,
-                step=step,
-                stream=stream,
-            )
-
-            hidden_states = layer_outputs[0]
-
+        bsz, q_len, hidden_size = hidden_states.size()
+        if q_len > 1:
+            for decoder_layer in self.layers:
+                layer_outputs = decoder_layer(
+                    hidden_states,
+                    attention_mask=causal_mask,
+                    position_embeddings=position_embeddings,
+                    step=step,
+                    stream=stream,
+                )
+                hidden_states = layer_outputs[0]
+            
+            print("mk_layers.public_pt.key_cache_5d", mk_layers.public_pt.key_cache_5d.size())
+            mk_layers.public_pt.key_cache_5d[:, 0, :, :, :].copy_(self.kv_cache[0][:, 0, :, :, :])
+            mk_layers.public_pt.value_cache_5d[:, 0, :, :, :].copy_(self.kv_cache[1][:, 0, :, :, :])
+        else:
+            print("size", bsz, q_len, hidden_size)
+            mk_out = mk_layers(cur_pos, position_embeddings, hidden_states.view(bsz*q_len, hidden_size))
+            print("outsize", mk_out.size())
+            hidden_states.copy_(mk_out.view(bsz, q_len, hidden_size))
+            
         hidden_states = self.norm(hidden_states)
 
         return (hidden_states,)
@@ -617,6 +602,8 @@ class Qwen3ForCausalLM(Qwen3PreTrainedModel, GenerationMixin):
     @torch.inference_mode()
     def forward(
         self,
+        mk_layers,
+        cur_pos,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
@@ -628,6 +615,8 @@ class Qwen3ForCausalLM(Qwen3PreTrainedModel, GenerationMixin):
     ):
 
         outputs = self.model(
+            mk_layers=mk_layers,
+            cur_pos=cur_pos,
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,

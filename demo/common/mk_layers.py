@@ -78,7 +78,7 @@ class MkLayers:
         )
         # 所有层共享
         public_pt = SimpleNamespace(
-            # 在rope中完成更新
+            # 在rope中完成更新, layer_num, batch, max_kv_seqlen, num_kv_heads, head_dim
             key_cache_5d = torch.zeros(layer_num, batch, max_kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16),  # [B, N=seqlen_kv,  H=groups, D=dim]
             value_cache_5d = torch.zeros(layer_num, batch, max_kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16),
             # 在推理前，根据step拷贝进对应的值
@@ -135,6 +135,10 @@ class MkLayers:
         )
         return params, io_pt, public_pt
         
+    # def sync_kvcache_from_model(public_pt, ):
+    #     # [layer_num, B, N=seqlen_kv,  H=groups, D=dim]
+    #     public_pt.key_cache_5d
+    #     public_pt.value_cache_5d
         
     def qwen3_alloc_io_buffer(self, params, io_pt, public_pt):
         self.params = params
@@ -186,12 +190,6 @@ class MkLayers:
         )
         return self.params, self.public_pt, self.attn_layer_io, self.mlp_layer_io
     
-    # def qwen3_share_io_buffer(self, params, public_pt, attn_layer_io, mlp_layer_io):
-    #     self.params = params
-    #     self.public_pt = public_pt
-    #     self.attn_layer_io = attn_layer_io
-    #     self.mlp_layer_io = mlp_layer_io
-        
     def qwen3_create_attn_layer(self, model, layer_id, is_long_kv = False, reuse_instance = False):
         w_input_layernorm_torch, w_q_norm_torch, w_k_norm_torch, \
         w_q_torch, w_k_torch, w_v_torch, w_out_proj_torch, \
@@ -367,15 +365,17 @@ class MkLayersHybridLayout:
             self.mk_layers.append(layers)
             
     def qwen3_create_decoder_layer(self, model_tag, model, layer_num, batch, is_no_compile, output_dir):
-        params, io_pt, public_pt = MkLayers.qwen3_alloc_torch_buffer(model_tag, layer_num, batch, q_seqlen=1, max_kv_seqlen=8192)   
-        self.mk_layers[0].qwen3_create_decoder_layer(model, layer_num, params, io_pt, public_pt, False, is_no_compile, output_dir)
-        self.mk_layers[1].qwen3_create_decoder_layer(model, layer_num, params, io_pt, public_pt, True, is_no_compile, output_dir+"longkv")
+        params, self.io_pt, self.public_pt = MkLayers.qwen3_alloc_torch_buffer(model_tag, layer_num, batch, q_seqlen=1, max_kv_seqlen=4096)   
+        self.mk_layers[0].qwen3_create_decoder_layer(model, layer_num, params, self.io_pt, self.public_pt, False, is_no_compile, output_dir)
+        self.mk_layers[1].qwen3_create_decoder_layer(model, layer_num, params, self.io_pt, self.public_pt, True, is_no_compile, output_dir+"longkv")
         
     def __call__(self, cur_pos, position_embeddings, hidden_states):
         # cur_pos == kv_seqlen; step = cur_pos - 1
         if cur_pos <= self.mk_layers[0].Qwen3MegaConfig.gqa_decode_layout_split_point:
+            print("cur_pos1", cur_pos)
             return self.mk_layers[0](cur_pos, position_embeddings, hidden_states)
         else:
+            print("cur_pos2", cur_pos)
             return self.mk_layers[1](cur_pos, position_embeddings, hidden_states)
         
         

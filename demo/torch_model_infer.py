@@ -5,6 +5,7 @@ import torch.distributed as dist
 import argparse
 import os, json
 from common.pkt_util import TorchRef, Qwen3Info
+from common.mk_layers import MkLayers, MkLayersHybridLayout
 
 DEFAULT_SAVE_DIR = os.path.join("outputs", "qwen3")
 MAX_SAVE_TOKENS = 100
@@ -51,9 +52,11 @@ if __name__ == "__main__":
     parser.add_argument("--max-num-batched-requests", default=1, type=int, help="Max number of requests in a batch")
     parser.add_argument("--page-size", default=4096, type=int, help="Page size")
     parser.add_argument("--max-num-pages", default=16, type=int, help="Max num pages")
-    parser.add_argument("--output-dir", help="Output files directory")
-    parser.add_argument("--trace-name", default="", help="Perfetto trace output name")
+    parser.add_argument("--output-dir", default=os.getenv("MEGAKERNEL_HOME", default=None)+"/demo/gen", help="Output files directory")
+    parser.add_argument("--trace-name", default="qwen3", help="Perfetto trace output name")
     parser.add_argument("--profiling", action="store_true", help="Use Profiler to generate trace")
+    parser.add_argument("--nc", action="store_true", help="no-compile: Use the specified compiled library instead of recompiling it")
+    
     # lookahead or promptlookup
     parser.add_argument(
         "--spec-decode",
@@ -210,6 +213,23 @@ if __name__ == "__main__":
     
     prompt_len = prompt_lengths[0].item()
     decode_limit = prompt_len + output_len
+    
+    #############################
+    batch = 1
+    q_seqlen = 1
+    hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim, num_hidden_layers \
+        = Qwen3Info.get_basic_params(model_tag)
+    layers = MkLayersHybridLayout(model_tag, instance_num=2, kernel_num=num_hidden_layers, world_size=1, rank=0, max_batch_size=1, trace_name=args.trace_name, profiling=args.profiling)
+    layers.qwen3_create_decoder_layer(model_tag=model_tag, model=model, layer_num=num_hidden_layers, batch=batch, is_no_compile=args.nc, output_dir=args.output_dir)
+
+    # cur_pos = 64
+    # prev_pos = 63
+    # hidden_states = torch.randn((batch, q_seqlen, hidden_size), dtype=torch.bfloat16, device="cuda")
+    # cos_embeddings = position_embeddings[0][:, prev_pos:cur_pos]
+    # sin_embeddings = position_embeddings[1][:, prev_pos:cur_pos]
+    # layers(cur_pos, (cos_embeddings, sin_embeddings), hidden_states.view(batch*q_seqlen, hidden_size))
+    
+    #############################
     for cur_pos in range(prompt_len, decode_limit):
         # print(cur_pos - 1)
         step.fill_(cur_pos - 1)
@@ -218,6 +238,8 @@ if __name__ == "__main__":
         sin_embeddings = position_embeddings[1][:, prev_pos:cur_pos]
         # print("cos_embeddings: ", cos_embeddings.size(), "sin_embeddings: ", sin_embeddings.size()) # torch.Size([1, cur_pos, 128]) torch.Size([1, cur_pos, 128])
         logits = model.forward(
+            mk_layers=layers,
+            cur_pos=cur_pos,
             input_ids=input_ids,
             position_embeddings=(cos_embeddings, sin_embeddings),
             step=step,
