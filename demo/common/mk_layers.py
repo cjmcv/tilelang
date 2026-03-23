@@ -62,26 +62,28 @@ class MkLayers:
             print("module_path: ", module_path)
             self.mk.load_module(module_path, meta_tensors)
 
-    def qwen3_alloc_io_buffer(self, model_tag, layer_num, batch, q_seqlen, max_kv_seqlen):
+    @staticmethod
+    def qwen3_alloc_torch_buffer(model_tag, layer_num, batch, q_seqlen, max_kv_seqlen):
         hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim, num_hidden_layers \
             = Qwen3Info.get_basic_params(model_tag)
         
-        self.batch = batch
-        self.q_seqlen = q_seqlen
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_heads = num_heads
-        self.num_kv_heads = num_kv_heads
-        self.head_dim = head_dim
-        
+        params = SimpleNamespace(
+            batch = batch,
+            q_seqlen = q_seqlen,
+            hidden_size = hidden_size,
+            intermediate_size = intermediate_size,
+            num_heads = num_heads,
+            num_kv_heads = num_kv_heads,
+            head_dim = head_dim,
+        )
         # 所有层共享
-        self.public_pt = SimpleNamespace(
+        public_pt = SimpleNamespace(
             # 在rope中完成更新
             key_cache_5d = torch.zeros(layer_num, batch, max_kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16),  # [B, N=seqlen_kv,  H=groups, D=dim]
             value_cache_5d = torch.zeros(layer_num, batch, max_kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16),
             # 在推理前，根据step拷贝进对应的值
-            cos = torch.empty((self.batch, self.q_seqlen, self.head_dim), dtype=torch.bfloat16, device="cuda"),
-            sin = torch.empty((self.batch, self.q_seqlen, self.head_dim), dtype=torch.bfloat16, device="cuda"),
+            cos = torch.empty((batch, q_seqlen, params.head_dim), dtype=torch.bfloat16, device="cuda"),
+            sin = torch.empty((batch, q_seqlen, params.head_dim), dtype=torch.bfloat16, device="cuda"),
         )
         
         #############################################################################        
@@ -91,69 +93,82 @@ class MkLayers:
         
         ##################
         # torch tensor
-        x_torch = torch.empty((batch, hidden_size), dtype=torch.bfloat16, device="cuda")
-        
         q_dim = num_heads*head_dim
-        kv_dim = num_kv_heads*head_dim    
+        kv_dim = num_kv_heads*head_dim   
+        max_attn_split = 8 
         qkv_proj_out_torch = torch.zeros(batch, q_dim+2*kv_dim, dtype=torch.bfloat16, device="cuda")
-        qk_torch = {
-            "2d": qkv_proj_out_torch[:, :q_dim+kv_dim].view(batch*q_seqlen*(num_heads+num_kv_heads), head_dim) 
-        }
-        q_torch = {
-            "2d": qkv_proj_out_torch[:, :q_dim].view(batch*q_seqlen*num_heads, head_dim),
-            "3d": qkv_proj_out_torch[:, :q_dim].view(batch*q_seqlen, num_heads, head_dim),
-            "4d": qkv_proj_out_torch[:, :q_dim].view(batch, q_seqlen, num_heads, head_dim),
-        }
-        k_torch = {
-            "2d": qkv_proj_out_torch[:, q_dim:q_dim+kv_dim].view(batch*q_seqlen*num_kv_heads, head_dim),
-            "4d": qkv_proj_out_torch[:, q_dim:q_dim+kv_dim].view(batch, q_seqlen, num_kv_heads, head_dim),
-        }
-        v_torch = {
-            "4d": qkv_proj_out_torch[:, q_dim+kv_dim:].view(batch, q_seqlen, num_kv_heads, head_dim),
-        }
-        
-        max_attn_split = 8
-        edge_torch = torch.empty(10, device="cuda", dtype=torch.int32)
-        glse_torch = torch.empty(batch, num_heads, max_attn_split, device="cuda", dtype=torch.bfloat16)
-        out_partial_torch = torch.empty(batch, num_heads, max_attn_split, head_dim, device="cuda", dtype=torch.bfloat16)
-        mask_torch = torch.ones(batch, max_kv_seqlen, num_kv_heads, device="cuda", dtype=torch.uint8)
-        
         attn_out_3dim_torch = torch.empty(batch, num_heads, head_dim, device="cuda", dtype=torch.bfloat16)
         attn_out_2dim_torch = attn_out_3dim_torch.view(batch*q_seqlen, q_dim)
-        attn_out_torch = {
-            "3d": attn_out_3dim_torch,
-            "2d": attn_out_2dim_torch
-        }
-        o_proj_res_out_torch = torch.zeros((batch, hidden_size), dtype=torch.bfloat16, device="cuda") # x_torch
+        io_pt = SimpleNamespace(
+            x_torch = torch.empty((batch, hidden_size), dtype=torch.bfloat16, device="cuda"),
+            layernorm_out_torch = torch.empty((batch, hidden_size), dtype=torch.bfloat16, device="cuda"),
+            qkv_proj_out_torch = qkv_proj_out_torch,
+            qk_torch = {
+                "2d": qkv_proj_out_torch[:, :q_dim+kv_dim].view(batch*q_seqlen*(num_heads+num_kv_heads), head_dim) 
+            },
+            q_torch = {
+                "2d": qkv_proj_out_torch[:, :q_dim].view(batch*q_seqlen*num_heads, head_dim),
+                "3d": qkv_proj_out_torch[:, :q_dim].view(batch*q_seqlen, num_heads, head_dim),
+                "4d": qkv_proj_out_torch[:, :q_dim].view(batch, q_seqlen, num_heads, head_dim),
+            },
+            k_torch = {
+                "2d": qkv_proj_out_torch[:, q_dim:q_dim+kv_dim].view(batch*q_seqlen*num_kv_heads, head_dim),
+                "4d": qkv_proj_out_torch[:, q_dim:q_dim+kv_dim].view(batch, q_seqlen, num_kv_heads, head_dim),
+            },
+            v_torch = {
+                "4d": qkv_proj_out_torch[:, q_dim+kv_dim:].view(batch, q_seqlen, num_kv_heads, head_dim),
+            },
+            edge_torch = torch.empty(10, device="cuda", dtype=torch.int32),
+            glse_torch = torch.empty(batch, num_heads, max_attn_split, device="cuda", dtype=torch.bfloat16),
+            out_partial_torch = torch.empty(batch, num_heads, max_attn_split, head_dim, device="cuda", dtype=torch.bfloat16),
+            mask_torch = torch.ones(batch, max_kv_seqlen, num_kv_heads, device="cuda", dtype=torch.uint8),
+            attn_out_torch = {
+                "3d": attn_out_3dim_torch,
+                "2d": attn_out_2dim_torch
+            },
+            o_proj_res_out_torch = torch.zeros((batch, hidden_size), dtype=torch.bfloat16, device="cuda"), # x_torch
 
+            # mlp
+            mlp_rms_out_torch = torch.empty((batch, hidden_size), dtype=torch.bfloat16, device="cuda"),
+            mlp_mid_torch = torch.empty((batch, intermediate_size*2), dtype=torch.bfloat16, device="cuda"),
+            silu_mul_out_torch = torch.empty((batch, intermediate_size), dtype=torch.bfloat16, device="cuda"),
+        )
+        return params, io_pt, public_pt
+        
+        
+    def qwen3_alloc_io_buffer(self, params, io_pt, public_pt):
+        self.params = params
+        self.io_pt = io_pt
+        self.public_pt = public_pt
+        
         # mk tensor
         self.attn_layer_io = SimpleNamespace(
-            layer_in = SimpleNamespace(pt=x_torch, mk=self.mk.attach_input(torch_tensor=x_torch, name="attn_layer_in")),
-            layernorm_out = SimpleNamespace(pt=None, mk=self.mk.new_tensor(dims=(batch, hidden_size), dtype=mi.bfloat16, name="layernorm_out", io_category="cuda_tensor")),
-            qkv_proj_out = SimpleNamespace(pt=qkv_proj_out_torch, mk=self.mk.attach_input(torch_tensor=qkv_proj_out_torch, name="qkv_proj_out")),
-            qk_norm_states = SimpleNamespace(pt=None, mk=self.mk.attach_input(torch_tensor=qk_torch["2d"], name="qk_norm_states")),
+            layer_in = SimpleNamespace(pt=self.io_pt.x_torch, mk=self.mk.attach_input(torch_tensor=self.io_pt.x_torch, name="attn_layer_in")),
+            layernorm_out = SimpleNamespace(pt=self.io_pt.layernorm_out_torch, mk=self.mk.attach_input(torch_tensor=self.io_pt.layernorm_out_torch, name="layernorm_out")),
+            qkv_proj_out = SimpleNamespace(pt=self.io_pt.qkv_proj_out_torch, mk=self.mk.attach_input(torch_tensor=self.io_pt.qkv_proj_out_torch, name="qkv_proj_out")),
+            qk_norm_states = SimpleNamespace(pt=None, mk=self.mk.attach_input(torch_tensor=self.io_pt.qk_torch["2d"], name="qk_norm_states")),
             rope_io = SimpleNamespace(
-                q = SimpleNamespace(pt=q_torch["4d"], mk=self.mk.attach_input(torch_tensor=q_torch["4d"], name="rope_io_q")),
-                k = SimpleNamespace(pt=k_torch["4d"], mk=self.mk.attach_input(torch_tensor=k_torch["4d"], name="rope_io_k"))
+                q = SimpleNamespace(pt=self.io_pt.q_torch["4d"], mk=self.mk.attach_input(torch_tensor=self.io_pt.q_torch["4d"], name="rope_io_q")),
+                k = SimpleNamespace(pt=self.io_pt.k_torch["4d"], mk=self.mk.attach_input(torch_tensor=self.io_pt.k_torch["4d"], name="rope_io_k"))
             ),
             kv_curstep = SimpleNamespace(
-                k = SimpleNamespace(pt=k_torch["4d"], mk=self.mk.attach_input(torch_tensor=k_torch["4d"], name="k_curstep")),
-                v = SimpleNamespace(pt=v_torch["4d"], mk=self.mk.attach_input(torch_tensor=v_torch["4d"], name="v_curstep")),
+                k = SimpleNamespace(pt=self.io_pt.k_torch["4d"], mk=self.mk.attach_input(torch_tensor=self.io_pt.k_torch["4d"], name="k_curstep")),
+                v = SimpleNamespace(pt=self.io_pt.v_torch["4d"], mk=self.mk.attach_input(torch_tensor=self.io_pt.v_torch["4d"], name="v_curstep")),
             ),
             attn_in = SimpleNamespace(
-                q = SimpleNamespace(pt=q_torch["3d"], mk=self.mk.attach_input(torch_tensor=q_torch["3d"], name="attn_in_q")),
+                q = SimpleNamespace(pt=self.io_pt.q_torch["3d"], mk=self.mk.attach_input(torch_tensor=self.io_pt.q_torch["3d"], name="attn_in_q")),
                 kcache = SimpleNamespace(pt=self.public_pt.key_cache_5d, mk=self.mk.attach_input(torch_tensor=self.public_pt.key_cache_5d, name="attn_in_kcache")),
                 vcache = SimpleNamespace(pt=self.public_pt.value_cache_5d, mk=self.mk.attach_input(torch_tensor=self.public_pt.value_cache_5d, name="attn_in_vcache")),
-                edge = SimpleNamespace(pt=edge_torch, mk=self.mk.attach_input(torch_tensor=edge_torch, name="edge")),
-                mask = SimpleNamespace(pt=mask_torch, mk=self.mk.attach_input(torch_tensor=mask_torch, name="attn_in_mask")),
-                glse = SimpleNamespace(pt=glse_torch, mk=self.mk.attach_input(torch_tensor=glse_torch, name="attn_in_glse")),
-                out_partial = SimpleNamespace(pt=out_partial_torch, mk=self.mk.attach_input(torch_tensor=out_partial_torch, name="attn_out_partial"))
+                edge = SimpleNamespace(pt=self.io_pt.edge_torch, mk=self.mk.attach_input(torch_tensor=self.io_pt.edge_torch, name="edge")),
+                mask = SimpleNamespace(pt=self.io_pt.mask_torch, mk=self.mk.attach_input(torch_tensor=self.io_pt.mask_torch, name="attn_in_mask")),
+                glse = SimpleNamespace(pt=self.io_pt.glse_torch, mk=self.mk.attach_input(torch_tensor=self.io_pt.glse_torch, name="attn_in_glse")),
+                out_partial = SimpleNamespace(pt=self.io_pt.out_partial_torch, mk=self.mk.attach_input(torch_tensor=self.io_pt.out_partial_torch, name="attn_out_partial"))
             ),
             attn_out = SimpleNamespace(
-                three_dim = SimpleNamespace(pt=attn_out_torch["3d"], mk=self.mk.attach_input(torch_tensor=attn_out_torch["3d"], name="attn_out_3dim")),
-                two_dim = SimpleNamespace(pt=attn_out_torch["2d"], mk=self.mk.attach_input(torch_tensor=attn_out_torch["2d"], name="attn_out_2dim")),
+                three_dim = SimpleNamespace(pt=self.io_pt.attn_out_torch["3d"], mk=self.mk.attach_input(torch_tensor=self.io_pt.attn_out_torch["3d"], name="attn_out_3dim")),
+                two_dim = SimpleNamespace(pt=self.io_pt.attn_out_torch["2d"], mk=self.mk.attach_input(torch_tensor=self.io_pt.attn_out_torch["2d"], name="attn_out_2dim")),
             ),
-            layer_out = SimpleNamespace(pt=o_proj_res_out_torch, mk=self.mk.attach_input(torch_tensor=o_proj_res_out_torch, name="attn_layer_out"))
+            layer_out = SimpleNamespace(pt=self.io_pt.o_proj_res_out_torch, mk=self.mk.attach_input(torch_tensor=self.io_pt.o_proj_res_out_torch, name="attn_layer_out"))
         )
         
         #############################################################################        
@@ -164,13 +179,18 @@ class MkLayers:
         # mk tensor
         self.mlp_layer_io = SimpleNamespace(
             layer_in = self.attn_layer_io.layer_out,
-            layernorm_out = SimpleNamespace(pt=None, mk=self.mk.new_tensor(dims=(batch, hidden_size), dtype=mi.bfloat16, name="mlp_rms_out", io_category="cuda_tensor")),
-            mlp_mid = SimpleNamespace(pt=None, mk=self.mk.new_tensor(dims=(batch, intermediate_size*2), dtype=mi.bfloat16, name="mlp_mid", io_category="cuda_tensor")),
-            silu_mul_out = SimpleNamespace(pt=None, mk=self.mk.new_tensor(dims=(batch, intermediate_size), dtype=mi.bfloat16, name="silu_mul_out", io_category="cuda_tensor")),
+            layernorm_out = SimpleNamespace(pt=self.io_pt.mlp_rms_out_torch, mk=self.mk.attach_input(torch_tensor=self.io_pt.mlp_rms_out_torch, name="mlp_rms_out")),
+            mlp_mid = SimpleNamespace(pt=self.io_pt.mlp_mid_torch, mk=self.mk.attach_input(torch_tensor=self.io_pt.mlp_mid_torch, name="mlp_mid")),
+            silu_mul_out = SimpleNamespace(pt=self.io_pt.silu_mul_out_torch, mk=self.mk.attach_input(torch_tensor=self.io_pt.silu_mul_out_torch, name="silu_mul_out")),
             layer_out = self.attn_layer_io.layer_in,
         )
+        return self.params, self.public_pt, self.attn_layer_io, self.mlp_layer_io
     
-    # def qwen3_share_io_buffer(self):
+    # def qwen3_share_io_buffer(self, params, public_pt, attn_layer_io, mlp_layer_io):
+    #     self.params = params
+    #     self.public_pt = public_pt
+    #     self.attn_layer_io = attn_layer_io
+    #     self.mlp_layer_io = mlp_layer_io
         
     def qwen3_create_attn_layer(self, model, layer_id, is_long_kv = False, reuse_instance = False):
         w_input_layernorm_torch, w_q_norm_torch, w_k_norm_torch, \
@@ -303,8 +323,8 @@ class MkLayers:
     def fill_meta(self):
         edge_torch = self.attn_layer_io.attn_in.edge.pt
         # edge_torch[0].fill_(step) # kv_seqlen
-        edge_torch[1].fill_(self.num_kv_heads * self.head_dim) # kvcache onestep_size
-        edge_torch[2].fill_(self.batch * self.q_seqlen * self.num_kv_heads * self.head_dim) # kvcache onelayer_size
+        edge_torch[1].fill_(self.params.num_kv_heads * self.params.head_dim) # kvcache onestep_size
+        edge_torch[2].fill_(self.params.batch * self.params.q_seqlen * self.params.num_kv_heads * self.params.head_dim) # kvcache onelayer_size
         
         k_torch_curstep = self.attn_layer_io.kv_curstep.k.pt
         v_torch_curstep = self.attn_layer_io.kv_curstep.v.pt
@@ -317,12 +337,10 @@ class MkLayers:
         # print("step", step, self.public_pt.cos.size(), cos.size())
         self.public_pt.cos.copy_(cos)
         self.public_pt.sin.copy_(sin)
-        
-    def qwen3_create_decoder_layer(self, model_tag, model, layer_num, batch, is_long_kv, is_no_compile, output_dir):
-        self.batch = batch
+     
+    def qwen3_create_decoder_layer(self, model, layer_num, params, io_pt, public_pt, is_long_kv, is_no_compile, output_dir):
         self.layer_num = layer_num
-        max_kv_seqlen = 8192
-        self.qwen3_alloc_io_buffer(model_tag, layer_num, batch, 1, max_kv_seqlen)
+        self.qwen3_alloc_io_buffer(params, io_pt, public_pt)
         for layer_id in range(layer_num):
             if (layer_id == 0):
                 reuse_instance = False
@@ -337,19 +355,26 @@ class MkLayers:
         self.update_step(cur_pos - 1, cos=position_embeddings[0], sin=position_embeddings[1])
         self.attn_layer_io.layer_in.pt.copy_(hidden_states)
         for layer_id in range(self.layer_num):
-            self.mk(self.batch, layer_id)  # attn的输入与mlp的输出是同一个tensor
+            self.mk(self.params.batch, layer_id)  # attn的输入与mlp的输出是同一个tensor
         return self.mlp_layer_io.layer_out.pt
     
-# class MkLayersHybridLayout:
-#     def __init__(self, model_tag, instance_num, kernel_num, world_size, rank, max_batch_size, trace_name, profiling):
-#         self.instance_num = instance_num
-#         self.mk_layers = []
-#         for i in range(self.instance_num):
-#             layers = MkLayers(model_tag, instance_id=i, kernel_num=kernel_num, world_size=1, rank=0, max_batch_size=1, trace_name=trace_name, profiling=profiling)
-#             self.mk_layers.append(layers)
+class MkLayersHybridLayout:
+    def __init__(self, model_tag, instance_num, kernel_num, world_size, rank, max_batch_size, trace_name, profiling):
+        self.instance_num = instance_num
+        self.mk_layers = []
+        for i in range(self.instance_num):
+            layers = MkLayers(model_tag, instance_id=i, kernel_num=kernel_num, world_size=world_size, rank=rank, max_batch_size=max_batch_size, trace_name=trace_name, profiling=profiling)
+            self.mk_layers.append(layers)
             
-#     def qwen3_create_decoder_layer(self, model_tag, model, kernel_num, batch, is_no_compile, output_dir):
-#         self.mk_layers[0].qwen3_create_decoder_layer(model_tag, model, kernel_num, batch, False, is_no_compile, output_dir)
-#         self.mk_layers[1].qwen3_create_decoder_layer(model_tag, model, kernel_num, batch, True, is_no_compile, output_dir+"longkv")
+    def qwen3_create_decoder_layer(self, model_tag, model, layer_num, batch, is_no_compile, output_dir):
+        params, io_pt, public_pt = MkLayers.qwen3_alloc_torch_buffer(model_tag, layer_num, batch, q_seqlen=1, max_kv_seqlen=8192)   
+        self.mk_layers[0].qwen3_create_decoder_layer(model, layer_num, params, io_pt, public_pt, False, is_no_compile, output_dir)
+        self.mk_layers[1].qwen3_create_decoder_layer(model, layer_num, params, io_pt, public_pt, True, is_no_compile, output_dir+"longkv")
+        
+    def __call__(self, cur_pos, position_embeddings, hidden_states):
+        if cur_pos < 512:
+            return self.mk_layers[0](cur_pos, position_embeddings, hidden_states)
+        else:
+            return self.mk_layers[1](cur_pos, position_embeddings, hidden_states)
         
         

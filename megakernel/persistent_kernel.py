@@ -5,6 +5,7 @@ import subprocess
 import shutil
 import sys
 import sysconfig
+from pathlib import Path
 
 from .core import *
 from .kernel import get_key_paths, KNGraph, TBGraph
@@ -570,7 +571,8 @@ class PersistentKernel:
         assert not self._is_compiled
         
         output_dir = kwargs.get("output_dir", None)
-
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        
         MEGAKERNEL_ROOT, INCLUDE_PATH, DEPS_PATH = get_key_paths()
         # tempdir_obj = tempfile.TemporaryDirectory()
         # tempdir = "./gen/" # tempdir_obj.name

@@ -5,7 +5,7 @@ import torch.distributed as dist
 import argparse
 import os, json
 from common.pkt_util import TorchRef, PerfReporter, Qwen3Info
-from common.mk_layers import MkLayers
+from common.mk_layers import MkLayers, MkLayersHybridLayout
     
 
 if __name__ == "__main__":
@@ -43,10 +43,14 @@ if __name__ == "__main__":
     
     position_embeddings=(all_position_embeddings[0][:, prev_pos:cur_pos], all_position_embeddings[1][:, prev_pos:cur_pos])
 
-    layer_num = num_hidden_layers
-    layers = MkLayers(model_tag, instance_id=0, kernel_num=layer_num, world_size=1, rank=0, max_batch_size=1, trace_name=args.trace_name, profiling=args.profiling)
-    layers.qwen3_create_decoder_layer(model_tag, model, layer_num, batch, is_long_kv, is_no_compile=args.nc, output_dir=args.output_dir)
+    layer_num = 1#num_hidden_layers
+    # layers = MkLayers(model_tag, instance_id=0, kernel_num=layer_num, world_size=1, rank=0, max_batch_size=1, trace_name=args.trace_name, profiling=args.profiling)
+    # params, io_pt, public_pt = MkLayers.qwen3_alloc_torch_buffer(model_tag, layer_num, batch, q_seqlen=1, max_kv_seqlen=8192)   
+    # layers.qwen3_create_decoder_layer(model, layer_num, params, io_pt, public_pt, is_long_kv=is_long_kv, is_no_compile=args.nc, output_dir=args.output_dir)
     
+    layers = MkLayersHybridLayout(model_tag, instance_num=2, kernel_num=layer_num, world_size=1, rank=0, max_batch_size=1, trace_name=args.trace_name, profiling=args.profiling)
+    layers.qwen3_create_decoder_layer(model_tag, model, layer_num, batch, is_no_compile=args.nc, output_dir=args.output_dir)
+
     # mk_out = layers(cur_pos, position_embeddings, hidden_states.view(batch*q_seqlen, hidden_size))
     def mk_run():
         return layers(cur_pos, position_embeddings, hidden_states.view(batch*q_seqlen, hidden_size))
