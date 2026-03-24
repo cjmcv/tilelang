@@ -470,7 +470,7 @@ class Qwen3Model(Qwen3PreTrainedModel):
         # N is the max number of pages (i.e., 1), 
         # P is the page size (i.e., config.max_embedding_positions), 
         # H is the number of key-value heads, and D is the hidden dim size
-        key_cache = torch.empty(
+        key_cache = torch.zeros(
             (
                 config.num_hidden_layers,
                 max_num_pages,
@@ -481,7 +481,7 @@ class Qwen3Model(Qwen3PreTrainedModel):
             dtype=torch.bfloat16,
             device="cuda",
         )
-        value_cache = torch.empty(
+        value_cache = torch.zeros(
             (
                 config.num_hidden_layers,
                 max_num_pages,
@@ -550,6 +550,7 @@ class Qwen3Model(Qwen3PreTrainedModel):
         #     )
         #     hidden_states = layer_outputs[0]
         
+        bsz, q_len, hidden_size = hidden_states.size()   
         if q_len > 1:
             for decoder_layer in self.layers:
                 layer_outputs = decoder_layer(
@@ -565,7 +566,6 @@ class Qwen3Model(Qwen3PreTrainedModel):
             mk_layers.public_pt.key_cache_5d[:, 0, :, :, :].copy_(self.kv_cache[0][:, 0, :, :, :])
             mk_layers.public_pt.value_cache_5d[:, 0, :, :, :].copy_(self.kv_cache[1][:, 0, :, :, :])
         else:
-            bsz, q_len, hidden_size = hidden_states.size()    
             print("size", bsz, q_len, hidden_size)
             mk_out = mk_layers(cur_pos, position_embeddings, hidden_states.view(bsz*q_len, hidden_size))
             print("outsize", mk_out.size())

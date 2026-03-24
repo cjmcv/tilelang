@@ -53,7 +53,7 @@ public:
     int extra_bx = params[fused_params_start_id+1];
     int extra_by = params[fused_params_start_id+2]; // 0
     int extra_bz = params[fused_params_start_id+3]; // 0
-    int layer_id = params[fused_params_start_id+4];
+    // int layer_id = params[fused_params_start_id+4];
 
     code.inc_indent();
     code.e("  if (task_desc->bx >= $ && task_desc->by == 0 && task_desc->bz == 0) {", 
@@ -63,7 +63,7 @@ public:
       // Update kv result to kvcache
       code.e("  kernel::copy_kernel<bfloat16_t, $>(", bgraph.thread_num);
       code.e("    task_desc->bx-$, task_desc->by, task_desc->bz,", bgraph.grid_dim.x-extra_bx);
-      code.e("    $,", layer_id);
+      code.e("    runtime_config.layer_id,");
       code.e("    *runtime_config.onelayer_size,");
       code.e("    *runtime_config.step,");
       code.e("    *runtime_config.onestep_size,");
@@ -124,8 +124,8 @@ public:
       int extra_bx = params[fused_params_start_id+1];
       int extra_by = params[fused_params_start_id+2]; // 0
       int extra_bz = params[fused_params_start_id+3]; // 0
-      int layer_id = params[fused_params_start_id+4];
-      code.e("    ((bfloat16_t*)runtime_config.kcache) + $ * (*runtime_config.onelayer_size) + (*runtime_config.step) * (*runtime_config.onestep_size));", layer_id);
+      // int layer_id = params[fused_params_start_id+4];
+      code.e("    ((bfloat16_t*)runtime_config.kcache) + runtime_config.layer_id * (*runtime_config.onelayer_size) + (*runtime_config.step) * (*runtime_config.onestep_size));");
       append_fused_func(bgraph, params, fused_params_start_id, code);
     }
     return register_task_variant(TASK_ROPE, code.to_string());
@@ -180,19 +180,19 @@ public:
       code.e("    task_desc->output_ptrs[2]);");
     }
     else {
-      // 直接输入完整的kvcache池，并根据step，从中选取数据？TODO
+      // 直接输入完整的kvcache池，并根据step，从中选取数据
       // 检查： $ * (*runtime_config.onelayer_size) + (*runtime_config.step) * (*runtime_config.onestep_size) 似乎有问题，step不应该偏移，仅偏移layer以选中指定层即可。
       // 5d kvcache [layer, batch, seqlen, num_kv_heads, dim_per_head]
       int num_kv_heads = input_ops[1]->dtensor.dim[3];
 
       int extra_func_id = params[fused_params_start_id];
-      int layer_id = params[fused_params_start_id+1];
+      // int layer_id = params[fused_params_start_id+1];
       code.e("kernel::gqa_decode_kernel<bfloat16_t, $, $, $, $, $, $>(",
         bgraph.thread_num, sub_kernel_id, batch_size, head, num_kv_heads, dim);
       code.e("    task_desc->bx, task_desc->by, task_desc->bz,");
       code.e("    task_desc->input_ptrs[0],");
-      code.e("    ((bfloat16_t*)task_desc->input_ptrs[1]) + $ * (*runtime_config.onelayer_size) + (*runtime_config.step) * (*runtime_config.onestep_size), // task_desc->input_ptrs[1]", layer_id);
-      code.e("    ((bfloat16_t*)task_desc->input_ptrs[2]) + $ * (*runtime_config.onelayer_size) + (*runtime_config.step) * (*runtime_config.onestep_size), // task_desc->input_ptrs[2]", layer_id);
+      code.e("    ((bfloat16_t*)task_desc->input_ptrs[1]) + runtime_config.layer_id * (*runtime_config.onelayer_size), // task_desc->input_ptrs[1]");
+      code.e("    ((bfloat16_t*)task_desc->input_ptrs[2]) + runtime_config.layer_id * (*runtime_config.onelayer_size), // task_desc->input_ptrs[2]");
       code.e("    task_desc->input_ptrs[3],");
       code.e("    runtime_config.step, // task_desc->input_ptrs[4],");
       code.e("    task_desc->output_ptrs[0],");

@@ -220,7 +220,7 @@ if __name__ == "__main__":
         k_embed=rope_in_k,
         sync_mode=(0, 0, 0),
         layout=fused_layout,
-        fused_params=[99, 1, *extra_layout, layer_id],
+        fused_params=[99, 1, *extra_layout],
     )
     
     # attn    
@@ -234,8 +234,8 @@ if __name__ == "__main__":
         out_partial=attn_out_partial,
         output=attn_out_3dim,
         sync_mode=(0, 0, 0),
-        layout=layout.gqa_decode_layout_16,
-        fused_params=[99, 0, layer_id],
+        layout=layout.gqa_decode_layout_shortkv,
+        fused_params=[99, 0],
     )
     mk.linear_with_residual_layer(
         input=attn_out_2dim,

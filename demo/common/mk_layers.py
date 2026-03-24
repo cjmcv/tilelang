@@ -70,6 +70,7 @@ class MkLayers:
         params = SimpleNamespace(
             batch = batch,
             q_seqlen = q_seqlen,
+            max_kv_seqlen = max_kv_seqlen,
             hidden_size = hidden_size,
             intermediate_size = intermediate_size,
             num_heads = num_heads,
@@ -244,7 +245,7 @@ class MkLayers:
             k_embed=self.attn_layer_io.rope_io.k.mk,
             sync_mode=(0, 0, 0),
             layout=fused_layout,
-            fused_params=[99, 1, *extra_layout, layer_id],
+            fused_params=[99, 1, *extra_layout],
         )
         
         # attn    
@@ -263,7 +264,7 @@ class MkLayers:
             output=self.attn_layer_io.attn_out.three_dim.mk,
             sync_mode=(0, 0, 0),
             layout=gqa_decode_layout,
-            fused_params=[99, 0, layer_id],
+            fused_params=[99, 0],
         )
         self.mk.linear_with_residual_layer(
             input=self.attn_layer_io.attn_out.two_dim.mk,
@@ -322,7 +323,7 @@ class MkLayers:
         edge_torch = self.attn_layer_io.attn_in.edge.pt
         # edge_torch[0].fill_(step) # kv_seqlen
         edge_torch[1].fill_(self.params.num_kv_heads * self.params.head_dim) # kvcache onestep_size
-        edge_torch[2].fill_(self.params.batch * self.params.q_seqlen * self.params.num_kv_heads * self.params.head_dim) # kvcache onelayer_size
+        edge_torch[2].fill_(self.params.batch * self.params.max_kv_seqlen * self.params.num_kv_heads * self.params.head_dim) # kvcache onelayer_size
         
         k_torch_curstep = self.attn_layer_io.kv_curstep.k.pt
         v_torch_curstep = self.attn_layer_io.kv_curstep.v.pt
@@ -331,7 +332,7 @@ class MkLayers:
     
     def update_step(self, step, cos, sin):
         edge_torch = self.attn_layer_io.attn_in.edge.pt
-        edge_torch[0].fill_(step) # kv_seqlen
+        edge_torch[0].fill_(step)
         # print("step", step, self.public_pt.cos.size(), cos.size())
         self.public_pt.cos.copy_(cos)
         self.public_pt.sin.copy_(sin)
@@ -353,7 +354,7 @@ class MkLayers:
         self.update_step(cur_pos - 1, cos=position_embeddings[0], sin=position_embeddings[1])
         self.attn_layer_io.layer_in.pt.copy_(hidden_states)
         for layer_id in range(self.layer_num):
-            self.mk(self.params.batch, layer_id)  # attn的输入与mlp的输出是同一个tensor
+            self.mk(self.params.batch, kernel_id=layer_id, layer_id=layer_id)  # attn的输入与mlp的输出是同一个tensor
         return self.mlp_layer_io.layer_out.pt
     
 class MkLayersHybridLayout:

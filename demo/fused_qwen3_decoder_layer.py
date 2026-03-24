@@ -62,14 +62,14 @@ if __name__ == "__main__":
             return torch_io
     ######################################
     start_pos = 1
-    decode_limit = 4
+    decode_limit = 60
     def mk_run_multi_step():
         mk_io = hidden_states.view(batch*q_seqlen, hidden_size).clone()
         for cur_pos in range(start_pos, decode_limit):
             position_embeddings=(all_position_embeddings[0][:, cur_pos-1:cur_pos], all_position_embeddings[1][:, cur_pos-1:cur_pos])
             mk_out = layers(cur_pos, position_embeddings, mk_io)
             mk_io.copy_(mk_out)
-        return mk_out
+        return mk_out #, layers.public_pt.key_cache_5d, layers.public_pt.value_cache_5d # [layer_num, batch, kv_seqlen, kv_heads, head_dim]
 
     def torch_ref_tmp_multi_step():
         torch_io = hidden_states.clone()    
@@ -80,14 +80,14 @@ if __name__ == "__main__":
                 for layer_id in range(layer_num):
                     out = model.model.layers[layer_id].forward(torch_io, attention_mask, position_embeddings, step, stream)
                     torch_io = out[0]
-            return torch_io
+            return torch_io #, model.model.kv_cache[0], model.model.kv_cache[1]
     ######################################
     
-    mk_run = mk_run_one_step
-    torch_ref_tmp = torch_ref_tmp_one_step
+    # mk_run = mk_run_one_step
+    # torch_ref_tmp = torch_ref_tmp_one_step
     
-    # mk_run = mk_run_multi_step
-    # torch_ref_tmp = torch_ref_tmp_multi_step
+    mk_run = mk_run_multi_step
+    torch_ref_tmp = torch_ref_tmp_multi_step
     
     if 0:
         graph, ref_output = TorchRef.compile_capture(torch_ref_tmp, is_compile=False) # 搜 “kv_seq_len = step + 1” 改成=> 1
@@ -98,16 +98,29 @@ if __name__ == "__main__":
         def torch_ref():
             return torch_ref_tmp()
     
-    for i in range(10):
-        torch_ref()
+    # for i in range(10):
+    #     torch_ref()
     
     # torch_ref()    
     # mk_run()
     
-    print("mk_out: ", mk_run())    
-    print("torch_ref: ", torch_ref())
+    # print("mk_out: ", mk_run())    
+    # print("torch_ref: ", torch_ref())
     
+    
+    # q1,k1,v1 = mk_run() # [:, 0, :, :, :]
+    # q2,k2,v2 = torch_ref()
+    # # print("q", PerfReporter.assert_similar(q1, q2))
+    # # print("k", PerfReporter.assert_similar(k1, k2))
+    # # print("v", PerfReporter.assert_similar(v1, v2))
+    
+    # print("mpk key0:\n", k1[0, 0, :, :, :])
+    # print("torch key0:\n", k2[0, 0, :, :, :])
+    # print("mpk key1:\n", k1[1, 0, :, :, :])
+    # print("torch key1:\n", k2[1, 0, :, :, :])
+    # # print("mpk key2:\n", k1[2, 0, :, :, :])
+    # # print("torch key2:\n", k2[2, 0, :, :, :])    
     reporter = PerfReporter() 
     reporter.generate_report(mk_run, torch_ref, 
-                            warnup_iter=100, test_iter=200, 
+                            warnup_iter=10, test_iter=20, 
                             allclose_iter=5, print_mode=1)

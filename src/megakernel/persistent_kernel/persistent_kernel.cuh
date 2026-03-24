@@ -555,13 +555,14 @@ void print_smem_size() {
 
 // Entry point for C/C++
 // TODO: change launch config
-extern "C" void launch_persistent_kernel(int kernel_id, int batch_size) {
+extern "C" void launch_persistent_kernel(int kernel_id, int batch_size, int layer_id) {
   // printf("launch_persistent_kernel: %d.\n", kernel_id);
   // int device;
   // cudaGetDevice(&device);
   // int sm_count;
   // cudaDeviceGetAttribute(&sm_count, cudaDevAttrMultiProcessorCount, device);
   // global_runtime_config[kernel_id].batch_size = batch_size;
+  global_runtime_config[kernel_id].layer_id = layer_id;
 
   cudaMemset(global_runtime_config[kernel_id].all_event_counters, 0, 
     sizeof(EventCounter) * global_runtime_config[kernel_id].num_events);

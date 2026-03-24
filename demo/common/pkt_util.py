@@ -352,7 +352,8 @@ class PerfReporter:
     # double norm_x = std::sqrt(norm_sq_x);
     # double norm_y = std::sqrt(norm_sq_y);
     # double sim = dot_product / (norm_x * norm_y); // 需要避免norm_x/norm_y为0，然后需要裁剪到[-1,1]
-    def assert_similar(self, x, y, eps=1e-2, name="tensor", assert_=False, print_=True):
+    @staticmethod
+    def assert_similar(x, y, eps=1e-2, name="tensor", assert_=False, print_=True):
         def print_red_warning(msg):
             print(f"\033[91m{msg}\033[0m")
 
@@ -403,7 +404,7 @@ class PerfReporter:
                 count0 = (radio > threshold[0]).sum().item()
                 count1 = (radio > threshold[1]).sum().item()
                 print("radio > ", threshold[0], ": ", count0, "-", count0/total_num, " / ", threshold[1], ": ", count1, "-", count1/total_num)
-            self.assert_similar(target_result, torch_result, name="similar")    
+            PerfReporter.assert_similar(target_result, torch_result, name="similar")    
              
     def time_cuda_event_record(self, name, func, test_iter):
         starter = torch.cuda.Event(enable_timing=True)
