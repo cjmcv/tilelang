@@ -23,7 +23,7 @@ def profile(target_func, torch_ref_func):
     reporter = PerfReporter() 
     reporter.generate_report(target_func, torch_ref_func,
                             warnup_iter=100, test_iter=500, 
-                            allclose_iter=5, print_mode=0)
+                            allclose_iter=5, print_mode=1)
 
 def test_silu_mul():
     M, N = 32, 9728
@@ -207,11 +207,11 @@ if __name__ == "__main__":
     # test_gemm_add()
      
     # test_gqa_decode(num_heads, num_kv_heads, head_dim)
-    # test_rope(num_heads, num_kv_heads, head_dim)
+    test_rope(num_heads, num_kv_heads, head_dim)
 
-    gen = MicroAutoGen(model_tag, batch_size=1, hidden_size=hidden_size, intermediate_size=intermediate_size, 
-                       max_kv_seqlen=8192, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim)
-    gen.gen_qwen3_ops(layer_id=99, mode=HparamSelectMode.TUNED) # HEURISTIC, TUNING, TUNED
+    # gen = MicroAutoGen(model_tag, batch_size=1, hidden_size=hidden_size, intermediate_size=intermediate_size, 
+    #                    max_kv_seqlen=8192, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim)
+    # gen.gen_qwen3_ops(layer_id=99, mode=HparamSelectMode.TUNED) # HEURISTIC, TUNING, TUNED
     # print(">> Finish gen_qwen3_ops.")
     # print("Test single_micro completed.")
     

@@ -539,7 +539,17 @@ class Qwen3Model(Qwen3PreTrainedModel):
         next_decoder_cache = None
         self.kv_last_page_len.copy_(step + 1)
 
-        bsz, q_len, hidden_size = hidden_states.size()
+        
+        # for decoder_layer in self.layers:
+        #     layer_outputs = decoder_layer(
+        #         hidden_states,
+        #         attention_mask=causal_mask,
+        #         position_embeddings=position_embeddings,
+        #         step=step,
+        #         stream=stream,
+        #     )
+        #     hidden_states = layer_outputs[0]
+        
         if q_len > 1:
             for decoder_layer in self.layers:
                 layer_outputs = decoder_layer(
@@ -555,6 +565,7 @@ class Qwen3Model(Qwen3PreTrainedModel):
             mk_layers.public_pt.key_cache_5d[:, 0, :, :, :].copy_(self.kv_cache[0][:, 0, :, :, :])
             mk_layers.public_pt.value_cache_5d[:, 0, :, :, :].copy_(self.kv_cache[1][:, 0, :, :, :])
         else:
+            bsz, q_len, hidden_size = hidden_states.size()    
             print("size", bsz, q_len, hidden_size)
             mk_out = mk_layers(cur_pos, position_embeddings, hidden_states.view(bsz*q_len, hidden_size))
             print("outsize", mk_out.size())
