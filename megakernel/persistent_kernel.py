@@ -423,7 +423,7 @@ class PersistentKernel:
     
         for i in range(0, len(layout), 2):
             grid_dim, tile_dim = layout[i], layout[i+1]
-            print(grid_dim, tile_dim, sync_mode)
+            # print(grid_dim, tile_dim, sync_mode)
             tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128))
             tb_graph.new_input(q,       sync_mode)
             tb_graph.new_input(k_cache, sync_mode)

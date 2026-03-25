@@ -63,7 +63,7 @@ class MkLayers:
             self.mk.load_module(module_path, meta_tensors)
 
     @staticmethod
-    def qwen3_alloc_torch_buffer(model_tag, layer_num, batch, q_seqlen, max_kv_seqlen):
+    def qwen3_alloc_torch_buffer(model_tag, layer_num, batch, q_seqlen, max_kv_seqlen=4096):
         hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim, num_hidden_layers \
             = Qwen3Info.get_basic_params(model_tag)
         
@@ -366,7 +366,7 @@ class MkLayersHybridLayout:
             self.mk_layers.append(layers)
             
     def qwen3_create_decoder_layer(self, model_tag, model, layer_num, batch, is_no_compile, output_dir):
-        params, self.io_pt, self.public_pt = MkLayers.qwen3_alloc_torch_buffer(model_tag, layer_num, batch, q_seqlen=1, max_kv_seqlen=4096)   
+        params, self.io_pt, self.public_pt = MkLayers.qwen3_alloc_torch_buffer(model_tag, layer_num, batch, q_seqlen=1)   
         self.mk_layers[0].qwen3_create_decoder_layer(model, layer_num, params, self.io_pt, self.public_pt, False, is_no_compile, output_dir)
         self.mk_layers[1].qwen3_create_decoder_layer(model, layer_num, params, self.io_pt, self.public_pt, True, is_no_compile, output_dir+"longkv")
         

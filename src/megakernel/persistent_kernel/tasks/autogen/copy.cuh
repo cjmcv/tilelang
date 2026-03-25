@@ -22,6 +22,9 @@ __device__ __forceinline__ void copy_kernel(const int bx, const int by, const in
                                             void* __restrict__ output_ptr1, 
                                             void* __restrict__ output_ptr2) {
   // (bx=2, by=1, bz=1)
+  if (threadIdx.x == 0) {
+    printf("layer_id: (%d, %d), (%d, %d)\n", layer_id, onelayer_size, step, onestep_size);
+  }
   const bfloat16_t* __restrict__ input1 = static_cast<const bfloat16_t*>(input_ptr1);
   const bfloat16_t* __restrict__ input2 = static_cast<const bfloat16_t*>(input_ptr2);
   bfloat16_t* __restrict__ output1 = static_cast<bfloat16_t*>(output_ptr1) + layer_id * onelayer_size + step * onestep_size;

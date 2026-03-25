@@ -181,7 +181,6 @@ public:
     }
     else {
       // 直接输入完整的kvcache池，并根据step，从中选取数据
-      // 检查： $ * (*runtime_config.onelayer_size) + (*runtime_config.step) * (*runtime_config.onestep_size) 似乎有问题，step不应该偏移，仅偏移layer以选中指定层即可。
       // 5d kvcache [layer, batch, seqlen, num_kv_heads, dim_per_head]
       int num_kv_heads = input_ops[1]->dtensor.dim[3];
 
