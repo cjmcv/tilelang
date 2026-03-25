@@ -219,8 +219,13 @@ if __name__ == "__main__":
     q_seqlen = 1
     hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim, num_hidden_layers \
         = Qwen3Info.get_basic_params(model_tag)
-    layers = MkLayersHybridLayout(model_tag, instance_num=2, kernel_num=num_hidden_layers, world_size=1, rank=0, max_batch_size=1, trace_name=args.trace_name, profiling=args.profiling)
-    layers.qwen3_create_decoder_layer(model_tag=model_tag, model=model, layer_num=num_hidden_layers, batch=batch, is_no_compile=args.nc, output_dir=args.output_dir)
+        
+    layers = MkLayers(model_tag, instance_id=0, kernel_num=num_hidden_layers, world_size=1, rank=0, max_batch_size=1, trace_name=args.trace_name, profiling=args.profiling)
+    params, io_pt, public_pt = MkLayers.qwen3_alloc_torch_buffer(model_tag, num_hidden_layers, batch, q_seqlen=1)   
+    layers.qwen3_create_decoder_layer(model, num_hidden_layers, params, io_pt, public_pt, is_long_kv=True, is_no_compile=args.nc, output_dir=args.output_dir)
+    
+    # layers = MkLayersHybridLayout(model_tag, instance_num=2, kernel_num=num_hidden_layers, world_size=1, rank=0, max_batch_size=1, trace_name=args.trace_name, profiling=args.profiling)
+    # layers.qwen3_create_decoder_layer(model_tag=model_tag, model=model, layer_num=num_hidden_layers, batch=batch, is_no_compile=args.nc, output_dir=args.output_dir)
 
     # cur_pos = 64
     # prev_pos = 63

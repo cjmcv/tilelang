@@ -551,7 +551,8 @@ class Qwen3Model(Qwen3PreTrainedModel):
         #     hidden_states = layer_outputs[0]
         
         bsz, q_len, hidden_size = hidden_states.size()   
-        if q_len > 1:
+        # if q_len > 1:
+        if cur_pos <= 64:
             for decoder_layer in self.layers:
                 layer_outputs = decoder_layer(
                     hidden_states,
@@ -561,10 +562,11 @@ class Qwen3Model(Qwen3PreTrainedModel):
                     stream=stream,
                 )
                 hidden_states = layer_outputs[0]
-            
-            print("mk_layers.public_pt.key_cache_5d", mk_layers.public_pt.key_cache_5d.size())
-            mk_layers.public_pt.key_cache_5d[:, 0, :, :, :].copy_(self.kv_cache[0][:, 0, :, :, :])
-            mk_layers.public_pt.value_cache_5d[:, 0, :, :, :].copy_(self.kv_cache[1][:, 0, :, :, :])
+                
+            if cur_pos == 64:
+                print("mk_layers.public_pt.key_cache_5d", mk_layers.public_pt.key_cache_5d.size())
+                mk_layers.public_pt.key_cache_5d[:, 0, :, :, :].copy_(self.kv_cache[0][:, 0, :, :, :])
+                mk_layers.public_pt.value_cache_5d[:, 0, :, :, :].copy_(self.kv_cache[1][:, 0, :, :, :])
         else:
             print("size", bsz, q_len, hidden_size)
             mk_out = mk_layers(cur_pos, position_embeddings, hidden_states.view(bsz*q_len, hidden_size))
