@@ -35,7 +35,7 @@ if __name__ == "__main__":
     stream = None
     print("before forward", hidden_states)
     
-    layer_num = 1 # num_hidden_layers
+    layer_num = num_hidden_layers
     layers = MkLayers(model_tag, instance_id=0, kernel_num=layer_num, world_size=1, rank=0, max_batch_size=1, trace_name=args.trace_name, profiling=args.profiling)
     params, io_pt, public_pt = MkLayers.qwen3_alloc_torch_buffer(model_tag, layer_num, batch, q_seqlen=1)   
     layers.qwen3_create_decoder_layer(model, layer_num, params, io_pt, public_pt, is_long_kv=True, is_no_compile=args.nc, output_dir=args.output_dir)
@@ -143,4 +143,12 @@ if __name__ == "__main__":
         mk_run()
         ender.record()
         torch.cuda.synchronize()
-        print("time: ", starter.elapsed_time(ender))
+        print("mpk time: ", starter.elapsed_time(ender))
+        
+    for i in range(10):
+        torch.cuda.synchronize()
+        starter.record()
+        torch_ref()
+        ender.record()
+        torch.cuda.synchronize()
+        print("torch time: ", starter.elapsed_time(ender))

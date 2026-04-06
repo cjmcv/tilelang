@@ -541,6 +541,8 @@ class Qwen3Model(Qwen3PreTrainedModel):
         self.kv_last_page_len.copy_(step + 1)
 
         if mk_layers == None:
+            torch.cuda.synchronize()
+            starter.record()
             for decoder_layer in self.layers:
                 layer_outputs = decoder_layer(
                     hidden_states,
@@ -550,6 +552,9 @@ class Qwen3Model(Qwen3PreTrainedModel):
                     stream=stream,
                 )
                 hidden_states = layer_outputs[0]
+            ender.record()
+            torch.cuda.synchronize()
+            print("torch time: ", starter.elapsed_time(ender))
         else:
             bsz, q_len, hidden_size = hidden_states.size()   
             # if q_len > 1:
@@ -575,7 +580,7 @@ class Qwen3Model(Qwen3PreTrainedModel):
                 mk_out = mk_layers(cur_pos, position_embeddings, hidden_states.view(bsz*q_len, hidden_size))
                 ender.record()
                 torch.cuda.synchronize()
-                print("time: ", starter.elapsed_time(ender))
+                print("mpk time: ", starter.elapsed_time(ender))
                 # print("outsize", mk_out.size())
                 hidden_states.copy_(mk_out.view(bsz, q_len, hidden_size))
             

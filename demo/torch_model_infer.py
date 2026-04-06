@@ -109,6 +109,7 @@ if __name__ == "__main__":
         hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim, num_hidden_layers \
             = Qwen3Info.get_basic_params(model_tag)
             
+        print("num_hidden_layers: ", num_hidden_layers)
         layers = MkLayers(model_tag, instance_id=0, kernel_num=num_hidden_layers, world_size=1, rank=0, max_batch_size=1, trace_name=args.trace_name, profiling=args.profiling)
         params, io_pt, public_pt = MkLayers.qwen3_alloc_torch_buffer(model_tag, num_hidden_layers, batch, q_seqlen=1)   
         layers.qwen3_create_decoder_layer(model, num_hidden_layers, params, io_pt, public_pt, is_long_kv=True, is_no_compile=args.nc, output_dir=args.output_dir)
@@ -178,22 +179,22 @@ if __name__ == "__main__":
     torch.cuda.synchronize()
     run_time = starter.elapsed_time(ender)
 
-    # #############
-    # cur_pos = 65
-    # hidden_states = torch.randn((batch, q_seqlen, hidden_size), dtype=torch.bfloat16, device="cuda")
-    # def mk_run_one_step():
-    #     mk_out = layers(cur_pos, (cos_embeddings, sin_embeddings), hidden_states.view(batch*q_seqlen, hidden_size))
-    #     return mk_out
+    #############
+    cur_pos = 65
+    hidden_states = torch.randn((batch, q_seqlen, hidden_size), dtype=torch.bfloat16, device="cuda")
+    def mk_run_one_step():
+        mk_out = layers(cur_pos, (cos_embeddings, sin_embeddings), hidden_states.view(batch*q_seqlen, hidden_size))
+        return mk_out
     
-    # for i in range(20):
-    #     torch.cuda.synchronize()
-    #     starter.record()
-    #     mk_run_one_step()
-    #     ender.record()
-    #     torch.cuda.synchronize()
-    #     print("time: ", starter.elapsed_time(ender))
-    # print("dims:", batch, q_seqlen, hidden_size)
-    # ################
+    for i in range(20):
+        torch.cuda.synchronize()
+        starter.record()
+        mk_run_one_step()
+        ender.record()
+        torch.cuda.synchronize()
+        print("outside time: ", starter.elapsed_time(ender))
+    print("dims:", batch, q_seqlen, hidden_size)
+    ################
     
     # ########################
     # cur_pos = 100
