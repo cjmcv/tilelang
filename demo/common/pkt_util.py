@@ -301,7 +301,7 @@ class Qwen3Info:
                 model_name = "/data/team/cjm/Qwen/Qwen3-4B"
             else:
                 print("!! Do not support model: ", model_tag)
-            model = Qwen3ForCausalLM.from_pretrained(model_name, world_size=1, max_num_pages=16, page_size=4096).to("cuda")
+            model = Qwen3ForCausalLM.from_pretrained(model_name, world_size=1, max_num_pages=16, page_size=2048).to("cuda")
             tokenizer = AutoTokenizer.from_pretrained(model_name) 
         return model, tokenizer
     

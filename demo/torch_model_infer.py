@@ -8,112 +8,31 @@ from common.pkt_util import TorchRef, Qwen3Info
 from common.mk_layers import MkLayers, MkLayersHybridLayout
 
 DEFAULT_SAVE_DIR = os.path.join("outputs", "qwen3")
-MAX_SAVE_TOKENS = 100
-
-# print limitation
-# torch.set_printoptions(threshold=2000)
-
-def grid_for_rmsnorm_linear_layer(size: int, use_cutlass_kernel: bool = True):
-    # 96 and 64 are enough to cover all Qwen3 model? Please update the method
-    # if you meet any incompatibility.
-    if size % 64 == 0 and not use_cutlass_kernel:
-        # TODO(Wenqin): If we set OUTPUT_SIZE too much for PTX linear kernel,
-        # there is some regression.
-        return size // 64
-    if size / 96 > 400:
-        # TODO: An add-hoc workaround for linear kernel, both MPK ptx and
-        # cutlass version will output unexpect result (not same out put for
-        # same prompt) if the OUTPUT_SIZE is too big, try to figure it out.
-        assert size % 256 == 0, "FATAL: Linear layer size not support, it's {size}."
-        return size // 256
-    if size % 96 == 0:
-        return 96
-    elif size % 64 == 0:
-        return 64
-    
-# Return the largest factor of m that is less than or equal to n
-# This is used to determine the grid size
-def max_factor_leq_n(m: int, n: int) -> int:
-    max_factor = 1
-    i = 1
-    while i * i <= m:
-        if m % i == 0:
-            if i <= n:
-                max_factor = max(max_factor, i)
-            if m // i <= n:
-                max_factor = max(max_factor, m // i)
-        i += 1
-    return max_factor
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--use-mirage", action="store_true", help="Use Mirage kernels")
-    parser.add_argument("--max-num-batched-tokens", default=8, type=int, help="Max number of tokens in a batch")
-    parser.add_argument("--max-num-batched-requests", default=1, type=int, help="Max number of requests in a batch")
-    parser.add_argument("--page-size", default=4096, type=int, help="Page size")
-    parser.add_argument("--max-num-pages", default=16, type=int, help="Max num pages")
     parser.add_argument("--output-dir", default=os.getenv("MEGAKERNEL_HOME", default=None)+"/demo/gen", help="Output files directory")
     parser.add_argument("--trace-name", default="qwen3", help="Perfetto trace output name")
     parser.add_argument("--profiling", action="store_true", help="Use Profiler to generate trace")
     parser.add_argument("--nc", action="store_true", help="no-compile: Use the specified compiled library instead of recompiling it")
     
-    # lookahead or promptlookup
-    parser.add_argument(
-        "--spec-decode",
-        default=None,
-        choices=["promptlookup", "lookahead"],
-        help="Enable speculative decoding with 'lookahead' or 'promptlookup' mode.",
-    )
-    parser.add_argument(
-        "--ngram-size",
-        default=3,
-        type=int,
-        help="Ngram size for lookahead spec decode",
-    )
     parser.add_argument(
         "--max-seq-length",
         default=512,
         type=int,
         help="Max sequence length for lookahead spec decode",
     )
-    parser.add_argument(
-        "--spec-length",
-        default=3,
-        type=int,
-        help="Spec length for lookahead spec decode",
-    )
-
-    parser.add_argument(
-        "--no-use-cutlass-kernel",
-        action="store_false",
-        dest="use_cutlass_kernel",
-        default=True,
-        help="Not use the cutlass version kernel.",
-    )
     parser.add_argument("--ignore-eos", action="store_true", help="Ignore eos token during generation")
 
     # -------- Args for CI tests ----------
     parser.add_argument("--max-new-tokens", type=int, default=None, help="Decode cap for CI determinism")
-    parser.add_argument("--temperature", type=float, default=0.0)
-    parser.add_argument("--top_p", type=float, default=1.0)
-    parser.add_argument("--do-sample", dest="do_sample", action="store_true", help="Enable sampling (default off)")
-    parser.add_argument(
-        "--save-tokens",
-        nargs="?",
-        const="auto",
-        default=None,
-        help=(
-            "Optionally dump first N generated token_ids, text, and latency to JSON. "
-            "If path omitted, saves to outputs/qwen3/{torch_output.json|mk_output.json}."
-        ),
-    )
     parser.add_argument("--prompt",
         type=str,
         default="Give me a short introduction to large language model.",
         help="Custom prompt text to generate from.",
     )
 
-    parser.add_argument("--split-kv-cache", action="store_true", help="Use split-kv cache")
     args = parser.parse_args()
     try:
         from mpi4py import MPI
@@ -128,16 +47,6 @@ if __name__ == "__main__":
         world_size = 1
         rank = 0
 
-    if args.save_tokens:
-        if args.save_tokens == "auto":
-            filename = "mk_output.json" if args.use_mirage else "torch_output.json"
-            save_path = os.path.join(DEFAULT_SAVE_DIR, filename)
-        else:
-            save_path = args.save_tokens
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-    else:
-        save_path = None
-
     if world_size > 1:
         dist.init_process_group(backend="nccl", init_method="env://")
     global print
@@ -150,30 +59,11 @@ if __name__ == "__main__":
 
     model_tag = "qwen3_06b"
     model, tokenizer = Qwen3Info.load_model(rank, model_tag)
-    total_num_requests = 1 if not args.use_mirage else args.max_num_batched_requests
+    total_num_requests = 1# if not args.use_mirage else args.max_num_batched_requests
     # get all model weight tensors
     tokens = torch.full((total_num_requests, args.max_seq_length), 0, dtype=torch.long, device="cuda")
 
     prompt = args.prompt
-    # This prompt is copied from https://github.com/apoorvumang/prompt-lookup-decoding/blob/main/demo-pld.ipynb
-    code_text = """import numpy as np
-                import matplotlib.pyplot as plt
-
-                # Calculate the average
-                average_throughput = np.mean(tokens_per_sec_arr)
-                print(f"Average Throughput: {average_throughput} tokens/sec")
-
-                # Plotting the histogram
-                plt.hist(tokens_per_sec_arr, bins=20, color='blue', edgecolor='black', alpha=0.7)
-                plt.title('Histogram of Throughput Values')
-                plt.xlabel('Tokens per Second')
-                plt.ylabel('Frequency')
-                plt.axvline(average_throughput, color='red', linestyle='dashed', linewidth=1)
-                plt.text(average_throughput*0.9, max(plt.ylim())*0.9, f'Average: {average_throughput:.2f}', color = 'red')
-                plt.show()
-                """
-    #question = "Can you please change x axis to start from 0"
-    #prompt = code_text + "\n" + question
     messages = [
         {
             "role": "system",
@@ -194,8 +84,6 @@ if __name__ == "__main__":
     # print("aa position_embeddings: ", position_embeddings[0].size(), position_embeddings[1].size()) # torch.Size([1, 32768, 128]) torch.Size([1, 32768, 128])
 
     # get all model weight tensors
-    input_tokens = torch.full((args.max_num_batched_tokens, 1), 0, dtype=torch.long, device="cuda")
-    output_tokens = torch.full((args.max_num_batched_tokens, 1), 0, dtype=torch.long, device="cuda")
     prev_pos = 0
 
     starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(
@@ -215,55 +103,116 @@ if __name__ == "__main__":
     decode_limit = prompt_len + output_len
     
     #############################
-    batch = 1
-    q_seqlen = 1
-    hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim, num_hidden_layers \
-        = Qwen3Info.get_basic_params(model_tag)
+    if args.use_mirage == True:
+        batch = 1
+        q_seqlen = 1
+        hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim, num_hidden_layers \
+            = Qwen3Info.get_basic_params(model_tag)
+            
+        layers = MkLayers(model_tag, instance_id=0, kernel_num=num_hidden_layers, world_size=1, rank=0, max_batch_size=1, trace_name=args.trace_name, profiling=args.profiling)
+        params, io_pt, public_pt = MkLayers.qwen3_alloc_torch_buffer(model_tag, num_hidden_layers, batch, q_seqlen=1)   
+        layers.qwen3_create_decoder_layer(model, num_hidden_layers, params, io_pt, public_pt, is_long_kv=True, is_no_compile=args.nc, output_dir=args.output_dir)
         
-    layers = MkLayers(model_tag, instance_id=0, kernel_num=num_hidden_layers, world_size=1, rank=0, max_batch_size=1, trace_name=args.trace_name, profiling=args.profiling)
-    params, io_pt, public_pt = MkLayers.qwen3_alloc_torch_buffer(model_tag, num_hidden_layers, batch, q_seqlen=1)   
-    layers.qwen3_create_decoder_layer(model, num_hidden_layers, params, io_pt, public_pt, is_long_kv=True, is_no_compile=args.nc, output_dir=args.output_dir)
-    
-    # layers = MkLayersHybridLayout(model_tag, instance_num=2, kernel_num=num_hidden_layers, world_size=1, rank=0, max_batch_size=1, trace_name=args.trace_name, profiling=args.profiling)
-    # layers.qwen3_create_decoder_layer(model_tag=model_tag, model=model, layer_num=num_hidden_layers, batch=batch, is_no_compile=args.nc, output_dir=args.output_dir)
+        # layers = MkLayersHybridLayout(model_tag, instance_num=2, kernel_num=num_hidden_layers, world_size=1, rank=0, max_batch_size=1, trace_name=args.trace_name, profiling=args.profiling)
+        # layers.qwen3_create_decoder_layer(model_tag=model_tag, model=model, layer_num=num_hidden_layers, batch=batch, is_no_compile=args.nc, output_dir=args.output_dir)
 
-    # cur_pos = 64
-    # prev_pos = 63
-    # hidden_states = torch.randn((batch, q_seqlen, hidden_size), dtype=torch.bfloat16, device="cuda")
-    # cos_embeddings = position_embeddings[0][:, prev_pos:cur_pos]
-    # sin_embeddings = position_embeddings[1][:, prev_pos:cur_pos]
-    # layers(cur_pos, (cos_embeddings, sin_embeddings), hidden_states.view(batch*q_seqlen, hidden_size))
-    
-    #############################
-    for cur_pos in range(prompt_len, decode_limit):
-        # print(cur_pos - 1)
-        step.fill_(cur_pos - 1)
-        input_ids = tokens[:, prev_pos:cur_pos]
-        cos_embeddings = position_embeddings[0][:, prev_pos:cur_pos]
-        sin_embeddings = position_embeddings[1][:, prev_pos:cur_pos]
-        # print("cos_embeddings: ", cos_embeddings.size(), "sin_embeddings: ", sin_embeddings.size()) # torch.Size([1, cur_pos, 128]) torch.Size([1, cur_pos, 128])
-        logits = model.forward(
-            mk_layers=layers,
-            cur_pos=cur_pos,
-            input_ids=input_ids,
-            position_embeddings=(cos_embeddings, sin_embeddings),
-            step=step,
-            stream=stream,
-        )
-        next_token = logits.argmax(dim=-1)
-        next_token = next_token[0, -1]
-        tokens[0, cur_pos] = next_token
-        prev_pos = cur_pos
-        if next_token == model.config.eos_token_id:
-            break
-        if cur_pos == prompt_len + warmup:
-            torch.cuda.synchronize()
-            starter.record()
-
+        # cur_pos = 64
+        # prev_pos = 63
+        # hidden_states = torch.randn((batch, q_seqlen, hidden_size), dtype=torch.bfloat16, device="cuda")
+        # cos_embeddings = position_embeddings[0][:, prev_pos:cur_pos]
+        # sin_embeddings = position_embeddings[1][:, prev_pos:cur_pos]
+        # layers(cur_pos, (cos_embeddings, sin_embeddings), hidden_states.view(batch*q_seqlen, hidden_size))
+        
+        #############################
+        for cur_pos in range(prompt_len, decode_limit):
+            # print(cur_pos - 1)
+            step.fill_(cur_pos - 1)
+            input_ids = tokens[:, prev_pos:cur_pos]
+            cos_embeddings = position_embeddings[0][:, prev_pos:cur_pos]
+            sin_embeddings = position_embeddings[1][:, prev_pos:cur_pos]
+            # print("cos_embeddings: ", cos_embeddings.size(), "sin_embeddings: ", sin_embeddings.size()) # torch.Size([1, cur_pos, 128]) torch.Size([1, cur_pos, 128])
+            logits = model.forward(
+                mk_layers=layers,
+                cur_pos=cur_pos,
+                input_ids=input_ids,
+                position_embeddings=(cos_embeddings, sin_embeddings),
+                step=step,
+                stream=stream,
+            )
+            next_token = logits.argmax(dim=-1)
+            next_token = next_token[0, -1]
+            tokens[0, cur_pos] = next_token
+            prev_pos = cur_pos
+            if next_token == model.config.eos_token_id:
+                break
+            if cur_pos == prompt_len + warmup:
+                torch.cuda.synchronize()
+                starter.record()
+    else:
+        for cur_pos in range(prompt_len, decode_limit):
+            # print(cur_pos - 1)
+            step.fill_(cur_pos - 1)
+            input_ids = tokens[:, prev_pos:cur_pos]
+            cos_embeddings = position_embeddings[0][:, prev_pos:cur_pos]
+            sin_embeddings = position_embeddings[1][:, prev_pos:cur_pos]
+            # print("cos_embeddings: ", cos_embeddings.size(), "sin_embeddings: ", sin_embeddings.size()) # torch.Size([1, cur_pos, 128]) torch.Size([1, cur_pos, 128])
+            logits = model.forward(
+                mk_layers=None,
+                cur_pos=cur_pos,
+                input_ids=input_ids,
+                position_embeddings=(cos_embeddings, sin_embeddings),
+                step=step,
+                stream=stream,
+            )
+            next_token = logits.argmax(dim=-1)
+            next_token = next_token[0, -1]
+            tokens[0, cur_pos] = next_token
+            prev_pos = cur_pos
+            if next_token == model.config.eos_token_id:
+                break
+            if cur_pos == prompt_len + warmup:
+                torch.cuda.synchronize()
+                starter.record()
+                
     ender.record()
     torch.cuda.synchronize()
     run_time = starter.elapsed_time(ender)
 
+    # #############
+    # cur_pos = 65
+    # hidden_states = torch.randn((batch, q_seqlen, hidden_size), dtype=torch.bfloat16, device="cuda")
+    # def mk_run_one_step():
+    #     mk_out = layers(cur_pos, (cos_embeddings, sin_embeddings), hidden_states.view(batch*q_seqlen, hidden_size))
+    #     return mk_out
+    
+    # for i in range(20):
+    #     torch.cuda.synchronize()
+    #     starter.record()
+    #     mk_run_one_step()
+    #     ender.record()
+    #     torch.cuda.synchronize()
+    #     print("time: ", starter.elapsed_time(ender))
+    # print("dims:", batch, q_seqlen, hidden_size)
+    # ################
+    
+    # ########################
+    # cur_pos = 100
+    # step.fill_(cur_pos - 1)
+    # torch.cuda.synchronize()
+    # starter.record()
+    # logits = model.forward(
+    #     mk_layers=layers,
+    #     cur_pos=cur_pos,
+    #     input_ids=input_ids,
+    #     position_embeddings=(cos_embeddings, sin_embeddings),
+    #     step=step,
+    #     stream=stream,
+    # )
+    # ender.record()
+    # torch.cuda.synchronize()
+    # print("time: ", starter.elapsed_time(ender))
+    # ###########################
+    
     end_idx = prev_pos + 1
     generated_ids = tokens[:, :end_idx]
 
@@ -274,26 +223,6 @@ if __name__ == "__main__":
             prompt_len, cur_pos - prompt_len, run_time / (cur_pos - prompt_len)
         )
     )
-    
-    # -------- CI dumps outputs to json files ----------
-    if save_path and rank == 0:
-        tokens_generated = max(0, end_idx - prompt_len)
-        per_tok_ms = run_time / max(tokens_generated, 1)
-        slice_end = min(end_idx, prompt_len + MAX_SAVE_TOKENS)
-        token_ids = tokens[0, prompt_len:slice_end].tolist()
-        out = {
-            "token_ids": token_ids,
-            "text": tokenizer.decode(tokens[0, :end_idx], skip_special_tokens=True),
-            "latency_ms_per_token": per_tok_ms,
-            "prompt_length": prompt_len,
-            "generate_length": tokens_generated,
-            "mode": "torch",
-        }
-        with open(save_path, "w") as f:
-            json.dump(out, f, indent=2)
-        print(f"Saved tokens to {save_path}")
-
-   
 
     if world_size > 1:
         dist.destroy_process_group()

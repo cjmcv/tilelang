@@ -272,6 +272,10 @@ if __name__ == "__main__":
         graph.replay()
         return ref_output
     
+    for i in range(100):
+        torch_ref()
+        
+    mk_run()
     reporter.generate_report(mk_run, torch_ref, 
                             warnup_iter=100, test_iter=200, 
                             allclose_iter=5, print_mode=1)

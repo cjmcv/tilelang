@@ -35,7 +35,7 @@ if __name__ == "__main__":
     stream = None
     print("before forward", hidden_states)
     
-    layer_num = 2 # num_hidden_layers
+    layer_num = 1 # num_hidden_layers
     layers = MkLayers(model_tag, instance_id=0, kernel_num=layer_num, world_size=1, rank=0, max_batch_size=1, trace_name=args.trace_name, profiling=args.profiling)
     params, io_pt, public_pt = MkLayers.qwen3_alloc_torch_buffer(model_tag, layer_num, batch, q_seqlen=1)   
     layers.qwen3_create_decoder_layer(model, layer_num, params, io_pt, public_pt, is_long_kv=True, is_no_compile=args.nc, output_dir=args.output_dir)
@@ -116,15 +116,15 @@ if __name__ == "__main__":
     print("mpk query0:\n", q1)
     print("torch query0:\n", q2)
     
-    print("mpk key0:\n", k1[0, 0, cur_pos-1:cur_pos, :, :])
-    print("torch key0:\n", k2[0, 0, cur_pos-1:cur_pos, :, :])
-    print("mpk key1:\n", k1[1, 0, cur_pos-1:cur_pos, :, :])
-    print("torch key1:\n", k2[1, 0, cur_pos-1:cur_pos, :, :])
+    # print("mpk key0:\n", k1[0, 0, cur_pos-1:cur_pos, :, :])
+    # print("torch key0:\n", k2[0, 0, cur_pos-1:cur_pos, :, :])
+    # print("mpk key1:\n", k1[1, 0, cur_pos-1:cur_pos, :, :])
+    # print("torch key1:\n", k2[1, 0, cur_pos-1:cur_pos, :, :])
     
-    print("mpk value0:\n", v1[0, 0, cur_pos-1:cur_pos, :, :])
-    print("torch value0:\n", v2[0, 0, cur_pos-1:cur_pos, :, :])
-    print("mpk value1:\n", v1[1, 0, cur_pos-1:cur_pos, :, :])
-    print("torch value1:\n", v2[1, 0, cur_pos-1:cur_pos, :, :])
+    # print("mpk value0:\n", v1[0, 0, cur_pos-1:cur_pos, :, :])
+    # print("torch value0:\n", v2[0, 0, cur_pos-1:cur_pos, :, :])
+    # print("mpk value1:\n", v1[1, 0, cur_pos-1:cur_pos, :, :])
+    # print("torch value1:\n", v2[1, 0, cur_pos-1:cur_pos, :, :])
     
     # print("mpk key0:\n", k1[0, 0, start_pos-1:decode_limit-1, :, :])
     # print("torch key0:\n", k2[0, 0, start_pos-1:decode_limit-1, :, :])
@@ -135,3 +135,12 @@ if __name__ == "__main__":
     # reporter.generate_report(mk_run, torch_ref, 
     #                         warnup_iter=1, test_iter=1, 
     #                         allclose_iter=2, print_mode=1)
+    
+    starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
+    for i in range(10):
+        torch.cuda.synchronize()
+        starter.record()
+        mk_run()
+        ender.record()
+        torch.cuda.synchronize()
+        print("time: ", starter.elapsed_time(ender))

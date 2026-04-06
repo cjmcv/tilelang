@@ -63,7 +63,7 @@ class MkLayers:
             self.mk.load_module(module_path, meta_tensors)
 
     @staticmethod
-    def qwen3_alloc_torch_buffer(model_tag, layer_num, batch, q_seqlen, max_kv_seqlen=4096):
+    def qwen3_alloc_torch_buffer(model_tag, layer_num, batch, q_seqlen, max_kv_seqlen=2048):
         hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim, num_hidden_layers \
             = Qwen3Info.get_basic_params(model_tag)
         

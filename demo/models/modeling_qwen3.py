@@ -39,6 +39,7 @@ from common.mk_layers import MkLayers, MkLayersHybridLayout
 
 from .rope import apply_rotary_pos_emb_triton
 
+starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Qwen2
 class Qwen3RMSNorm(nn.Module):
@@ -221,22 +222,22 @@ class Qwen3Attention(nn.Module):
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.key_cache, self.value_cache = kv_cache
-        # print("Qwen3Attention: ", config.num_attention_heads, config.num_key_value_heads, config.head_dim)
+        print("Qwen3Attention: ", config.num_attention_heads, config.num_key_value_heads, config.head_dim)
         assert kv_cache[0].shape == (
             config.num_hidden_layers,
             16,
-            4096,
+            2048,
             self.num_key_value_heads // world_size,
             self.head_dim,
         )
         assert kv_cache[1].shape == (
             config.num_hidden_layers,
             16,
-            4096,
+            2048,
             self.num_key_value_heads // world_size,
             self.head_dim,
         )
-        self.max_position_embeddings = 4096
+        self.max_position_embeddings = 2048 # 4096
         self.rope_theta = config.rope_theta
         self.is_causal = True
         self.attention_dropout = config.attention_dropout
@@ -539,20 +540,7 @@ class Qwen3Model(Qwen3PreTrainedModel):
         next_decoder_cache = None
         self.kv_last_page_len.copy_(step + 1)
 
-        
-        # for decoder_layer in self.layers:
-        #     layer_outputs = decoder_layer(
-        #         hidden_states,
-        #         attention_mask=causal_mask,
-        #         position_embeddings=position_embeddings,
-        #         step=step,
-        #         stream=stream,
-        #     )
-        #     hidden_states = layer_outputs[0]
-        
-        bsz, q_len, hidden_size = hidden_states.size()   
-        # if q_len > 1:
-        if cur_pos <= 64:
+        if mk_layers == None:
             for decoder_layer in self.layers:
                 layer_outputs = decoder_layer(
                     hidden_states,
@@ -562,16 +550,34 @@ class Qwen3Model(Qwen3PreTrainedModel):
                     stream=stream,
                 )
                 hidden_states = layer_outputs[0]
-                
-            if cur_pos == 64:
-                print("mk_layers.public_pt.key_cache_5d", mk_layers.public_pt.key_cache_5d.size())
-                mk_layers.public_pt.key_cache_5d[:, 0, :, :, :].copy_(self.kv_cache[0][:, 0, :, :, :])
-                mk_layers.public_pt.value_cache_5d[:, 0, :, :, :].copy_(self.kv_cache[1][:, 0, :, :, :])
         else:
-            print("size", bsz, q_len, hidden_size)
-            mk_out = mk_layers(cur_pos, position_embeddings, hidden_states.view(bsz*q_len, hidden_size))
-            print("outsize", mk_out.size())
-            hidden_states.copy_(mk_out.view(bsz, q_len, hidden_size))
+            bsz, q_len, hidden_size = hidden_states.size()   
+            # if q_len > 1:
+            if cur_pos <= 64:
+                for decoder_layer in self.layers:
+                    layer_outputs = decoder_layer(
+                        hidden_states,
+                        attention_mask=causal_mask,
+                        position_embeddings=position_embeddings,
+                        step=step,
+                        stream=stream,
+                    )
+                    hidden_states = layer_outputs[0]
+                    
+                if cur_pos == 64:
+                    print("mk_layers.public_pt.key_cache_5d", mk_layers.public_pt.key_cache_5d.size())
+                    mk_layers.public_pt.key_cache_5d[:, 0, :, :, :].copy_(self.kv_cache[0][:, 0, :, :, :])
+                    mk_layers.public_pt.value_cache_5d[:, 0, :, :, :].copy_(self.kv_cache[1][:, 0, :, :, :])
+            else:
+                # print("sizes: ", bsz, q_len, hidden_size)
+                torch.cuda.synchronize()
+                starter.record()
+                mk_out = mk_layers(cur_pos, position_embeddings, hidden_states.view(bsz*q_len, hidden_size))
+                ender.record()
+                torch.cuda.synchronize()
+                print("time: ", starter.elapsed_time(ender))
+                # print("outsize", mk_out.size())
+                hidden_states.copy_(mk_out.view(bsz, q_len, hidden_size))
             
         hidden_states = self.norm(hidden_states)
 

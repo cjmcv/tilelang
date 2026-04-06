@@ -63,8 +63,6 @@ git submodule add https://github.com/apache/tvm.git 3rdparty/tvm
    onelayer_size 和 onestep_size转为固定值，生成 #define
 
 0. 单kernel多布局切换。
-0. 实现fused_attn.py: mpk(batch, step), 添加step参数用于控制推理步数。gqa kernel动态选择时的布局兼容问题，如何处理？
-1. 可以先完成固定step的推理集成。
 
 1. block_dim: PersistentKernel中“TBGraph(CyTBGraph(grid_dim, block_dim”中的block_dim疑似没用，仅仅用于kernel模板参数的确认与校验。是否真的需要校验？
 2. 考虑tilelang端只生成代码而不编译，看能否减少耗时；
@@ -72,7 +70,6 @@ git submodule add https://github.com/apache/tvm.git 3rdparty/tvm
 5. gemv对比性能
 7. 分析：gemm1的4block -> silu_mul的2block，02->0, 13->1，能否只写回gemm1的后两个block 23，前两个block 01保留在smem，延递silu_mul上。
    尝试: 依托block的固定smem，通过多传入偏移量，实现跨task共享。
-
 
 8. 排查block数量不能超过sm数量的本质原因。（因为kernel限制一个sm仅持有一个block，当worker超过sm数量时，worker将会占据所有gpu资源，scheduler因缺少资源难以被启动，导致worker也接不到任务卡住）
 2. 跨步同步，不必每个task都读和写一次gmem。task添加标记，event的首task启动，后面连续多个不需要等待，计算完一次写。（大显卡不需要处理这个问题？）
