@@ -72,10 +72,6 @@ enum TaskType {
   TASK_GQA_DECODE = 123,
   TASK_ROPE = 124,
   TASK_NVSHMEM_COPY = 199,
-  TASK_SCHD_TASKS = 200,
-  TASK_SCHD_EVENTS = 201,
-  TASK_GET_EVENT = 202,
-  TASK_GET_NEXT_TASK = 203,
 };
 
 enum EventType {
@@ -116,12 +112,8 @@ struct EventDesc {
 struct FullTaskDesc {
   FullTaskDesc(TaskType t, int _variant_id)
       : task_type(t), variant_id(_variant_id), num_inputs(0), num_outputs(0),
-        trigger_event(EVENT_INVALID_ID), dependent_event(EVENT_INVALID_ID) {
-    task_metadata.raw_payload = ~0ull;
-  }
-  FullTaskDesc() {
-    task_metadata.raw_payload = ~0ull;
-  }
+        trigger_event(EVENT_INVALID_ID), dependent_event(EVENT_INVALID_ID) {}
+  FullTaskDesc() {}
   TaskType task_type;
   unsigned variant_id;
   int num_inputs, num_outputs;
@@ -134,20 +126,10 @@ struct FullTaskDesc {
       int expert_offset; // Used for MoE
     };
     struct {
-      int16_t request_id;    // Used for paged attention
-      uint16_t kv_idx;       // Used for paged attention split kv
-      int merge_task_offset; // Used for paged attention split kv merge
-    };
-    struct {
       size_t xfer_size_in_bytes; // Used for nvshmem
     };
-    unsigned long long raw_payload;
   } task_metadata;
 };
-
-static_assert(
-    sizeof(FullTaskDesc::TaskMetadata) == sizeof(unsigned long long),
-    "FullTaskDesc::TaskMetadata layout changed; update raw_payload type.");
 
 struct alignas(16) TaskDesc {
   TaskDesc(FullTaskDesc t)
@@ -176,9 +158,7 @@ struct alignas(16) TaskDesc {
     }
 #endif
   }
-  TaskDesc() {
-    task_metadata.raw_payload = ~0ull;
-  }
+  TaskDesc() {}
   TaskType task_type;
   unsigned variant_id;
   EventId trigger_event;

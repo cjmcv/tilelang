@@ -354,6 +354,7 @@ class MkLayers:
         self.update_step(cur_pos - 1, cos=position_embeddings[0], sin=position_embeddings[1])
         self.attn_layer_io.layer_in.pt.copy_(hidden_states)
         for layer_id in range(self.layer_num):
+            # print(layer_id)
             self.mk(self.params.batch, kernel_id=layer_id, layer_id=layer_id)  # attn的输入与mlp的输出是同一个tensor
         return self.mlp_layer_io.layer_out.pt
     
@@ -380,3 +381,5 @@ class MkLayersHybridLayout:
             return self.mk_layers[1](cur_pos, position_embeddings, hidden_states)
         
         
+# class MkModelInfer:
+    

@@ -732,13 +732,8 @@ private:
       code.e("FullTaskDesc "
             "task_desc(static_cast<TaskType>(task.at(\"task_type\")),");
       code.e("            task.at(\"variant_id\"));");
-      code.e("task_desc.task_metadata.request_id = "
-            "task.at(\"request_id\").get<int>();");
       code.e("task_desc.task_metadata.expert_offset = "
             "task.at(\"expert_offset\").get<int>();");
-      code.e("task_desc.task_metadata.kv_idx = task.at(\"kv_idx\").get<int>();");
-      code.e("task_desc.task_metadata.merge_task_offset = "
-            "task.at(\"merge_task_offset\").get<int>();");
       code.e("if (task.at(\"trigger_event\").is_number_integer()) {");
       code.e("task_desc.trigger_event = task.at(\"trigger_event\").get<unsigned "
             "long long int>();");
@@ -946,10 +941,7 @@ private:
               {"outputs", {}},
               {"trigger_event", EVENT_INVALID_ID},
               {"dependent_event", EVENT_INVALID_ID},
-              {"request_id", -1},
-              {"expert_offset", -1},
-              {"kv_idx", -1},
-              {"merge_task_offset", -1}});
+              {"expert_offset", -1}});
     }
     // generate task[1]
     {
@@ -961,10 +953,7 @@ private:
               {"outputs", {}},
               {"trigger_event", get_event_id(my_gpu_id, 1 /*event_pos*/, false /*is_nvshmem*/)},
               {"dependent_event", EVENT_INVALID_ID},
-              {"request_id", -1},
-              {"expert_offset", -1},
-              {"kv_idx", -1},
-              {"merge_task_offset", -1}});
+              {"expert_offset", -1}});
     }
 
     // generate all other tasks
@@ -1037,10 +1026,7 @@ private:
             {"outputs", {}},
             {"trigger_event", task_desc.trigger_event},
             {"dependent_event", task_desc.dependent_event},
-            {"request_id", task_desc.task_metadata.request_id},
-            {"expert_offset", task_desc.task_metadata.expert_offset},
-            {"kv_idx", task_desc.task_metadata.kv_idx},
-            {"merge_task_offset", task_desc.task_metadata.merge_task_offset}};
+            {"expert_offset", task_desc.task_metadata.expert_offset}};
 
         /////////////////////////
         // Input 

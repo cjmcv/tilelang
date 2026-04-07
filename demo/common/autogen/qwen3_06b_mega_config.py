@@ -20,3 +20,4 @@ class Qwen3MegaConfig06b:
     gqa_decode_layout_longkv  = ((1, 8, 4), (32, 64, 4), (16, 1, 1), (32, 64, 4))
     gqa_decode_layout_split_point = 64
     o_proj_layout = (16, 1, 1), (64, 16, 128)
+    lm_head = (2374, 1, 1), (64, 16, 128)

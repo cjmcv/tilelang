@@ -508,8 +508,6 @@ class Qwen3Model(Qwen3PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-        self.kv_last_page_len = torch.tensor([0], dtype=torch.int32, device="cuda")
-        
     def get_input_embeddings(self):
         return self.embed_tokens
 
@@ -527,17 +525,12 @@ class Qwen3Model(Qwen3PreTrainedModel):
         stream: torch.cuda.Stream = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
     ):
-        inputs_embeds = self.embed_tokens(input_ids)
-
         causal_mask = None
-
-        hidden_states = inputs_embeds
-
         # decoder layers
-        next_decoder_cache = None
-        self.kv_last_page_len.copy_(step + 1)
-
         if mk_layers == None:
+            inputs_embeds = self.embed_tokens(input_ids)
+            hidden_states = inputs_embeds
+        
             # torch.cuda.synchronize()
             # starter.record()
             for decoder_layer in self.layers:
@@ -549,13 +542,17 @@ class Qwen3Model(Qwen3PreTrainedModel):
                     stream=stream,
                 )
                 hidden_states = layer_outputs[0]
+                
+            hidden_states = self.norm(hidden_states)
             # ender.record()
             # torch.cuda.synchronize()
             # print("torch time: ", starter.elapsed_time(ender))
         else:
-            bsz, q_len, hidden_size = hidden_states.size()   
-            # if q_len > 1:
             if cur_pos <= 64:
+                inputs_embeds = self.embed_tokens(input_ids)
+                hidden_states = inputs_embeds
+                             
+                bsz, q_len, hidden_size = hidden_states.size()
                 for decoder_layer in self.layers:
                     layer_outputs = decoder_layer(
                         hidden_states,
@@ -565,25 +562,34 @@ class Qwen3Model(Qwen3PreTrainedModel):
                         stream=stream,
                     )
                     hidden_states = layer_outputs[0]
+                
+                hidden_states = self.norm(hidden_states)
                     
                 if cur_pos == 64:
                     print("mk_layers.public_pt.key_cache_5d", mk_layers.public_pt.key_cache_5d.size())
                     mk_layers.public_pt.key_cache_5d[:, 0, :, :, :].copy_(self.kv_cache[0][:, 0, :, :, :])
                     mk_layers.public_pt.value_cache_5d[:, 0, :, :, :].copy_(self.kv_cache[1][:, 0, :, :, :])
             else:
-                # print("sizes: ", bsz, q_len, hidden_size)
                 # torch.cuda.synchronize()
                 # starter.record()
+                
+                inputs_embeds = self.embed_tokens(input_ids)
+                hidden_states = inputs_embeds
+                bsz, q_len, hidden_size = hidden_states.size()
+                
+                # print("sizes: ", bsz, q_len, hidden_size)
+
                 mk_out = mk_layers(cur_pos, position_embeddings, hidden_states.view(bsz*q_len, hidden_size))
 
                 # print("outsize", mk_out.size())
                 hidden_states.copy_(mk_out.view(bsz, q_len, hidden_size))
+
+                hidden_states = self.norm(hidden_states)
+                
                 # ender.record()
                 # torch.cuda.synchronize()
-                # print("mpk time: ", starter.elapsed_time(ender))
+                # print("mpk time: ", starter.elapsed_time(ender))                
                 
-        hidden_states = self.norm(hidden_states)
-
         return (hidden_states,)
 
 
@@ -594,6 +600,7 @@ class Qwen3ForCausalLM(Qwen3PreTrainedModel, GenerationMixin):
         self.model = Qwen3Model(config, world_size, max_num_pages, page_size)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        print("config.hidden_size, config.vocab_size: ", config.hidden_size, config.vocab_size)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -636,6 +643,7 @@ class Qwen3ForCausalLM(Qwen3PreTrainedModel, GenerationMixin):
         **loss_kwargs,
     ):
 
+                
         outputs = self.model(
             mk_layers=mk_layers,
             cur_pos=cur_pos,
@@ -646,9 +654,14 @@ class Qwen3ForCausalLM(Qwen3PreTrainedModel, GenerationMixin):
             stream=stream,
             inputs_embeds=inputs_embeds,
         )
-
+        
+        torch.cuda.synchronize()
+        starter.record() 
         hidden_states = outputs[0]
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
-
+        
+        ender.record()
+        torch.cuda.synchronize()
+        print("mpk time: ", starter.elapsed_time(ender))        
         return logits

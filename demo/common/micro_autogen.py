@@ -137,6 +137,9 @@ class MicroAutoGen:
             if (layer_id == 8 or layer_id == 99):
                 kernel = MicroLinear(MicroLinearStrategy.GEMM_ADD, self.batch_size, self.hidden_size, self.num_heads*self.head_dim, dtype=self.dtype, accum_dtype=self.accum_dtype)
                 self._save_target_info(kernel, mode, code_dir, config_file, "o_proj_layout")
-            
+            if (layer_id == 9 or layer_id == 99):
+                # vocab_size: 151936
+                kernel = MicroLinear(MicroLinearStrategy.GEMM, self.batch_size, 151936, self.hidden_size, dtype=self.dtype, accum_dtype=self.accum_dtype)
+                self._save_target_info(kernel, mode, code_dir, config_file, "lm_head")
             
         

@@ -16,11 +16,6 @@ event_name_list = {
     123: "TASK_GQA_DECODE",
     124: "TASK_ROPE",
     199: "TASK_NVSHMEM_COPY",
-    200: "TASK_SCHD_TASKS",
-    201: "TASK_SCHD_EVENTS",
-    202: "TASK_GET_EVENT",
-    203: "TASK_GET_NEXT_TASK",
-    262: "TASK_TENSOR_INIT",
 }
 
 

@@ -57,7 +57,8 @@ if __name__ == "__main__":
     print("Input arguments:", args)
     print(f"world_size({world_size}) rank({rank})")
     torch.set_default_dtype(torch.bfloat16)
-
+    starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
+    
     model_tag = "qwen3_06b"
     model, tokenizer = Qwen3Info.load_model(rank, model_tag, page_size=MAX_KV_SEQLEN)
     total_num_requests = 1# if not args.use_mk else args.max_num_batched_requests
@@ -86,10 +87,6 @@ if __name__ == "__main__":
 
     # get all model weight tensors
     prev_pos = 0
-
-    starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(
-        enable_timing=True
-    )
     step = torch.full((total_num_requests, ), 0, dtype=torch.int32, device="cuda")
     num_new_tokens = torch.full((total_num_requests, ), 1, dtype=torch.int32, device="cuda")
     # print("step: ", step.size())
@@ -128,15 +125,15 @@ if __name__ == "__main__":
         #############################
         run_time = 0
         for cur_pos in range(prompt_len, decode_limit):
-            # print(cur_pos - 1)
-            torch.cuda.synchronize()
-            starter.record()
-                
+            # print(cur_pos - 1)   
             step.fill_(cur_pos - 1)
             input_ids = tokens[:, prev_pos:cur_pos]
             cos_embeddings = position_embeddings[0][:, prev_pos:cur_pos]
             sin_embeddings = position_embeddings[1][:, prev_pos:cur_pos]
             # print("cos_embeddings: ", cos_embeddings.size(), "sin_embeddings: ", sin_embeddings.size()) # torch.Size([1, cur_pos, 128]) torch.Size([1, cur_pos, 128])
+            
+            torch.cuda.synchronize()
+            starter.record()
             logits = model.forward(
                 mk_layers=layers,
                 cur_pos=cur_pos,
@@ -145,22 +142,21 @@ if __name__ == "__main__":
                 step=step,
                 stream=stream,
             )
-            next_token = logits.argmax(dim=-1)
-            next_token = next_token[0, -1]
-            tokens[0, cur_pos] = next_token
-            prev_pos = cur_pos
-            
             ender.record()
             torch.cuda.synchronize()
             one_step_time = starter.elapsed_time(ender)
             print("run_time: ", one_step_time)
             
+            next_token = logits.argmax(dim=-1)
+            next_token = next_token[0, -1]
+            tokens[0, cur_pos] = next_token
+            prev_pos = cur_pos
             if next_token == model.config.eos_token_id:
                 break
             
-            if cur_pos >= 64: # prompt_len + warmup:
-                print("add", cur_pos)
-                run_time += one_step_time
+            # if cur_pos >= 64: # prompt_len + warmup:
+            #     print("add", cur_pos)
+            #     run_time += one_step_time
     else:
         for cur_pos in range(prompt_len, decode_limit):
             # print(cur_pos - 1)
