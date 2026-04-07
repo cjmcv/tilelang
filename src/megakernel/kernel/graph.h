@@ -308,27 +308,27 @@ private:
                           std::vector<FullTaskDesc> &all_tasks,
                           std::map<dim3, TaskId, Dim3Comparator> const &pre_task_map,
                           std::map<dim3, TaskId, Dim3Comparator> &cur_task_map) {
-    printf("%s: task[%d] register_info (all_tasks: %d, all_events: %d, pre_task_map: %d, cur_task_map: %d).\n", 
+    printf("%s: task[%d] register_info (all_tasks: %ld, all_events: %ld, pre_task_map: %ld, cur_task_map: %ld).\n", 
       prefix_str.c_str(), task_type, all_tasks.size(), all_events.size(), pre_task_map.size(), cur_task_map.size());
     for (size_t i=0; i<all_tasks.size(); i++) {
-      printf("task %d: depend: %d, trigger: %d\n", i, all_tasks[i].dependent_event, all_tasks[i].trigger_event);
+      printf("task %ld: depend: %lld, trigger: %lld\n", i, all_tasks[i].dependent_event, all_tasks[i].trigger_event);
     }
     for (size_t i=0; i<all_events.size(); i++) {
-      printf("event %d: num: %d, first: %d, last: %d\n", i, all_events[i].num_triggers, all_events[i].first_task_id, all_events[i].last_task_id);
+      printf("event %ld: num: %d, first: %lld, last: %lld\n", i, all_events[i].num_triggers, all_events[i].first_task_id, all_events[i].last_task_id);
     }
     for (const auto& [key, task_id] : cur_task_map) {
-      printf("dim3(%d, %d, %d)->TaskId: %d.\n", key.x, key.y, key.z, task_id);
+      printf("dim3(%d, %d, %d)->TaskId: %lld.\n", key.x, key.y, key.z, task_id);
     }
   }
   void print_final_register_info(std::string prefix_str,
                           std::vector<EventDesc> &all_events,
                           std::vector<FullTaskDesc> &all_tasks) {
-    printf("%s: final_register_info (all_tasks: %d, all_events: %d).\n", 
+    printf("%s: final_register_info (all_tasks: %ld, all_events: %ld).\n", 
       prefix_str.c_str(), all_tasks.size(), all_events.size());
     for (size_t i=0; i<all_tasks.size(); i++)
-      printf("task %d: depend: %d, trigger: %d\n", i, all_tasks[i].dependent_event, all_tasks[i].trigger_event);
+      printf("task %ld: depend: %lld, trigger: %lld\n", i, all_tasks[i].dependent_event, all_tasks[i].trigger_event);
     for (size_t i=0; i<all_events.size(); i++)
-      printf("event %d: type: %d, num: %d, first: %d, last: %d\n", i, all_events[i].num_triggers, all_events[i].event_type, all_events[i].first_task_id, all_events[i].last_task_id);
+      printf("event %ld: type: %d, num: %d, first: %lld, last: %lld\n", i, all_events[i].num_triggers, all_events[i].event_type, all_events[i].first_task_id, all_events[i].last_task_id);
   }
   void create_events_add_tasks(
     TaskType task_type,

@@ -202,17 +202,11 @@ struct RuntimeConfig {
   int num_gpus, my_gpu_id;
   int num_tasks;
   int num_events;
-  unsigned long long int per_worker_queue_len, per_sched_queue_len;
-  unsigned long long int *worker_queue_last_ready_task_id;
-  unsigned long long int *sched_queue_last_ready_event_id;
-  unsigned long long int *sched_queue_next_free_event_id;
   EventCounter *all_event_counters;
   int *all_event_num_triggers;
   int **static_worker_tasks_index;
   TaskDesc *all_tasks;
   EventDesc *all_events;
-  TaskId **worker_queues;
-  EventId **sched_queues;
   TaskId *first_tasks;
   int batch_size;
   int *step;                    // Metadata for LLM serving
@@ -223,23 +217,10 @@ struct RuntimeConfig {
   int *onestep_size;         // Metadata for LLM serving
   int *onelayer_size;           // Metadata for LLM serving
   int layer_id;
-  long long *tokens;            // Metadata for LLM serving
-  long long *input_tokens;      // Metadata for LLM serving
-  long long *output_tokens;     // Metadata for LLM serving
-  long long eos_token_id;       // Metadata for LLM serving
-  int max_seq_length;           // Metadata for LLM serving
-  int *new_token_nums;          // Metadata for LLM serving
-  // int *qo_indptr_buffer;        // Metadata for LLM serving (paged attention)
-  // int *paged_kv_indptr_buffer;  // Metadata for LLM serving (paged attention)
-  // int *paged_kv_indices_buffer; // Metadata for LLM serving (paged attention)
-  // int *paged_kv_last_page_len_buffer; // Metadata for LLM serving
-
   int *infer_cnt; 
 
   void *profiler_buffer;
-  bool split_worker_scheduler;
   bool is_static_schedule;
-  cudaStream_t worker_stream, scheduler_stream;
 };
 
 } // namespace runtime

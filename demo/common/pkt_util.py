@@ -291,7 +291,7 @@ class Qwen3Info:
         return [hidden_size, intermediate_size, num_attention_heads, num_key_value_heads, head_dim, num_hidden_layers]
         
     @staticmethod
-    def load_model(rank, model_tag):
+    def load_model(rank, model_tag, page_size):
         from models.modeling_qwen3 import Qwen3ForCausalLM
         torch.cuda.set_device(rank)
         with torch.device("cuda"):
@@ -301,7 +301,7 @@ class Qwen3Info:
                 model_name = "/data/team/cjm/Qwen/Qwen3-4B"
             else:
                 print("!! Do not support model: ", model_tag)
-            model = Qwen3ForCausalLM.from_pretrained(model_name, world_size=1, max_num_pages=16, page_size=2048).to("cuda")
+            model = Qwen3ForCausalLM.from_pretrained(model_name, world_size=1, max_num_pages=16, page_size=page_size).to("cuda")
             tokenizer = AutoTokenizer.from_pretrained(model_name) 
         return model, tokenizer
     

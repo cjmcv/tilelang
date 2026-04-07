@@ -21,9 +21,10 @@ if __name__ == "__main__":
     model_tag = "qwen3_06b"
     batch = 1
     q_seqlen = 1
+    max_kv_seqlen = 1024
     hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim, num_hidden_layers \
         = Qwen3Info.get_basic_params(model_tag)
-    model, tokenizer = Qwen3Info.load_model(0, model_tag)
+    model, tokenizer = Qwen3Info.load_model(0, model_tag, page_size=max_kv_seqlen)
     
     positions = torch.arange(32768).unsqueeze(0).to(model.device)
     all_position_embeddings = model.model.rotary_emb(positions)
@@ -37,7 +38,7 @@ if __name__ == "__main__":
     
     layer_num = num_hidden_layers
     layers = MkLayers(model_tag, instance_id=0, kernel_num=layer_num, world_size=1, rank=0, max_batch_size=1, trace_name=args.trace_name, profiling=args.profiling)
-    params, io_pt, public_pt = MkLayers.qwen3_alloc_torch_buffer(model_tag, layer_num, batch, q_seqlen=1)   
+    params, io_pt, public_pt = MkLayers.qwen3_alloc_torch_buffer(model_tag, layer_num, batch, q_seqlen=1, max_kv_seqlen=max_kv_seqlen)   
     layers.qwen3_create_decoder_layer(model, layer_num, params, io_pt, public_pt, is_long_kv=True, is_no_compile=args.nc, output_dir=args.output_dir)
     
     # layers = MkLayersHybridLayout(model_tag, instance_num=2, kernel_num=layer_num, world_size=1, rank=0, max_batch_size=1, trace_name=args.trace_name, profiling=args.profiling)

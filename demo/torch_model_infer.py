@@ -8,10 +8,11 @@ from common.pkt_util import TorchRef, Qwen3Info
 from common.mk_layers import MkLayers, MkLayersHybridLayout
 
 DEFAULT_SAVE_DIR = os.path.join("outputs", "qwen3")
+MAX_KV_SEQLEN = 1024
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--use-mirage", action="store_true", help="Use Mirage kernels")
+    parser.add_argument("--use-mk", action="store_true", help="Use megakernel kernels")
     parser.add_argument("--output-dir", default=os.getenv("MEGAKERNEL_HOME", default=None)+"/demo/gen", help="Output files directory")
     parser.add_argument("--trace-name", default="qwen3", help="Perfetto trace output name")
     parser.add_argument("--profiling", action="store_true", help="Use Profiler to generate trace")
@@ -58,8 +59,8 @@ if __name__ == "__main__":
     torch.set_default_dtype(torch.bfloat16)
 
     model_tag = "qwen3_06b"
-    model, tokenizer = Qwen3Info.load_model(rank, model_tag)
-    total_num_requests = 1# if not args.use_mirage else args.max_num_batched_requests
+    model, tokenizer = Qwen3Info.load_model(rank, model_tag, page_size=MAX_KV_SEQLEN)
+    total_num_requests = 1# if not args.use_mk else args.max_num_batched_requests
     # get all model weight tensors
     tokens = torch.full((total_num_requests, args.max_seq_length), 0, dtype=torch.long, device="cuda")
 
@@ -103,7 +104,7 @@ if __name__ == "__main__":
     decode_limit = prompt_len + output_len
     
     #############################
-    if args.use_mirage == True:
+    if args.use_mk == True:
         batch = 1
         q_seqlen = 1
         hidden_size, intermediate_size, num_heads, num_kv_heads, head_dim, num_hidden_layers \
@@ -111,7 +112,7 @@ if __name__ == "__main__":
             
         print("num_hidden_layers: ", num_hidden_layers)
         layers = MkLayers(model_tag, instance_id=0, kernel_num=num_hidden_layers, world_size=1, rank=0, max_batch_size=1, trace_name=args.trace_name, profiling=args.profiling)
-        params, io_pt, public_pt = MkLayers.qwen3_alloc_torch_buffer(model_tag, num_hidden_layers, batch, q_seqlen=1)   
+        params, io_pt, public_pt = MkLayers.qwen3_alloc_torch_buffer(model_tag, num_hidden_layers, batch, q_seqlen=1, max_kv_seqlen=MAX_KV_SEQLEN)   
         layers.qwen3_create_decoder_layer(model, num_hidden_layers, params, io_pt, public_pt, is_long_kv=True, is_no_compile=args.nc, output_dir=args.output_dir)
         
         # layers = MkLayersHybridLayout(model_tag, instance_num=2, kernel_num=num_hidden_layers, world_size=1, rank=0, max_batch_size=1, trace_name=args.trace_name, profiling=args.profiling)
@@ -125,8 +126,12 @@ if __name__ == "__main__":
         # layers(cur_pos, (cos_embeddings, sin_embeddings), hidden_states.view(batch*q_seqlen, hidden_size))
         
         #############################
+        run_time = 0
         for cur_pos in range(prompt_len, decode_limit):
             # print(cur_pos - 1)
+            torch.cuda.synchronize()
+            starter.record()
+                
             step.fill_(cur_pos - 1)
             input_ids = tokens[:, prev_pos:cur_pos]
             cos_embeddings = position_embeddings[0][:, prev_pos:cur_pos]
@@ -144,11 +149,18 @@ if __name__ == "__main__":
             next_token = next_token[0, -1]
             tokens[0, cur_pos] = next_token
             prev_pos = cur_pos
+            
+            ender.record()
+            torch.cuda.synchronize()
+            one_step_time = starter.elapsed_time(ender)
+            print("run_time: ", one_step_time)
+            
             if next_token == model.config.eos_token_id:
                 break
-            if cur_pos == prompt_len + warmup:
-                torch.cuda.synchronize()
-                starter.record()
+            
+            if cur_pos >= 64: # prompt_len + warmup:
+                print("add", cur_pos)
+                run_time += one_step_time
     else:
         for cur_pos in range(prompt_len, decode_limit):
             # print(cur_pos - 1)
@@ -175,9 +187,9 @@ if __name__ == "__main__":
                 torch.cuda.synchronize()
                 starter.record()
                 
-    ender.record()
-    torch.cuda.synchronize()
-    run_time = starter.elapsed_time(ender)
+        ender.record()
+        torch.cuda.synchronize()
+        run_time = starter.elapsed_time(ender)
 
     #############
     cur_pos = 65

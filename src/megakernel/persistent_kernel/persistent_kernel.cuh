@@ -108,21 +108,9 @@ __device__ __forceinline__ size_t get_event_position_index(EventId event_id) {
 }
 
 __device__ __forceinline__ void prepare_queue(RuntimeConfig config) {
-  // Initialize worker queue last task id
-  // Each worker now maintains a local and a remote worker queue
-  for (int i = blockIdx.x * blockDim.x + threadIdx.x;
-       i < 2 * config.num_workers;
-       i += blockDim.x * gridDim.x) {
-    config.worker_queue_last_ready_task_id[i] = 0;
-  }
   // Initialize scheduler queue last event id
   // We maintain one extra scheduler queue for the global scheduler
   int num_schedulers = config.num_local_schedulers + config.num_remote_schedulers;
-  for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < num_schedulers + 1;
-       i += blockDim.x * gridDim.x) {
-    config.sched_queue_last_ready_event_id[i] = 0;
-    config.sched_queue_next_free_event_id[i] = 0;
-  }
   // Initialize all event counters
   for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < config.num_events;
        i += blockDim.x * gridDim.x) {
@@ -135,9 +123,6 @@ __device__ __forceinline__ void prepare_queue(RuntimeConfig config) {
     *config.infer_cnt = 0;
 
     assert(config.all_events[end_of_task_graph_event_pos].event_type == EVENT_END_OF_TASK_GRAPH);
-    config.sched_queue_next_free_event_id[0] = 1;
-    config.sched_queues[0][0] = end_of_task_graph_event_pos;
-    config.sched_queue_last_ready_event_id[0] = 1;
   }
 }
 
@@ -298,12 +283,9 @@ extern "C" void init_persistent_kernel(int kernel_id,
 #endif
 
   global_runtime_config[kernel_id].infer_cnt = gpu_malloc<int>(sizeof(int));
-  global_runtime_config[kernel_id].per_worker_queue_len = 1024;
-  global_runtime_config[kernel_id].per_sched_queue_len = 1024;
   global_runtime_config[kernel_id].num_gpus = npes;
   global_runtime_config[kernel_id].my_gpu_id = mype;
   global_runtime_config[kernel_id].num_graphs = 1;
-  global_runtime_config[kernel_id].split_worker_scheduler = false;
   global_runtime_config[kernel_id].is_static_schedule = true;
 
   std::vector<FullTaskDesc> all_fulltasks;
@@ -451,17 +433,6 @@ extern "C" void init_persistent_kernel(int kernel_id,
                host_tasks_index_arr.data(),
                num_workers * sizeof(int*), cudaMemcpyHostToDevice);
   }
-
-  // Initialize worker queue last task id
-  // Each worker now maintains a local and a remote worker queue
-  global_runtime_config[kernel_id].worker_queue_last_ready_task_id =
-      gpu_malloc<unsigned long long int>((num_workers * 2) * sizeof(unsigned long long int));
-  //  Initialize scheduler queue last event id
-  //  We maintain one extra scheduler queue for the global scheduler
-  global_runtime_config[kernel_id].sched_queue_last_ready_event_id =
-      gpu_malloc<unsigned long long int>((num_schedulers + 1) * sizeof(unsigned long long int));
-  global_runtime_config[kernel_id].sched_queue_next_free_event_id =
-      gpu_malloc<unsigned long long int>((num_schedulers + 1) * sizeof(unsigned long long int));
   //  Initialize all event counters
   global_runtime_config[kernel_id].all_event_counters = gpu_malloc<EventCounter>(all_events.size() * sizeof(EventCounter));
   global_runtime_config[kernel_id].all_event_num_triggers = gpu_malloc<int>(all_events.size() * sizeof(int));
@@ -490,33 +461,7 @@ extern "C" void init_persistent_kernel(int kernel_id,
              all_events.data(),
              all_events.size() * sizeof(EventDesc),
              cudaMemcpyHostToDevice);
-  // Initialize worker queues
-  {
-    std::vector<TaskId *> host_worker_queues;
-    for (int i = 0; i < (num_workers * 2); i++) {
-      TaskId *worker_queue = gpu_malloc<TaskId>(
-          global_runtime_config[kernel_id].per_worker_queue_len * sizeof(TaskId));
-      host_worker_queues.push_back(worker_queue);
-    }
-    global_runtime_config[kernel_id].worker_queues = gpu_malloc<TaskId *>((num_workers * 2) * sizeof(TaskId *));
-    cudaMemcpy(global_runtime_config[kernel_id].worker_queues,
-               host_worker_queues.data(),
-               (num_workers * 2) * sizeof(TaskId *),
-               cudaMemcpyHostToDevice);
-  }
-  // Initialize scheduler queues
-  {
-    std::vector<EventId *> host_sched_queues;
-    for (int i = 0; i < (num_schedulers + 1); i++) {
-      EventId *sched_queue = gpu_malloc<EventId>(global_runtime_config[kernel_id].per_sched_queue_len * sizeof(EventId));
-      host_sched_queues.push_back(sched_queue);
-    }
-    global_runtime_config[kernel_id].sched_queues = gpu_malloc<EventId *>((num_schedulers + 1) * sizeof(EventId *));
-    cudaMemcpy(global_runtime_config[kernel_id].sched_queues,
-               host_sched_queues.data(),
-               (num_schedulers + 1) * sizeof(EventId *),
-               cudaMemcpyHostToDevice);
-  }
+
   // Initialize first tasks
   {
     global_runtime_config[kernel_id].first_tasks = gpu_malloc<TaskId>(first_tasks.size() * sizeof(TaskId));
@@ -530,9 +475,6 @@ extern "C" void init_persistent_kernel(int kernel_id,
   cudaFuncSetAttribute(static_persistent_kernel,
                        cudaFuncAttributeMaxDynamicSharedMemorySize,
                        MAX_DYNAMIC_SHARED_MEMORY_SIZE);
-  // Create worker and scheduler streams
-  cudaStreamCreate(&global_runtime_config[kernel_id].worker_stream);
-  cudaStreamCreate(&global_runtime_config[kernel_id].scheduler_stream);
 }
 
 void print_smem_size() {
@@ -579,8 +521,6 @@ extern "C" void launch_persistent_kernel(int kernel_id, int batch_size, int laye
 }
 
 extern "C" void finalize_persistent_kernel(int kernel_id) {
-  gpu_free(global_runtime_config[kernel_id].sched_queue_last_ready_event_id);
-  gpu_free(global_runtime_config[kernel_id].sched_queue_next_free_event_id);
   gpu_free(global_runtime_config[kernel_id].all_event_counters);
   gpu_free(global_runtime_config[kernel_id].all_event_num_triggers);
   gpu_free(global_runtime_config[kernel_id].all_tasks);
@@ -602,32 +542,9 @@ extern "C" void finalize_persistent_kernel(int kernel_id) {
     gpu_free(global_runtime_config[kernel_id].static_worker_tasks_index);
   }
 
-  std::vector<TaskId *> host_worker_queues(num_workers * 2);
-  cudaMemcpy(host_worker_queues.data(),
-             global_runtime_config[kernel_id].worker_queues,
-             (num_workers * 2) * sizeof(TaskId *),
-             cudaMemcpyDeviceToHost);
-  for (int i = 0; i < 2 * num_workers; i++) {
-    gpu_free(host_worker_queues[i]);
-  }
-  gpu_free(global_runtime_config[kernel_id].worker_queues);
-  int num_schedulers = global_runtime_config[kernel_id].num_local_schedulers +
-                       global_runtime_config[kernel_id].num_remote_schedulers;
-  std::vector<EventId *> host_sched_queues(num_schedulers + 1);
-  cudaMemcpy(host_sched_queues.data(),
-             global_runtime_config[kernel_id].sched_queues,
-             (num_schedulers + 1) * sizeof(EventId *),
-             cudaMemcpyDeviceToHost);
-  for (int i = 0; i < num_schedulers + 1; i++) {
-    gpu_free(host_sched_queues[i]);
-  }
-  gpu_free(global_runtime_config[kernel_id].sched_queues);
   gpu_free(global_runtime_config[kernel_id].first_tasks);
 #ifdef USE_NVSHMEM
   nvshmem_barrier_all();
   nvshmem_finalize();
 #endif
-  // Free worker and scheduler streams
-  cudaStreamDestroy(global_runtime_config[kernel_id].worker_stream);
-  cudaStreamDestroy(global_runtime_config[kernel_id].scheduler_stream);
 }

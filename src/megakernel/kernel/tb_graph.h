@@ -72,8 +72,7 @@ public:
   TBGraph &operator=(TBGraph const &) = delete;
   // input operator
       
-  kernel::DTensor *new_input(megakernel::kernel::DTensor const *dtensor,
-                     int3 input_map){
+  kernel::DTensor *new_input(megakernel::kernel::DTensor const *dtensor, int3 input_map){
     TBOperator *op = new TBOperator(grid_dim, *dtensor, input_map);
     assert(op != nullptr);
     operators.push_back(op);
