@@ -307,15 +307,18 @@ extern "C" void init_persistent_kernel(int kernel_id,
     all_tasks.push_back(task_desc);
   }
 
+   ///////////////////////////////////////////////
+  // Static Scheduling Scheme
   // is_static_schedule
   {
     global_runtime_config[kernel_id].num_tasks = all_tasks.size();
     int num_workers = global_runtime_config[kernel_id].num_workers;
     int tasks_each_worker = (all_tasks.size() + num_workers - 1) / num_workers;
-    int capacity_each_worker = (tasks_each_worker + 1) * 1.5; // each_worker: 0:len, 1:task0, 2:task1... capacity=task_num+1
+    int capacity_each_worker = all_tasks.size(); // (tasks_each_worker + 1) * 1.5; // each_worker: 0:len, 1:task0, 2:task1... capacity=task_num+1
     // printf("capacity_each_worker: %d.\n", capacity_each_worker);
 
     // 按dep event对task分组
+    // 一个event对应一组task，该event满足则对应task均可执行。
     std::vector<std::vector<int>> event_task_ids;
     event_task_ids.resize(all_events.size());
     for (int i=0; i<all_tasks.size(); i++) {
@@ -329,8 +332,10 @@ extern "C" void init_persistent_kernel(int kernel_id,
         }
       }
     }
-    ///////////////////////////////////////////////
-    // Static Scheduling Scheme
+  
+    // host存放阶段，用于下面cudaMemcpy到显存
+    // host_tasks_index[worker_id] => 属于该worker的所有task
+    // host_tasks_index[worker_id][0], 表示该worker有多少个task
     std::vector<std::vector<int>> host_tasks_index;
     host_tasks_index.resize(num_workers);
     for (int i=0; i<num_workers; i++) {
@@ -351,39 +356,83 @@ extern "C" void init_persistent_kernel(int kernel_id,
     //   host_tasks_index[i][0] = cnt;
     // }
 
-    // 2. 按event分组填充task到worker
+    // // 2. 按event分组填充task到worker
+    // int wid = 0;
+    // for (int ei=0; ei<event_task_ids.size(); ei++) {
+    //   int task_id = 0;
+    //   int task_num = event_task_ids[ei].size();
+    //   if (task_num == 0) continue;
+
+    //   int base_num = task_num / num_workers; // (task_num + num_workers - 1) / num_workers;
+    //   int remainder = task_num % num_workers;
+      
+    //   int tasks_assigned = 0;
+    //   int idx = 0;  // 对应该轮的第几个worker，每个event重置1次，使前remainder个worker多拿一个task
+    //   while (tasks_assigned < task_num) {
+    //     int target_count = base_num + (idx < remainder ? 1 : 0);          // wid 当前该拿多少
+    //     int actual_count = min(target_count, task_num - tasks_assigned);  // 边界处理
+    //     // printf("[%d]actual_count: %d.\n", ei, actual_count);
+
+    //     // TaskDesc task_desc = all_tasks[event_task_ids[ei][tasks_assigned]];
+    //     // if (task_desc.task_type == TASK_SILU_MUL) {
+    //     //   static int cnt = 0;
+    //     //   if (cnt < (20-4)*2 && wid != 0 && wid != 17 && wid != 18 && wid != 19) {
+    //     //     cnt++; 
+    //     //     wid = (wid + 1) % num_workers;
+    //     //     continue;            
+    //     //   }
+    //     // }
+
+    //     for (int i = 0; i < actual_count; i++) {
+    //       host_tasks_index[wid][host_tasks_index[wid][0] + 1] = event_task_ids[ei][tasks_assigned + i];
+    //       host_tasks_index[wid][0]++;
+    //     }
+    //     tasks_assigned += actual_count;
+    //     idx++;
+    //     wid = (wid + 1) % num_workers;
+    //   }
+    // }
+
+    // // 3. 按event分组填充task到worker，每个event的任务都从worker0开始
+    // for (int ei=0; ei<event_task_ids.size(); ei++) {
+    //   int task_id = 0;
+    //   int task_num = event_task_ids[ei].size();
+    //   if (task_num == 0) continue;
+
+    //   int wid = 0;
+    //   int base_num = task_num / num_workers; // (task_num + num_workers - 1) / num_workers;
+    //   int remainder = task_num % num_workers;
+      
+    //   int tasks_assigned = 0;
+    //   int idx = 0;  // 对应该轮的第几个worker，每个event重置1次，使前remainder个worker多拿一个task
+    //   while (tasks_assigned < task_num) {
+    //     int target_count = base_num + (idx < remainder ? 1 : 0);          // wid 当前该拿多少
+    //     int actual_count = min(target_count, task_num - tasks_assigned);  // 边界处理
+
+    //     for (int i = 0; i < actual_count; i++) {
+    //       host_tasks_index[wid][host_tasks_index[wid][0] + 1] = event_task_ids[ei][tasks_assigned + i];
+    //       host_tasks_index[wid][0]++;
+    //     }
+    //     tasks_assigned += actual_count;
+    //     idx++;
+    //     wid = (wid + 1) % num_workers;
+    //   }
+    // }
+
+    // 3. 按event分组填充task到worker
     int wid = 0;
     for (int ei=0; ei<event_task_ids.size(); ei++) {
       int task_id = 0;
       int task_num = event_task_ids[ei].size();
       if (task_num == 0) continue;
-
-      int base_num = task_num / num_workers; // (task_num + num_workers - 1) / num_workers;
-      int remainder = task_num % num_workers;
       
       int tasks_assigned = 0;
-      int idx = 0;  // 对应该轮的第几个worker，每个event重置1次，使前remainder个worker多拿一个task
       while (tasks_assigned < task_num) {
-        int target_count = base_num + (idx < remainder ? 1 : 0);          // wid 当前该拿多少
-        int actual_count = min(target_count, task_num - tasks_assigned);  // 边界处理
-        // printf("[%d]actual_count: %d.\n", ei, actual_count);
-
-        // TaskDesc task_desc = all_tasks[event_task_ids[ei][tasks_assigned]];
-        // if (task_desc.task_type == TASK_SILU_MUL) {
-        //   static int cnt = 0;
-        //   if (cnt < (20-4)*2 && wid != 0 && wid != 17 && wid != 18 && wid != 19) {
-        //     cnt++; 
-        //     wid = (wid + 1) % num_workers;
-        //     continue;            
-        //   }
-        // }
-
-        for (int i = 0; i < actual_count; i++) {
-          host_tasks_index[wid][host_tasks_index[wid][0] + 1] = event_task_ids[ei][tasks_assigned + i];
-          host_tasks_index[wid][0]++;
+        if (tasks_assigned >= task_num) {
+          break;
         }
-        tasks_assigned += actual_count;
-        idx++;
+        host_tasks_index[wid][host_tasks_index[wid][0] + 1] = event_task_ids[ei][tasks_assigned++];
+        host_tasks_index[wid][0]++;
         wid = (wid + 1) % num_workers;
       }
     }
@@ -410,7 +459,8 @@ extern "C" void init_persistent_kernel(int kernel_id,
       int num = host_tasks_index[i][0];
       printf("worker[%d]-(%d): ", i, num);
       for (int j=0; j<num; j++) {
-        printf("%d, ", host_tasks_index[i][j+1]);
+        int id = host_tasks_index[i][j+1];
+        printf("%d(%d), ", id, all_tasks[id].task_type);
       }
       printf("\n");
     }

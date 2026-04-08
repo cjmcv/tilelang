@@ -192,6 +192,7 @@ class MkLayers:
         return self.params, self.public_pt, self.attn_layer_io, self.mlp_layer_io
     
     def qwen3_create_attn_layer(self, model, layer_id, is_long_kv = False, reuse_instance = False):
+        # rmsnorm -> qkv_proj -> q/k rmsnorm -> rope -> gqa -> out_proj with_residual
         w_input_layernorm_torch, w_q_norm_torch, w_k_norm_torch, \
         w_q_torch, w_k_torch, w_v_torch, w_out_proj_torch, \
         k_cache_torch, v_cache_torch = Qwen3Info.get_weight_qwen3_attention(model, layer_id)
@@ -276,6 +277,7 @@ class MkLayers:
         )
     
     def qwen3_create_mlp_layer(self, model, layer_id, reuse_instance = False):
+        # rmsnorm -> gateup_proj -> silu_mul -> down_proj with res
         w_rms_norm_torch, w_gate_proj, w_up_proj, w_down_proj_torch = Qwen3Info.get_weight_qwen3_mlp(model, layer_id)
         self.w_mlp_gateup_proj.append(torch.cat((w_gate_proj, w_up_proj), 0).contiguous())
         

@@ -523,6 +523,41 @@ def test_replace_weight(mk, max_batch_size, batch_size, N, K, spec_layout):
     #                         warnup_iter=100, test_iter=100, 
     #                         allclose_iter=5, print_mode=1)
  
+def test_prefetch_weight(mk, max_batch_size, batch_size, N, K, spec_layout):
+    x_torch = torch.randn((max_batch_size, K), dtype=torch.bfloat16, device="cuda")
+    # w_torch = w_gatedup_torch 
+    w_torch = torch.randn((N, K), dtype=torch.bfloat16, device="cuda")
+    out_torch = torch.zeros((max_batch_size, N), dtype=torch.bfloat16, device="cuda")
+    print("x: ", x_torch.data_ptr(), "w: ", w_torch.data_ptr(), "o: ", out_torch.data_ptr())
+    
+    x = mk.attach_input(torch_tensor=x_torch, name="in")
+    w = mk.attach_input(torch_tensor=w_torch, name="w")
+    linear_out = mk.attach_input(torch_tensor=out_torch, name="linear_out")
+
+    # grid_dim, block_dim(实际是tile_dim), thread_num(实际是block_dim, 固定为threadIdx.x==128或256, 其他维度为1)
+    
+    mk.linear_layer(
+        input=x,
+        weight=w,
+        output=linear_out,
+        sync_mode=(0, 0, 0),
+        layout=spec_layout,
+    )
+    layers.compile_load(is_no_compile=args.nc, output_dir=args.output_dir)
+    
+    def torch_ref():
+        return TorchRef.linear(x_torch[:batch_size], w_torch)
+    
+    def target_func():
+        mk(batch_size)
+        return out_torch[:batch_size]
+        
+    # target_output = target_func()
+    # ref_output = torch_ref()
+    reporter.generate_report(target_func, torch_ref, 
+                            warnup_iter=100, test_iter=100, 
+                            allclose_iter=5, print_mode=1)
+    
 if __name__ == "__main__":
     max_batch_size = 1
     batch_size = 1
@@ -573,11 +608,12 @@ if __name__ == "__main__":
     # test_linear_residual(mk, max_batch_size, batch_size, hidden_size, num_heads*head_dim, layout.o_proj_layout)
     
     #######################################
-    test_replace_weight(mk, max_batch_size, batch_size, intermediate_size*2, hidden_size, layout.linear1_layout)
+    # test_replace_weight(mk, max_batch_size, batch_size, intermediate_size*2, hidden_size, layout.linear1_layout)
     # test_gqa_decode_multi_instance(mk, layout, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, seqlen_kv=seqlen_kv, head_dim=head_dim)
     # test_parallel_rms_norm(mk, layout, max_batch_size, batch_size, hidden_size)
     # test_rope_fused(mk, layout, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim)
     
+    test_prefetch_weight(mk, max_batch_size, batch_size, (num_heads+2*num_kv_heads)*head_dim, hidden_size, layout.qkv_proj_layout)
     print("Test single_mega completed.")
     # ncu --set full --section "SpeedOfLight_RooflineChart" -k "kernel" -o my_profile python demo/single_linear.py --nc
     # ncu --set full --section "SpeedOfLight_RooflineChart" -k "persistent_kernel" -o my_profile python demo/single_linear.py

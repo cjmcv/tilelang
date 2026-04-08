@@ -6,7 +6,6 @@ import megakernel as mi
 from common.pkt_util import TorchRef, PerfReporter, Qwen3Info
 from common.mk_layers import MkLayers
 
-WITH_RMS_NORM = 1
 WITH_RESIDUAL = 1
 
 if __name__ == "__main__":
@@ -55,79 +54,66 @@ if __name__ == "__main__":
     mlp_out = mk.attach_input(torch_tensor=out_torch, name="mlp_out")
     
     x_residual = x
-    if WITH_RMS_NORM:
-        rms_out = mk.new_tensor(dims=(max_batch_size, hidden_size), dtype=mi.bfloat16, name="rms_out", io_category="cuda_tensor")
-        mk.rmsnorm_layer(
-            input=x,
-            weight=w_rms_norm,
-            output=rms_out,
-            sync_mode=(0, 0, 0),
-            layout=layout.rmsnorm_layout,
-        )
-        x = rms_out
-        
+
+    rms_out = mk.new_tensor(dims=(max_batch_size, hidden_size), dtype=mi.bfloat16, name="rms_out", io_category="cuda_tensor")
+    mk.rmsnorm_layer(
+        input=x,
+        weight=w_rms_norm,
+        output=rms_out,
+        sync_mode=(0, 0, 0),
+        layout=layout.rmsnorm_layout,
+    )
+
     # mlp_mid_torch = torch.zeros((max_batch_size, intermediate_size*2), dtype=torch.bfloat16, device="cuda")
     # mlp_mid = mk.attach_input(torch_tensor=mlp_mid_torch, name="mlp_mid")
     mlp_mid = mk.new_tensor(dims=(max_batch_size, intermediate_size*2), dtype=mi.bfloat16, name="mlp_mid", io_category="cuda_tensor")
     mk.linear_layer(
-        input=x,
+        input=rms_out,
         weight=w_gatedup,
         output=mlp_mid,
         sync_mode=(0, 0, 0),
         layout=layout.linear1_layout,
     )
     
-    if 1:
-        # silu_mul_out_torch = torch.zeros((max_batch_size, intermediate_size), dtype=torch.bfloat16, device="cuda")
-        # silu_mul_out = mk.attach_input(torch_tensor=silu_mul_out_torch, name="silu_mul_out")
-        # mlp_out_torch = silu_mul_out_torch
-        silu_mul_out = mk.new_tensor(dims=(max_batch_size, intermediate_size), dtype=mi.bfloat16, name="silu_mul_out", io_category="cuda_tensor")
-        mk.silu_mul_layer(
-            input=mlp_mid,
-            output=silu_mul_out,
-            sync_mode=(2, 0, 0),
-            layout=layout.silu_mul_layout,
-            # grid_dim=(2, 4, 1), tile_dim=(128, 1, 1),
-            # sync_mode=(2, 0, 0),
+    # silu_mul_out_torch = torch.zeros((max_batch_size, intermediate_size), dtype=torch.bfloat16, device="cuda")
+    # silu_mul_out = mk.attach_input(torch_tensor=silu_mul_out_torch, name="silu_mul_out")
+    # mlp_out_torch = silu_mul_out_torch
+    silu_mul_out = mk.new_tensor(dims=(max_batch_size, intermediate_size), dtype=mi.bfloat16, name="silu_mul_out", io_category="cuda_tensor")
+    mk.silu_mul_layer(
+        input=mlp_mid,
+        output=silu_mul_out,
+        sync_mode=(2, 0, 0),
+        layout=layout.silu_mul_layout,
+        # grid_dim=(2, 4, 1), tile_dim=(128, 1, 1),
+        # sync_mode=(2, 0, 0),
+    )
+    if WITH_RESIDUAL:
+        mk.linear_with_residual_layer(
+            input=silu_mul_out,
+            weight=w_down_proj,
+            residual=x_residual,
+            output=mlp_out,
+            sync_mode=(0, 0, 0),
+            layout=layout.linear2_layout,
         )
-        if WITH_RESIDUAL:
-            mk.linear_with_residual_layer(
-                input=silu_mul_out,
-                weight=w_down_proj,
-                residual=x_residual,
-                output=mlp_out,
-                sync_mode=(0, 0, 0),
-                layout=layout.linear2_layout,
-            )
-        else:
-            mk.linear_layer(
-                input=silu_mul_out,
-                weight=w_down_proj,
-                output=mlp_out,
-                sync_mode=(0, 0, 0),
-                layout=layout.inear2_layout,
-            )
     else:
-        mk.silu_mul_linear_layer(
-            input=mlp_mid,
+        mk.linear_layer(
+            input=silu_mul_out,
             weight=w_down_proj,
             output=mlp_out,
-            grid_dim=(20, 1, 1), tile_dim=(128, 64, 64),
-            sync_mode=(2, 0, 0),
+            sync_mode=(0, 0, 0),
+            layout=layout.inear2_layout,
         )
+
     layers.compile_load(is_no_compile=args.nc, output_dir=args.output_dir)
     
     ###
     def ref_run():
-        if WITH_RMS_NORM:
-            return TorchRef.norm_mlp(x_torch[:batch_size], w_rms_norm_torch, w_gatedup_torch, w_down_proj_torch)
-        elif WITH_RMS_NORM and WITH_RESIDUAL:
+        if WITH_RESIDUAL:
             return TorchRef.norm_mlp(x_torch[:batch_size], w_rms_norm_torch, w_gatedup_torch, w_down_proj_torch) + x_torch[:batch_size]
         else:
-            return TorchRef.mlp(x_torch[:batch_size], w_gatedup_torch, w_down_proj_torch)
-        return TorchRef.linear(x_torch[:batch_size], w_gatedup_torch)
-        # O1 = TorchRef.rms_norm(x_torch[:batch_size], w_rms_norm_torch)
-        # return TorchRef.linear(O1, w_gatedup_torch)
+            return TorchRef.norm_mlp(x_torch[:batch_size], w_rms_norm_torch, w_gatedup_torch, w_down_proj_torch)
+
     graph, ref_output = TorchRef.compile_capture(ref_run, is_compile=False)
     
     ##
