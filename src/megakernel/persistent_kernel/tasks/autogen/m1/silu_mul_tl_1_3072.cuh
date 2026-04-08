@@ -26,6 +26,7 @@ __device__ __forceinline__ void silu_mul_kernel_1_3072(const int bx, const int b
   static_assert(THREAD_NUM==128);
   static_assert(TILE_DIM_X==64); static_assert(TILE_DIM_Y==16); static_assert(TILE_DIM_Z==1);
   static_assert(M==1); static_assert(N==3072);
+  if (bx >= 48 || by >= 1 || bz >= 1) { return; }
   
   const bfloat16_t* __restrict__ A = static_cast<const bfloat16_t*>(input_ptr);
   bfloat16_t* __restrict__ C = static_cast<bfloat16_t*>(output_ptr);
@@ -109,4 +110,4 @@ __device__ __forceinline__ void silu_mul_kernel_1_3072(const int bx, const int b
 // use_cooperative_groups: 0.
 // layout: (48, 1, 1), (64, 16, 1)
 // block_dim=(128, 1, 1).
-// latency: 0.00366 ms vs [ref-0.0 sim-1.0], idx: 0
+// latency: 0.00362 ms vs [ref-0.0 sim-1.0], idx: 0

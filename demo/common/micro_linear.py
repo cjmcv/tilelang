@@ -357,6 +357,7 @@ template <typename T,
   static_assert(THREAD_NUM==<threads>);
   static_assert(TILE_DIM_X==<BLOCK_N>); static_assert(TILE_DIM_Y==<BLOCK_M>); static_assert(TILE_DIM_Z==<BLOCK_K>);
   static_assert(M==<M>); static_assert(N==<N>); static_assert(K==<K>);
+  if (bx >= <gridx_0> || by >= <gridy_0> || bz >= <gridz_0>) { return; }
   
   const <dtype>* __restrict__ A = static_cast<const <dtype>*>(input_ptr);
   const <dtype>* __restrict__ B = static_cast<const <dtype>*>(weight_ptr);
@@ -395,6 +396,10 @@ template <typename T,
         
         grid_dim, block_dim, dynamic_smem_buf, use_cooperative_groups = kernel.get_launch_info()[0]
         self.layout = f"({grid_dim['blockIdx.x']}, {grid_dim['blockIdx.y']}, {grid_dim['blockIdx.z']}), ({BLOCK_N}, {BLOCK_M}, {BLOCK_K})"
+        source = source.replace("<gridx_0>", str(grid_dim['blockIdx.x']))
+        source = source.replace("<gridy_0>", str(grid_dim['blockIdx.y']))
+        source = source.replace("<gridz_0>", str(grid_dim['blockIdx.z']))
+        
         extra_attr = f"\n// Strategy: {self.strategy.name}"
         extra_attr += f"\n// selected_hparams: {selected_hparams}."
         extra_attr += f"\n// smem: {dynamic_smem_buf} bytes."

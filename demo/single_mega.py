@@ -524,21 +524,33 @@ def test_replace_weight(mk, max_batch_size, batch_size, N, K, spec_layout):
     #                         allclose_iter=5, print_mode=1)
  
 def test_prefetch_weight(mk, max_batch_size, batch_size, N, K, spec_layout):
-    x_torch = torch.randn((max_batch_size, K), dtype=torch.bfloat16, device="cuda")
-    # w_torch = w_gatedup_torch 
+
+    
+    x_torch = torch.randn((max_batch_size, hidden_size), dtype=torch.bfloat16, device="cuda")
+    w_rms_norm_torch = torch.randn((1, hidden_size), dtype=torch.bfloat16, device="cuda")
+    rms_out_torch = torch.randn((max_batch_size, hidden_size), dtype=torch.bfloat16, device="cuda")
+    
     w_torch = torch.randn((N, K), dtype=torch.bfloat16, device="cuda")
     out_torch = torch.zeros((max_batch_size, N), dtype=torch.bfloat16, device="cuda")
     print("x: ", x_torch.data_ptr(), "w: ", w_torch.data_ptr(), "o: ", out_torch.data_ptr())
     
     x = mk.attach_input(torch_tensor=x_torch, name="in")
-    w = mk.attach_input(torch_tensor=w_torch, name="w")
+    w_rms_norm = mk.attach_input(torch_tensor=w_rms_norm_torch, name="w_norm")
+    rms_out = mk.attach_input(torch_tensor=rms_out_torch, name="rms_out")
+    w_linear = mk.attach_input(torch_tensor=w_torch, name="w")
     linear_out = mk.attach_input(torch_tensor=out_torch, name="linear_out")
-
-    # grid_dim, block_dim(实际是tile_dim), thread_num(实际是block_dim, 固定为threadIdx.x==128或256, 其他维度为1)
+    
+    mk.rmsnorm_layer(
+        input=x,
+        weight=w_rms_norm,
+        output=rms_out,
+        sync_mode=(0, 0, 0),
+        layout=layout.rmsnorm_layout,
+    )
     
     mk.linear_layer(
-        input=x,
-        weight=w,
+        input=rms_out,
+        weight=w_linear,
         output=linear_out,
         sync_mode=(0, 0, 0),
         layout=spec_layout,
@@ -546,7 +558,9 @@ def test_prefetch_weight(mk, max_batch_size, batch_size, N, K, spec_layout):
     layers.compile_load(is_no_compile=args.nc, output_dir=args.output_dir)
     
     def torch_ref():
-        return TorchRef.linear(x_torch[:batch_size], w_torch)
+        O1 = TorchRef.rms_norm(x_torch[:batch_size], w_rms_norm_torch)
+        O2 = TorchRef.linear(O1, w_torch)
+        return O2
     
     def target_func():
         mk(batch_size)

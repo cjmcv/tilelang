@@ -32,6 +32,7 @@ template <typename T,
   static_assert(THREAD_NUM==128);
   static_assert(TILE_DIM_X==64); static_assert(TILE_DIM_Y==16); static_assert(TILE_DIM_Z==128);
   static_assert(M==1); static_assert(N==151936); static_assert(K==1024);
+  if (bx >= 2374 || by >= 1 || bz >= 1) { return; }
   
   const bfloat16_t* __restrict__ A = static_cast<const bfloat16_t*>(input_ptr);
   const bfloat16_t* __restrict__ B = static_cast<const bfloat16_t*>(weight_ptr);
@@ -123,4 +124,4 @@ template <typename T,
 // use_cooperative_groups: 0.
 // layout: (2374, 1, 1), (64, 16, 128)
 // block_dim=(128, 1, 1).
-// latency: 2.29641 ms vs [ref-1.95078 sim-1.0], idx: 46
+// latency: 1.64005 ms vs [ref-1.6437 sim-1.0], idx: 46

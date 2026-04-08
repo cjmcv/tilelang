@@ -25,6 +25,7 @@ __device__ __forceinline__ void rms_norm_kernel_1_1024(const int bx, const int b
   static_assert(THREAD_NUM==128);
   static_assert(TILE_DIM_X==1); static_assert(TILE_DIM_Y==1); static_assert(TILE_DIM_Z==1);
   static_assert(M==1); static_assert(N==1024);
+  if (bx >= 1 || by >= 1 || bz >= 1) { return; }
   
   const bfloat16_t* __restrict__ A = static_cast<const bfloat16_t*>(input_ptr);
   const bfloat16_t* __restrict__ B = static_cast<const bfloat16_t*>(weight_ptr);
@@ -88,4 +89,4 @@ __device__ __forceinline__ void rms_norm_kernel_1_1024(const int bx, const int b
 // use_cooperative_groups: 0.
 // layout: (1, 1, 1), (1, 1, 1)
 // block_dim=(128, 1, 1).
-// latency: 0.0033 ms vs [ref-0.0033 sim-1.0], idx: 0
+// latency: 0.00347 ms vs [ref-0.00318 sim-0.99999], idx: 0
