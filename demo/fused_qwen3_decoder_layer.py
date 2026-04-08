@@ -141,15 +141,17 @@ if __name__ == "__main__":
     for i in range(10):
         torch.cuda.synchronize()
         starter.record()
-        mk_run()
-        ender.record()
-        torch.cuda.synchronize()
-        print("mpk time: ", starter.elapsed_time(ender))
-        
-    for i in range(10):
-        torch.cuda.synchronize()
-        starter.record()
         torch_ref()
         ender.record()
         torch.cuda.synchronize()
         print("torch time: ", starter.elapsed_time(ender))
+
+    cnt = 100
+    torch.cuda.synchronize()
+    starter.record()        
+    for i in range(cnt):
+        mk_run()
+    ender.record()
+    torch.cuda.synchronize()
+    print("mpk time: ", starter.elapsed_time(ender) / cnt)
+    
