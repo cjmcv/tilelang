@@ -348,7 +348,7 @@ private:
     std::map<dim3, TaskId, Dim3Comparator> &cur_task_map) {
     
     int fence_mode = input_map.x;
-    int parallel_mode = input_map.y; // 暂时没用上，0: 不操作；1: 忽略前一个算子的所有triggers
+    int deps_num = input_map.y; // 表示producer的数据，用于区分实际的生产节点和融合的辅助节点。辅助节点对后面任务无依赖关系。
     printf("input_map: (%d, %d, %d).\n", input_map.x, input_map.y, input_map.z); 
     std::vector<std::pair<std::vector<dim3>, std::vector<dim3>>> pv;
     size_t event_num = 1;
@@ -364,10 +364,15 @@ private:
         for (bid.x = 0; bid.x < producer_grid_dim.x; bid.x++) {
           for (bid.y = 0; bid.y < producer_grid_dim.y; bid.y++) {
             for (bid.z = 0; bid.z < producer_grid_dim.z; bid.z++) {
+              if (deps_num > 0 && deps_num <= producer.size()) {
+                // printf("beark: %d, %d.\n", deps_num, producer.size());
+                break;
+              }
               producer.push_back(bid);
             }
           }
         }
+        // printf("producer.size(): %d.\n", producer.size());
         for (bid.x = 0; bid.x < consumer_grid_dim.x; bid.x++) {
           for (bid.y = 0; bid.y < consumer_grid_dim.y; bid.y++) {
             for (bid.z = 0; bid.z < consumer_grid_dim.z; bid.z++) {

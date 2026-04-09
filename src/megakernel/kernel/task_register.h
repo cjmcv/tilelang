@@ -210,12 +210,16 @@ public:
   }
 
   int register_rmsnorm_task(tb::TBGraph const &bgraph, std::vector<int> const &params, size_t *num_inputs, size_t *num_outputs) {
-    int fused_params_start_id = get_fused_start_id(params);
-    int extra_func_id = params[fused_params_start_id];
+    int fused_params_start_id = -1;
     int extra_tensors = 0;
-    if (extra_func_id == 10) { // 10: 表示扩展的功能是权重预加载
-      extra_tensors = 1;
+    if (params.size() != 0) {
+      fused_params_start_id = get_fused_start_id(params);
+      int extra_func_id = params[fused_params_start_id];
+      if (extra_func_id == 10) { // 10: 表示扩展的功能是权重预加载
+        extra_tensors = 1;
+      }      
     }
+
     std::vector<tb::TBOperator *> input_ops;
     std::vector<tb::TBOperator *> output_ops;
     *num_inputs = 2;

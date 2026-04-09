@@ -199,9 +199,12 @@ void static_persistent_kernel(RuntimeConfig config) {
     // Trigger event
     if (threadIdx.x == 0) {
       EventId event_id = task_desc->trigger_event;
-      size_t event_index = get_event_position_index(event_id);
-      EventCounter count = atom_add_release_gpu_u64(&config.all_event_counters[event_index], 1);
-      // printf("tri(%d):(%d), ", event_index, count);
+      // printf("event_id: %d, %d.\n", event_id, EVENT_INVALID_ID);
+      if (event_id != EVENT_INVALID_ID) {  
+        size_t event_index = get_event_position_index(event_id);
+        EventCounter count = atom_add_release_gpu_u64(&config.all_event_counters[event_index], 1);
+        // printf("tri(%d):(%d), ", event_index, count);
+      }
     }
   }
 }
@@ -428,11 +431,16 @@ extern "C" void init_persistent_kernel(int kernel_id,
       int task_num = event_task_ids[ei].size();
       if (task_num == 0) continue;
         
+      // TODO: 使用配置表？或找到可自动化的方法
+      int sm_cnt = 20; // 142
       int task_id = event_task_ids[ei][0];
       if (all_tasks[task_id].task_type == 120 && all_tasks[task_id].variant_id == 0) {
-        wid += 1; // assign_offset
+        wid += 1; // assign_offset: 20 - 19(fused_layout);
+        // wid += 78;   // 142 - 64(fused_layout);
+        wid = wid % num_workers;
       }
-      
+      //////////////////////////////////////
+
       int tasks_assigned = 0;
       while (tasks_assigned < task_num) {
         if (tasks_assigned >= task_num) {

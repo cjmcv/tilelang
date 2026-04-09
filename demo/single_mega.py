@@ -562,7 +562,7 @@ def test_prefetch_weight(mk, max_batch_size, batch_size, N, K, spec_layout):
         input=rms_out,
         weight=w_linear,
         output=linear_out,
-        sync_mode=(0, 0, 0),
+        sync_mode=(0, 1, 0), # y轴式，表示producer只有1个，对应前置算子的block数量
         layout=spec_layout,
     )
     layers.compile_load(is_no_compile=args.nc, output_dir=args.output_dir)
