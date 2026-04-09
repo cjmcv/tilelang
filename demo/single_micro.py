@@ -19,6 +19,85 @@ from common.micro_rope import MicroRope
 
 from common.micro_autogen import MicroAutoGen
 
+def test_code_gen():
+    @tilelang.jit(out_idx=[-1], pass_configs={"tl.disable_tma_lower": True})
+    def kernel_load_B(M, N, BLOCK_M, BLOCK_N, threads, dtype="bfloat16"):
+        @T.prim_func
+        def rms_norm_load_B(B: T.Tensor((1, N), dtype)):
+            with T.Kernel(1, threads=threads) as bx:
+                B_shared = T.alloc_shared((1, N), dtype)
+                T.copy(B[0:1, :], B_shared)
+        return rms_norm_load_B
+
+    @tilelang.jit(out_idx=[-1], pass_configs={"tl.disable_tma_lower": True})
+    def kernel_main(M, N, BLOCK_M, BLOCK_N, threads, eps=1e-12, dtype="bfloat16", accum_dtype="float32"):
+        @T.prim_func
+        def rms_norm(A: T.Tensor((M, N), dtype), B_smem: T.Tensor((N,), dtype), C: T.Tensor((M, N), dtype)):
+            with T.Kernel(T.ceildiv(M, BLOCK_M), threads=threads) as bx:
+                A_shared = T.alloc_shared((BLOCK_M, N), dtype)
+                A_pow_local = T.alloc_fragment((BLOCK_M, N), accum_dtype)
+                A_local = T.alloc_fragment((BLOCK_M, N), accum_dtype)
+                A_powsum = T.alloc_fragment((BLOCK_M,), accum_dtype)
+                B_local = T.alloc_fragment((1, N), accum_dtype)
+
+                T.copy(A[bx * BLOCK_M : (bx + 1) * BLOCK_M, :], A_shared)
+
+                for i in T.Parallel(BLOCK_M, N):
+                    B_local[i % BLOCK_M, i // BLOCK_M] = B_smem[i]
+
+                T.copy(A_shared, A_local)
+
+                for i, j in T.Parallel(BLOCK_M, N):
+                    A_pow_local[i, j] = A_local[i, j] * A_local[i, j]
+                T.reduce_sum(A_pow_local, A_powsum, dim=1)
+                for i in T.Parallel(BLOCK_M):
+                    A_powsum[i] = T.rsqrt(A_powsum[i] / N + eps)
+                for i, j in T.Parallel(BLOCK_M, N):
+                    A_local[i, j] *= A_powsum[i] * B_local[i, j]
+                T.copy(A_local, C[bx * BLOCK_M : (bx + 1) * BLOCK_M, :])
+
+        return rms_norm
+    
+    @tilelang.jit(out_idx=[-1], pass_configs={"tl.disable_tma_lower": True})
+    def kernel_main_org(M, N, BLOCK_M, BLOCK_N, threads, eps=1e-12, dtype="bfloat16", accum_dtype="float32"):
+        @T.prim_func
+        def rms_norm(A: T.Tensor((M, N), dtype), B: T.Tensor((1, N), dtype), C: T.Tensor((M, N), dtype)):
+            with T.Kernel(T.ceildiv(M, BLOCK_M), threads=threads) as bx:
+                A_shared = T.alloc_shared((BLOCK_M, N), dtype)
+                A_pow_local = T.alloc_fragment((BLOCK_M, N), accum_dtype)
+                A_local = T.alloc_fragment((BLOCK_M, N), accum_dtype)
+                A_powsum = T.alloc_fragment((BLOCK_M,), accum_dtype)
+                B_shared = T.alloc_shared((1, N), dtype)
+                B_local = T.alloc_fragment((1, N), accum_dtype)
+                
+                T.copy(B[0:1, :], B_shared)
+                T.copy(A[bx * BLOCK_M : (bx + 1) * BLOCK_M, :], A_shared)
+                
+                T.copy(A_shared, A_local)
+                T.copy(B_shared, B_local)
+                
+                for i, j in T.Parallel(BLOCK_M, N):
+                    A_pow_local[i, j] = A_local[i, j] * A_local[i, j]
+                T.reduce_sum(A_pow_local, A_powsum, dim=1)
+                for i in T.Parallel(BLOCK_M):
+                    A_powsum[i] = T.rsqrt(A_powsum[i] / N + eps)
+                for i, j in T.Parallel(BLOCK_M, N):
+                    A_local[i, j] *= A_powsum[i] * B_local[0, j]
+                T.copy(A_local, C[bx * BLOCK_M : (bx + 1) * BLOCK_M, :])
+
+        return rms_norm
+    
+    M = 32
+    N = 2560
+    a = torch.randn(M, N, dtype=torch.bfloat16, device="cuda")
+    b = torch.randn(1, N, dtype=torch.bfloat16, device="cuda")
+    kernel = kernel_main_org(M, N, 1, 1, 128)
+    print(kernel.get_kernel_source())
+    print(kernel(a,b)) 
+    
+    kernel2 = kernel_load_B(M, N, 1, 1, 128)
+    print(kernel2.get_kernel_source())
+    
 def profile(target_func, torch_ref_func):
     reporter = PerfReporter() 
     reporter.generate_report(target_func, torch_ref_func,
@@ -209,10 +288,12 @@ if __name__ == "__main__":
     # test_gqa_decode(num_heads, num_kv_heads, head_dim)
     # test_rope(num_heads, num_kv_heads, head_dim)
 
-    gen = MicroAutoGen(model_tag, batch_size=1, hidden_size=hidden_size, intermediate_size=intermediate_size, 
-                       max_kv_seqlen=8192, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim)
-    gen.gen_qwen3_ops(layer_id=99, mode=HparamSelectMode.TUNED) # HEURISTIC, TUNING, TUNED
-    print(">> Finish gen_qwen3_ops.")
+    test_code_gen()
+    
+    # gen = MicroAutoGen(model_tag, batch_size=1, hidden_size=hidden_size, intermediate_size=intermediate_size, 
+    #                    max_kv_seqlen=8192, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim)
+    # gen.gen_qwen3_ops(layer_id=99, mode=HparamSelectMode.TUNED) # HEURISTIC, TUNING, TUNED
+    # print(">> Finish gen_qwen3_ops.")
     # print("Test single_micro completed.")
     
     # PerfReporter.draw()

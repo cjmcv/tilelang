@@ -201,6 +201,9 @@ public:
     assert(op->op_type == type::KN_CUSTOMIZED_OP);
     KNCustomizedOp const *customized = static_cast<KNCustomizedOp const *>(op);
     TaskRegister *task_register = TaskRegister::get_instance();
+
+    size_t num_inputs = 0;
+    size_t num_outputs = 0;
     if (name == "rope") {
       int variant_id = task_register->register_rope_task(customized->bgraph, params);
       task_config[op] = std::make_tuple(4, 2, TASK_ROPE, variant_id);
@@ -208,8 +211,8 @@ public:
       int variant_id = task_register->register_gqa_decode_task(customized->bgraph, params);
       task_config[op] = std::make_tuple(5, 3, TASK_GQA_DECODE, variant_id);
     } else if (name == "rmsnorm") {
-      int variant_id = task_register->register_rmsnorm_task(customized->bgraph, params);
-      task_config[op] = std::make_tuple(2, 1, TASK_RMS_NORM, variant_id);
+      int variant_id = task_register->register_rmsnorm_task(customized->bgraph, params, &num_inputs, &num_outputs);
+      task_config[op] = std::make_tuple(num_inputs, num_outputs, TASK_RMS_NORM, variant_id);
     } else if (name == "rmsnorm_linear") {
       int variant_id = task_register->register_rmsnorm_linear_task(customized->bgraph, params);
       task_config[op] = std::make_tuple(3, 1, TASK_RMS_NORM_LINEAR, variant_id);

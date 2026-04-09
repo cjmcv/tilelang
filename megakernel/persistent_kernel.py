@@ -314,7 +314,8 @@ class PersistentKernel:
         output: DTensor,
         sync_mode: tuple,
         layout: tuple,
-        
+        fused_params: list = None, # flag 99, funcid, layout[3]
+        fused_tensor: DTensor = None,
     ):
         grid_dim, tile_dim = layout
         assert input.num_dims == 2
@@ -324,8 +325,12 @@ class PersistentKernel:
         tb_graph.new_input(input, sync_mode)
         tb_graph.new_input(weight, sync_mode)
         tb_graph.new_input(output, (-1, -1, -1))
-        self.kn_graph.customized([input, weight, output], tb_graph)
-        self.kn_graph.register_task("rmsnorm_hopper" if self.target_cc >= 90 else "rmsnorm")
+        if fused_tensor is not None:
+            tb_graph.new_input(fused_tensor, (-1, -1, -1))
+            self.kn_graph.customized([input, weight, output, fused_tensor], tb_graph)
+        else:
+            self.kn_graph.customized([input, weight, output], tb_graph)
+        self.kn_graph.register_task("rmsnorm", (fused_params if fused_params is not None else []))
 
     def rmsnorm_linear_layer(
         self,
@@ -382,7 +387,7 @@ class PersistentKernel:
         k_embed: DTensor,
         sync_mode: tuple,
         layout: tuple,
-        fused_params: list = None, # flag 99, funcid, layout[3]
+        fused_params: list = None, # flag 99 (固定，扩展micro kernel的参数开始标志), funcid, layout[3]
     ):
         assert q.num_dims == 4
         assert k.num_dims == 4

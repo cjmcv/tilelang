@@ -525,7 +525,6 @@ def test_replace_weight(mk, max_batch_size, batch_size, N, K, spec_layout):
  
 def test_prefetch_weight(mk, max_batch_size, batch_size, N, K, spec_layout):
 
-    
     x_torch = torch.randn((max_batch_size, hidden_size), dtype=torch.bfloat16, device="cuda")
     w_rms_norm_torch = torch.randn((1, hidden_size), dtype=torch.bfloat16, device="cuda")
     rms_out_torch = torch.randn((max_batch_size, hidden_size), dtype=torch.bfloat16, device="cuda")
@@ -540,14 +539,25 @@ def test_prefetch_weight(mk, max_batch_size, batch_size, N, K, spec_layout):
     w_linear = mk.attach_input(torch_tensor=w_torch, name="w")
     linear_out = mk.attach_input(torch_tensor=out_torch, name="linear_out")
     
+    extra_layout = (19, 0, 0)
+    fused_layout = tuple(a + b for a, b in zip(layout.rmsnorm_layout[0], extra_layout)), layout.rmsnorm_layout[1]
     mk.rmsnorm_layer(
         input=x,
         weight=w_rms_norm,
         output=rms_out,
         sync_mode=(0, 0, 0),
-        layout=layout.rmsnorm_layout,
+        layout=fused_layout,
+        fused_params=[99, 10, *extra_layout],
+        fused_tensor=w_linear,
     )
     
+    # mk.rmsnorm_layer(
+    #     input=x,
+    #     weight=w_rms_norm,
+    #     output=rms_out,
+    #     sync_mode=(0, 0, 0),
+    #     layout=layout.rmsnorm_layout,
+    # )
     mk.linear_layer(
         input=rms_out,
         weight=w_linear,
@@ -571,6 +581,7 @@ def test_prefetch_weight(mk, max_batch_size, batch_size, N, K, spec_layout):
     reporter.generate_report(target_func, torch_ref, 
                             warnup_iter=100, test_iter=100, 
                             allclose_iter=5, print_mode=1)
+    print("w_torch.data_ptr: ", w_torch.data_ptr())
     
 if __name__ == "__main__":
     max_batch_size = 1
@@ -602,8 +613,9 @@ if __name__ == "__main__":
     # model, tokenizer = reporter.memory_footprint_simulation(rank)
     # w_rms_torch, w_gatedup_torch, w_down_proj_torch = reporter.get_weight_qwen3_mlp(layer_id=0)
     
+    kernel_num = 1
     model_tag = "qwen3_06b"
-    layers = MkLayers(model_tag, 0, 10, world_size, rank, max_batch_size, args.trace_name, args.profiling)
+    layers = MkLayers(model_tag, 0, kernel_num, world_size, rank, max_batch_size, args.trace_name, args.profiling)
     mk = layers.get_mk()
     layout = layers.get_layout()
     

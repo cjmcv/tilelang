@@ -419,12 +419,19 @@ extern "C" void init_persistent_kernel(int kernel_id,
     //   }
     // }
 
-    // 3. 按event分组填充task到worker
+    // 3. 按event分组填充task到worker, 不分任务类别，顺序排布
+    // 如： w0 0 3 6 
+    //      w1 1 4 7
+    //      w2 2 5 8
     int wid = 0;
     for (int ei=0; ei<event_task_ids.size(); ei++) {
-      int task_id = 0;
       int task_num = event_task_ids[ei].size();
       if (task_num == 0) continue;
+        
+      int task_id = event_task_ids[ei][0];
+      if (all_tasks[task_id].task_type == 120 && all_tasks[task_id].variant_id == 0) {
+        wid += 1; // assign_offset
+      }
       
       int tasks_assigned = 0;
       while (tasks_assigned < task_num) {
@@ -460,7 +467,7 @@ extern "C" void init_persistent_kernel(int kernel_id,
       printf("worker[%d]-(%d): ", i, num);
       for (int j=0; j<num; j++) {
         int id = host_tasks_index[i][j+1];
-        printf("%d(%d), ", id, all_tasks[id].task_type);
+        printf("%d(%d-%d), ", id, all_tasks[id].task_type, all_tasks[id].bx);
       }
       printf("\n");
     }

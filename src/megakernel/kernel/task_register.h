@@ -46,7 +46,7 @@ public:
     return -1;
   }
 
-  void append_fused_func(tb::TBGraph const &bgraph, std::vector<int> const &params, int fused_params_start_id, megakernel::transpiler::CodeKeeper &code) {
+  void append_fused_func(tb::TBGraph const &bgraph, std::vector<int> const &params, int fused_params_start_id, megakernel::transpiler::CodeKeeper &code, std::string input_str = "") {
     if (fused_params_start_id == -1) { return ; }
 
     int extra_func_id = params[fused_params_start_id];
@@ -71,6 +71,13 @@ public:
       code.e("    runtime_config.vcache_curstep,");
       code.e("    runtime_config.kcache,");
       code.e("    runtime_config.vcache);");
+    }
+    else if (extra_func_id == 10) {
+      // 权重预加载
+      code.e("  kernel::prefetch_kernel<bfloat16_t, $>(", bgraph.thread_num);
+      code.e("    task_desc->bx-$, task_desc->by, task_desc->bz,", bgraph.grid_dim.x-extra_bx);
+      code.e("    runtime_config.layer_id,");
+      code.e("    $);", input_str.c_str());
     }
     code.e("  }");
   }
@@ -202,16 +209,20 @@ public:
     return register_task_variant(TASK_GQA_DECODE, code.to_string());
   }
 
-  int register_rmsnorm_task(tb::TBGraph const &bgraph, std::vector<int> const &params) {
-    assert(params.size() == 0);
+  int register_rmsnorm_task(tb::TBGraph const &bgraph, std::vector<int> const &params, size_t *num_inputs, size_t *num_outputs) {
+    int fused_params_start_id = get_fused_start_id(params);
+    int extra_func_id = params[fused_params_start_id];
+    int extra_tensors = 0;
+    if (extra_func_id == 10) { // 10: 表示扩展的功能是权重预加载
+      extra_tensors = 1;
+    }
     std::vector<tb::TBOperator *> input_ops;
     std::vector<tb::TBOperator *> output_ops;
-    int num_inputs = 2;
-    int num_outputs = 1;
-
-    assert(bgraph.operators.size() == (size_t)num_inputs + num_outputs);
+    *num_inputs = 2;
+    *num_outputs = 1 + extra_tensors;
+    // assert(bgraph.operators.size() == (size_t)num_inputs + num_outputs + extra_tensors);
     for (auto const &op : bgraph.operators) {
-      if (input_ops.size() < (size_t)num_inputs) {
+      if (input_ops.size() < *num_inputs) {
         input_ops.push_back(static_cast<tb::TBOperator *>(op));
       } else {
         output_ops.push_back(static_cast<tb::TBOperator *>(op));
@@ -235,6 +246,9 @@ public:
     code.e("    task_desc->input_ptrs[1],");
     code.e("    task_desc->output_ptrs[0],");
     code.e("    1e-12f);");
+    if (fused_params_start_id != -1) {
+      append_fused_func(bgraph, params, fused_params_start_id, code, "task_desc->output_ptrs[1]");
+    }
     return register_task_variant(TASK_RMS_NORM, code.to_string());
   }
 

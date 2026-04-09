@@ -8,3 +8,4 @@
 #include "gqa_decode.cuh"
 #include "rope.cuh"
 #include "copy.cuh"
+#include "prefetch.cuh"
