@@ -107,48 +107,8 @@ __device__ __forceinline__ size_t get_event_position_index(EventId event_id) {
   return (event_id & 0xffffffff);
 }
 
-__device__ __forceinline__ void prepare_queue(RuntimeConfig config) {
-  // Initialize scheduler queue last event id
-  // We maintain one extra scheduler queue for the global scheduler
-  int num_schedulers = config.num_local_schedulers + config.num_remote_schedulers;
-  // Initialize all event counters
-  for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < config.num_events;
-       i += blockDim.x * gridDim.x) {
-    config.all_event_counters[i] = 0;
-  }
-  // Send event to scheduler[0]
-  // 第 config.num_workers 个 block 负责
-  int end_of_task_graph_event_pos = config.num_events - 1;
-  if (blockIdx.x == 0 && threadIdx.x == 0) {
-    *config.infer_cnt = 0;
-
-    assert(config.all_events[end_of_task_graph_event_pos].event_type == EVENT_END_OF_TASK_GRAPH);
-  }
-}
-
-__device__ __forceinline__ void persistent_checker(RuntimeConfig config) {
-  assert(gridDim.y == 1);
-  assert(gridDim.z == 1);
-  // Each worker SM serves a single worker
-  // Each scheduelr SM serves four schedulers
-  int const num_schedulers = config.num_local_schedulers + config.num_remote_schedulers;
-  int const num_schedulers_per_sm = std::min((int)blockDim.x / 32, 4);
-  assert(num_schedulers % num_schedulers_per_sm == 0);
-  assert(gridDim.x == config.num_workers + num_schedulers / num_schedulers_per_sm);
-  assert(config.num_workers <= MAX_NUM_WORKERS);
-  // We will reinterpret TaskDesc as an array of integers to
-  // collectively load it from device to shared memory
-  static_assert(sizeof(TaskDesc) % sizeof(int) == 0);
-  // assert(blockDim.x >= 128);
-
-  if (blockIdx.x < config.num_workers) {
-    prepare_queue(config);
-  }
-}
-
 __global__ __launch_bounds__(WORKER_NUM_THREADS, 1) 
 void static_persistent_kernel(RuntimeConfig config) {
-  // persistent_checker(config);
   #ifdef MPK_ENABLE_PROFILING
   PROFILER_CLOSURE_PARAMS_DECL;
   PROFILER_INIT(static_cast<uint64_t *>(config.profiler_buffer),
@@ -206,6 +166,7 @@ void static_persistent_kernel(RuntimeConfig config) {
         // printf("tri(%d):(%d), ", event_index, count);
       }
     }
+    __syncthreads();
   }
 }
 
@@ -236,9 +197,7 @@ static void _init_persistent_kernel(int kernel_id,
                                     int num_gpus,
                                     int my_gpu_id);
 
-static int used_kernel_num = 0;
 static RuntimeConfig global_runtime_config[100];
-
 extern "C" void init_persistent_kernel(int kernel_id,
                                        std::vector<void *> meta_tensors,
                                        void *profiler_buffer,
@@ -431,15 +390,15 @@ extern "C" void init_persistent_kernel(int kernel_id,
       int task_num = event_task_ids[ei].size();
       if (task_num == 0) continue;
         
-      // TODO: 使用配置表？或找到可自动化的方法
-      int sm_cnt = 20; // 142
-      int task_id = event_task_ids[ei][0];
-      if (all_tasks[task_id].task_type == 120 && all_tasks[task_id].variant_id == 0) {
-        wid += 1; // assign_offset: 20 - 19(fused_layout);
-        // wid += 78;   // 142 - 64(fused_layout);
-        wid = wid % num_workers;
-      }
-      //////////////////////////////////////
+      // // TODO: 使用配置表？或找到可自动化的方法
+      // int sm_cnt = 20; // 142
+      // int task_id = event_task_ids[ei][0];
+      // if (all_tasks[task_id].task_type == 120 && all_tasks[task_id].variant_id == 0) {
+      //   wid += 1; // assign_offset: 20 - 19(fused_layout);
+      //   // wid += 78;   // 142 - 64(fused_layout);
+      //   wid = wid % num_workers;
+      // }
+      // //////////////////////////////////////
 
       int tasks_assigned = 0;
       while (tasks_assigned < task_num) {

@@ -132,8 +132,8 @@ if __name__ == "__main__":
             sin_embeddings = position_embeddings[1][:, prev_pos:cur_pos]
             # print("cos_embeddings: ", cos_embeddings.size(), "sin_embeddings: ", sin_embeddings.size()) # torch.Size([1, cur_pos, 128]) torch.Size([1, cur_pos, 128])
             
-            torch.cuda.synchronize()
-            starter.record()
+            # torch.cuda.synchronize()
+            # starter.record()
             logits = model.forward(
                 mk_layers=layers,
                 cur_pos=cur_pos,
@@ -142,10 +142,10 @@ if __name__ == "__main__":
                 step=step,
                 stream=stream,
             )
-            ender.record()
-            torch.cuda.synchronize()
-            one_step_time = starter.elapsed_time(ender)
-            print("run_time: ", one_step_time)
+            # ender.record()
+            # torch.cuda.synchronize()
+            # one_step_time = starter.elapsed_time(ender)
+            # print("run_time: ", one_step_time)
             
             next_token = logits.argmax(dim=-1)
             next_token = next_token[0, -1]
@@ -188,20 +188,21 @@ if __name__ == "__main__":
         run_time = starter.elapsed_time(ender)
 
     #############
-    cur_pos = 65
-    hidden_states = torch.randn((batch, q_seqlen, hidden_size), dtype=torch.bfloat16, device="cuda")
-    def mk_run_one_step():
-        mk_out = layers(cur_pos, (cos_embeddings, sin_embeddings), hidden_states.view(batch*q_seqlen, hidden_size))
-        return mk_out
-    
-    for i in range(20):
+    if args.use_mk == True:
+        cur_pos = 65
+        hidden_states = torch.randn((batch, q_seqlen, hidden_size), dtype=torch.bfloat16, device="cuda")
+        def mk_run_one_step():
+            mk_out = layers(cur_pos, (cos_embeddings, sin_embeddings), hidden_states.view(batch*q_seqlen, hidden_size))
+            return mk_out
+
         torch.cuda.synchronize()
-        starter.record()
-        mk_run_one_step()
+        starter.record()    
+        for i in range(100):
+            mk_run_one_step()
         ender.record()
         torch.cuda.synchronize()
-        print("outside time: ", starter.elapsed_time(ender))
-    print("dims:", batch, q_seqlen, hidden_size)
+        print("outside time: ", starter.elapsed_time(ender)/100)
+        print("dims:", batch, q_seqlen, hidden_size)
     ################
     
     # ########################

@@ -443,8 +443,8 @@ class PerfReporter:
         self.torch_profile(target_run)
         self.torch_profile(torch_run)
         
-        latency = do_bench(lambda: target_run(), warmup=warnup_iter, rep=test_iter, backend="cupti")
-        ref_latency = do_bench(lambda: torch_run(), warmup=warnup_iter, rep=test_iter, backend="cupti")
+        latency = do_bench(lambda: target_run(), warmup=warnup_iter, rep=test_iter, backend="event")
+        ref_latency = do_bench(lambda: torch_run(), warmup=warnup_iter, rep=test_iter, backend="event")
         print(f"Latency: {latency:.4f}ms vs {ref_latency:.4f}(torch) ms")
         
     @staticmethod

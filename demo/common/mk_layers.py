@@ -200,36 +200,36 @@ class MkLayers:
         self.w_qkv_proj_torch.append(torch.cat([w_q_torch, w_k_torch, w_v_torch], dim=0).contiguous())
         self.w_qk_norm_torch.append(torch.cat([w_q_norm_torch, w_k_norm_torch], dim=0).contiguous())
         
-        if (reuse_instance == True):
-            layer_id_str = "_" + str(layer_id)
+        layer_id_str = "_" + str(layer_id) 
+        if (reuse_instance == True):    
             self.mk.attach_input(torch_tensor=w_input_layernorm_torch, name="w_layernorm"+layer_id_str)
             self.mk.attach_input(torch_tensor=self.w_qkv_proj_torch[layer_id], name="w_qkv_proj"+layer_id_str)
             self.mk.attach_input(torch_tensor=self.w_qk_norm_torch[layer_id], name="w_qk_norm"+layer_id_str)
             self.mk.attach_input(torch_tensor=w_out_proj_torch, name="w_o_proj"+layer_id_str)
             
-            self.append_repl_weight_pair(layer_id, "w_layernorm", "w_layernorm"+layer_id_str)
-            self.append_repl_weight_pair(layer_id, "w_qkv_proj", "w_qkv_proj"+layer_id_str)
-            self.append_repl_weight_pair(layer_id, "w_qk_norm", "w_qk_norm"+layer_id_str)
-            self.append_repl_weight_pair(layer_id, "w_o_proj", "w_o_proj"+layer_id_str)
+            self.append_repl_weight_pair(layer_id, "w_layernorm_0", "w_layernorm"+layer_id_str)
+            self.append_repl_weight_pair(layer_id, "w_qkv_proj_0", "w_qkv_proj"+layer_id_str)
+            self.append_repl_weight_pair(layer_id, "w_qk_norm_0", "w_qk_norm"+layer_id_str)
+            self.append_repl_weight_pair(layer_id, "w_o_proj_0", "w_o_proj"+layer_id_str)
             return 
         
         self.mk.rmsnorm_layer(
             input  = self.attn_layer_io.layer_in.mk,
-            weight = self.mk.attach_input(torch_tensor=w_input_layernorm_torch, name="w_layernorm"),
+            weight = self.mk.attach_input(torch_tensor=w_input_layernorm_torch, name="w_layernorm"+layer_id_str),
             output = self.attn_layer_io.layernorm_out.mk,
             sync_mode = (0, 0, 0),
             layout = self.Qwen3MegaConfig.rmsnorm_layout,
         )
         self.mk.linear_layer(
             input  = self.attn_layer_io.layernorm_out.mk,
-            weight = self.mk.attach_input(torch_tensor=self.w_qkv_proj_torch[layer_id], name="w_qkv_proj"),
+            weight = self.mk.attach_input(torch_tensor=self.w_qkv_proj_torch[layer_id], name="w_qkv_proj"+layer_id_str),
             output = self.attn_layer_io.qkv_proj_out.mk,
             sync_mode = (0, 0, 0),
             layout = self.Qwen3MegaConfig.qkv_proj_layout,
         )
         self.mk.rmsnorm_layer(
             input  = self.attn_layer_io.qk_norm_states.mk,
-            weight = self.mk.attach_input(torch_tensor=self.w_qk_norm_torch[layer_id], name="w_qk_norm"),
+            weight = self.mk.attach_input(torch_tensor=self.w_qk_norm_torch[layer_id], name="w_qk_norm"+layer_id_str),
             output = self.attn_layer_io.qk_norm_states.mk,
             sync_mode=(0, 0, 0),
             layout = self.Qwen3MegaConfig.merge_q_k_norm_layout,
@@ -240,8 +240,8 @@ class MkLayers:
         self.mk.rope_layer(
             q=self.attn_layer_io.rope_io.q.mk,
             k=self.attn_layer_io.rope_io.k.mk,
-            cos=self.mk.attach_input(torch_tensor=self.public_pt.cos, name="cos"), # 所有层共享，不需要替换
-            sin=self.mk.attach_input(torch_tensor=self.public_pt.sin, name="sin"),
+            cos=self.mk.attach_input(torch_tensor=self.public_pt.cos, name="cos"+layer_id_str), # 所有层共享，不需要替换
+            sin=self.mk.attach_input(torch_tensor=self.public_pt.sin, name="sin"+layer_id_str),
             q_embed=self.attn_layer_io.rope_io.q.mk,
             k_embed=self.attn_layer_io.rope_io.k.mk,
             sync_mode=(0, 0, 0),
@@ -269,7 +269,7 @@ class MkLayers:
         )
         self.mk.linear_with_residual_layer(
             input=self.attn_layer_io.attn_out.two_dim.mk,
-            weight=self.mk.attach_input(torch_tensor=w_out_proj_torch, name="w_o_proj"),
+            weight=self.mk.attach_input(torch_tensor=w_out_proj_torch, name="w_o_proj"+layer_id_str),
             residual=self.attn_layer_io.layer_in.mk,
             output=self.attn_layer_io.layer_out.mk,
             sync_mode=(0, 0, 0),
@@ -281,27 +281,27 @@ class MkLayers:
         w_rms_norm_torch, w_gate_proj, w_up_proj, w_down_proj_torch = Qwen3Info.get_weight_qwen3_mlp(model, layer_id)
         self.w_mlp_gateup_proj.append(torch.cat((w_gate_proj, w_up_proj), 0).contiguous())
         
+        layer_id_str = "_" + str(layer_id)
         if (reuse_instance == True):
-            layer_id_str = "_" + str(layer_id)
             self.mk.attach_input(torch_tensor=w_rms_norm_torch, name="w_norm"+layer_id_str)
             self.mk.attach_input(torch_tensor=self.w_mlp_gateup_proj[layer_id], name="w_gatedup"+layer_id_str)
             self.mk.attach_input(torch_tensor=w_down_proj_torch, name="w_down_proj"+layer_id_str)
             
-            self.append_repl_weight_pair(layer_id, "w_norm", "w_norm"+layer_id_str)
-            self.append_repl_weight_pair(layer_id, "w_gatedup", "w_gatedup"+layer_id_str)
-            self.append_repl_weight_pair(layer_id, "w_down_proj", "w_down_proj"+layer_id_str)
+            self.append_repl_weight_pair(layer_id, "w_norm_0", "w_norm"+layer_id_str)
+            self.append_repl_weight_pair(layer_id, "w_gatedup_0", "w_gatedup"+layer_id_str)
+            self.append_repl_weight_pair(layer_id, "w_down_proj_0", "w_down_proj"+layer_id_str)
             return 
         
         self.mk.rmsnorm_layer(
             input = self.mlp_layer_io.layer_in.mk,
-            weight = self.mk.attach_input(torch_tensor=w_rms_norm_torch, name="w_norm"),
+            weight = self.mk.attach_input(torch_tensor=w_rms_norm_torch, name="w_norm"+layer_id_str),
             output = self.mlp_layer_io.layernorm_out.mk,
             sync_mode=(0, 0, 0),
             layout=self.Qwen3MegaConfig.rmsnorm_layout,
         )
         self.mk.linear_layer(
             input  = self.mlp_layer_io.layernorm_out.mk,
-            weight = self.mk.attach_input(torch_tensor=self.w_mlp_gateup_proj[layer_id], name="w_gatedup"),
+            weight = self.mk.attach_input(torch_tensor=self.w_mlp_gateup_proj[layer_id], name="w_gatedup"+layer_id_str),
             output = self.mlp_layer_io.mlp_mid.mk,
             sync_mode=(0, 0, 0),
             layout = self.Qwen3MegaConfig.linear1_layout,
@@ -314,7 +314,7 @@ class MkLayers:
         )
         self.mk.linear_with_residual_layer(
             input    = self.mlp_layer_io.silu_mul_out.mk,
-            weight   = self.mk.attach_input(torch_tensor=w_down_proj_torch, name="w_down_proj"),
+            weight   = self.mk.attach_input(torch_tensor=w_down_proj_torch, name="w_down_proj"+layer_id_str),
             residual = self.mlp_layer_io.layer_in.mk,
             output   = self.mlp_layer_io.layer_out.mk,
             sync_mode=(0, 0, 0),
@@ -343,6 +343,7 @@ class MkLayers:
         self.layer_num = layer_num
         self.qwen3_alloc_io_buffer(params, io_pt, public_pt)
         for layer_id in range(layer_num):
+            # reuse_instance = False
             if (layer_id == 0):
                 reuse_instance = False
             else:

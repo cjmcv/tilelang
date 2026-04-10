@@ -39,6 +39,7 @@ from common.mk_layers import MkLayers, MkLayersHybridLayout
 
 from .rope import apply_rotary_pos_emb_triton
 
+import time
 starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
 MAX_KV_SEQLEN = 1024
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Qwen2
@@ -571,8 +572,8 @@ class Qwen3Model(Qwen3PreTrainedModel):
                     mk_layers.public_pt.value_cache_5d[:, 0, :, :, :].copy_(self.kv_cache[1][:, 0, :, :, :])
             else:
                 # torch.cuda.synchronize()
-                # starter.record()
-                
+                # start_time = time.perf_counter()   
+
                 inputs_embeds = self.embed_tokens(input_ids)
                 hidden_states = inputs_embeds
                 bsz, q_len, hidden_size = hidden_states.size()
@@ -582,12 +583,12 @@ class Qwen3Model(Qwen3PreTrainedModel):
                 mk_out = mk_layers(cur_pos, position_embeddings, hidden_states.view(bsz*q_len, hidden_size))
 
                 # print("outsize", mk_out.size())
-                hidden_states.copy_(mk_out.view(bsz, q_len, hidden_size))
+                # hidden_states.copy_(mk_out.view(bsz, q_len, hidden_size))
 
-                hidden_states = self.norm(hidden_states)
-                
-                # ender.record()
+                hidden_states = self.norm(mk_out.view(bsz, q_len, hidden_size))
+
                 # torch.cuda.synchronize()
+                # print("mpk time: ", (time.perf_counter()-start_time)*1000)
                 # print("mpk time: ", starter.elapsed_time(ender))                
                 
         return (hidden_states,)
@@ -643,7 +644,10 @@ class Qwen3ForCausalLM(Qwen3PreTrainedModel, GenerationMixin):
         **loss_kwargs,
     ):
 
-                
+        torch.cuda.synchronize()
+        # starter.record() 
+        start_time = time.perf_counter()
+        
         outputs = self.model(
             mk_layers=mk_layers,
             cur_pos=cur_pos,
@@ -655,13 +659,12 @@ class Qwen3ForCausalLM(Qwen3PreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
         )
         
-        torch.cuda.synchronize()
-        starter.record() 
         hidden_states = outputs[0]
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
         
-        ender.record()
+        # ender.record()
         torch.cuda.synchronize()
-        print("mpk time: ", starter.elapsed_time(ender))        
+        # print("mpk time: ", starter.elapsed_time(ender), hidden_states.size())   
+        print("mpk all time: ", (time.perf_counter()-start_time)*1000)     
         return logits
