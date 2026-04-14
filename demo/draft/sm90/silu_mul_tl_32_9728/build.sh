@@ -6,10 +6,10 @@
 # -L../build/tvm -ltvm_ffi \
 
 rm a.out
-nvcc -gencode arch=compute_90,code=sm_90a \
+nvcc -gencode arch=compute_90a,code=sm_90a \
      -I../../../../3rdparty/cutlass/include \
      -I../../../../src/ \
-     host.cu main.cu \
+     host.cu \
      -lcuda
 
 echo "Compile Done!"

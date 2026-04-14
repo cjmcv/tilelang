@@ -113,61 +113,6 @@ static void CreateSiluMulTMADescs(
     ));
 }
 
-// 使用 cuLaunchKernelEx 启动 kernel
-static cudaError_t LaunchSiluMulKernel(
-    void *A_gmem,
-    void *C_gmem,
-    int M,
-    int N,
-    cudaStream_t stream
-) {
-    // 创建 TMA 描述符
-    CUtensorMap A_desc, C_desc;
-    CreateSiluMulTMADescs(&A_desc, &C_desc, A_gmem, C_gmem, M, N);
-
-    // Grid/Block 维度 (来自生成代码)
-    // grid: (152, 1, 1) = (N/BLOCK_N, M/BLOCK_M, 1)
-    // block: (256, 1, 1) = threads
-    dim3 grid_dim(152, 1, 1);
-    dim3 block_dim(256, 1, 1);
-    size_t smem_size = 12288;
-
-    // 启动配置
-    CUstream custream = (CUstream)stream;
-
-    CUlaunchConfig config;
-    config.gridDimX = grid_dim.x;
-    config.gridDimY = grid_dim.y;
-    config.gridDimZ = grid_dim.z;
-    config.blockDimX = block_dim.x;
-    config.blockDimY = block_dim.y;
-    config.blockDimZ = block_dim.z;
-    config.sharedMemBytes = smem_size;
-    config.hStream = custream;
-    config.attrs = NULL;
-    config.numAttrs = 0;
-
-    // 获取 kernel 函数 (需要先加载编译好的 cubin)
-    CUmodule module;
-    CUfunction function;
-    CHECK_CU(cuModuleGetFunction(&function, module, "silu_mul_kernel"));
-
-    // 设置共享内存
-    CHECK_CU(cuFuncSetAttribute(
-        function,
-        CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES,
-        (int)smem_size
-    ));
-
-    // 准备参数
-    void *args[] = {&A_desc, &C_desc};
-
-    // 启动
-    CHECK_CU(cuLaunchKernelEx(&config, function, args, NULL));
-
-    return cudaSuccess;
-}
-
 // ============================================
 // 主函数
 // ============================================
@@ -196,7 +141,7 @@ int main(int argc, char **argv) {
     CHECK_CU(cuDeviceGetAttribute(&sm_minor, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, device));
     printf("Device: sm_%d.%d\n", sm_major, sm_minor);
 
-    if (sm_major < 90) {
+    if (sm_major < 9) {
         printf("ERROR: This kernel requires Hopper (sm_90a)\n");
         return 1;
     }
@@ -218,17 +163,22 @@ int main(int argc, char **argv) {
     }
     CHECK_RT(cudaMemcpy(d_A, h_A.data(), A_size, cudaMemcpyHostToDevice));
 
+    // 创建 TMA 描述符
+    CUtensorMap A_desc, C_desc;
+    CreateSiluMulTMADescs(&A_desc, &C_desc, d_A, d_C, M, N);
+
+    // Grid/Block/Shared memory 维度
+    dim3 grid_dim(152, 1, 1);
+    dim3 block_dim(256, 1, 1);
+    size_t smem_size = 12288;
+
     // Stream
     cudaStream_t stream;
     CHECK_RT(cudaStreamCreate(&stream));
 
     // 启动 kernel
     printf("Launching silu_mul_kernel...\n");
-    cudaError_t err = LaunchSiluMulKernel(d_A, d_C, M, N, stream);
-    if (err != cudaSuccess) {
-        printf("Launch failed: %s\n", cudaGetErrorName(err));
-        return 1;
-    }
+    silu_mul_kernel<<<grid_dim, block_dim, smem_size, stream>>>(A_desc, C_desc);
 
     CHECK_RT(cudaStreamSynchronize(stream));
     printf("Kernel completed!\n");
