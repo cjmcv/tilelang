@@ -62,11 +62,13 @@ tma_copy_kernel(CUtensorMap src_desc, CUtensorMap dst_desc) {
     mbarrier[0].expect_transaction(8192);  // 64 * 64 * 2 = 8192 bytes
 
     // TMA load: 从 A_desc 加载数据到 smem
-    // TileLang 约定: crd0=y, crd1=x
-    // 传入 (blockIdx.x * 64, 0) 表示: x = blockIdx.x * 64, y = 0
+    // TileLang 约定: crd0=y, crd1=x，对应 PTX {%crd0, %crd1} = {dim1, dim0}
+    // global_dim = {N, M} = {dim_y, dim_x}
+    // 所以 crd0 -> dim_y (N方向), crd1 -> dim_x (M方向)
+    // 传入 (blockIdx.x * 64, 0) = (y, x) 是正确的
     tl::tma_load(src_desc, mbarrier[0],
                  &(((bfloat16_t*)smem_buf)[0]),
-                 0, (int)blockIdx.x * 64);  // 注意顺序: (y, x)
+                 (int)blockIdx.x * 64, 0);
   } else {
     // Warpgroup 2: thread 128-255 等待 load 完成
     mbarrier[0].wait(0);
@@ -103,10 +105,11 @@ static CUresult CreateTMA2DDesc(
 ) {
     CUtensorMap tensor_map;
 
-    // TileLang: coord[0]=y, coord[1]=x
-    uint64_t global_dim[] = {static_cast<uint64_t>(dim_y), static_cast<uint64_t>(dim_x)};
-    uint64_t global_stride[] = {static_cast<uint64_t>(stride_y), 1ULL};
-    uint32_t box_dim[] = {box_dim_y, box_dim_x};
+    // TileLang: coord[0]=y, coord[1]=x，对应 PTX {dim1, dim0}
+    // 所以 global_dim[0] = dim0 = x_range = dim_x, global_dim[1] = dim1 = y_range = dim_y
+    uint64_t global_dim[] = {static_cast<uint64_t>(dim_x), static_cast<uint64_t>(dim_y)};
+    uint64_t global_stride[] = {static_cast<uint64_t>(1), static_cast<uint64_t>(stride_y)};
+    uint32_t box_dim[] = {box_dim_x, box_dim_y};
     uint32_t element_strides[] = {1, 1};
 
     return cuTensorMapEncodeTiled(
@@ -126,15 +129,15 @@ static CUresult CreateTMA2DDesc(
 }
 
 int main(int argc, char **argv) {
-    const int M = 64;    // 行数
-    const int N = 256;   // 列数
+    const int M = 32;    // 行数
+    const int N = 64;    // 列数
     const int BLOCK_N = 64;
-    const int BLOCK_M = 64;
+    const int BLOCK_M = 32;
 
     printf("=== TMA Copy Test ===\n");
     printf("Matrix size: M=%d, N=%d\n", M, N);
     printf("Block size: %d x %d\n", BLOCK_M, BLOCK_N);
-    printf("Grid: (%d, 1, 1)\n\n", (N + BLOCK_N - 1) / BLOCK_N);
+    printf("Grid: (1, 1, 1) - single block test\n\n");
 
     // 初始化
     CHECK_RT(cudaSetDevice(0));
@@ -166,22 +169,21 @@ int main(int argc, char **argv) {
 
     // 创建 TMA 描述符
     // 矩阵 A 和 B 都是 [M, N]
-    // kernel 中 tma_load(..., y, x) 其中 x=blockIdx.x*64, y=0
-    // TileLang coord[0]=y, coord[1]=x，所以:
-    //   global_dim[0] = dim_y = N (y 范围)
-    //   global_dim[1] = dim_x = M (x 范围)
-    //   stride_y = M (跨行 stride，元素个数)
+    // TileLang tma_load(..., y, x) 其中 y=blockIdx.x*64, x=0
+    // PTX: {%crd0, %crd1} = {dim1, dim0}
+    // 所以 global_dim[0] = dim0 = x_range = M, global_dim[1] = dim1 = y_range = N
+    // stride[0] = 1 (dim0 步长), stride[1] = M (dim1 步长)
     CUtensorMap A_desc, B_desc;
 
     printf("Creating TMA descriptors...\n");
-    printf("  dim_y = %d, dim_x = %d, stride_y = %d\n", N, M, M);
-    printf("  box_dim_y = %d, box_dim_x = %d\n", BLOCK_N, BLOCK_M);
+    printf("  global_dim = {%d, %d}, stride = {1, %d}\n", M, N, M);
+    printf("  box_dim = {%d, %d}\n", BLOCK_M, BLOCK_N);
 
     CHECK_CU(CreateTMA2DDesc(
         &A_desc, d_A,
-        M, N,              // dim_x=M, dim_y=N (coord[1]=x, coord[0]=y)
+        M, N,              // dim_x=M, dim_y=N
         BLOCK_M, BLOCK_N,  // box_dim_x, box_dim_y
-        M                   // stride_y = M (元素个数)
+        M                   // stride_y = M (dim1 步长)
     ));
 
     CHECK_CU(CreateTMA2DDesc(
@@ -192,18 +194,17 @@ int main(int argc, char **argv) {
     ));
     printf("TMA descriptors created successfully\n");
 
-    // Launch 配置
-    int grid_x = (N + BLOCK_N - 1) / BLOCK_N;
-    dim3 grid_dim(grid_x, 1, 1);
+    // Launch 配置 - 只用 1 个 block 测试
+    dim3 grid_dim(1, 1, 1);  // 只有一个 block
     dim3 block_dim(256, 1, 1);
-    size_t smem_size = BLOCK_M * BLOCK_N * sizeof(bfloat16_t);  // 64 * 64 * 2 = 8192
+    size_t smem_size = BLOCK_M * BLOCK_N * sizeof(bfloat16_t);  // 32 * 64 * 2 = 4096
 
     cudaStream_t stream;
     CHECK_RT(cudaStreamCreate(&stream));
 
     printf("\nLaunching tma_copy_kernel...\n");
-    printf("Grid: (%d,1,1), Block: (256,1,1), Smem: %zu\n",
-           grid_x, smem_size);
+    printf("Grid: (1,1,1), Block: (256,1,1), Smem: %zu\n",
+           smem_size);
 
     tma_copy_kernel<<<grid_dim, block_dim, smem_size, stream>>>(A_desc, B_desc);
 
