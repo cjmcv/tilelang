@@ -106,10 +106,11 @@ static CUresult CreateTMA2DDesc(
     CUtensorMap tensor_map;
 
     // TileLang: coord[0]=y, coord[1]=x，对应 PTX {dim1, dim0}
-    // 所以 global_dim[0] = dim0 = x_range = dim_x, global_dim[1] = dim1 = y_range = dim_y
-    uint64_t global_dim[] = {static_cast<uint64_t>(dim_x), static_cast<uint64_t>(dim_y)};
-    uint64_t global_stride[] = {static_cast<uint64_t>(1), static_cast<uint64_t>(stride_y)};
-    uint32_t box_dim[] = {box_dim_x, box_dim_y};
+    // global_dim: {dim1, dim0} = {y_range, x_range} = {dim_y, dim_x}
+    // global_stride: {stride_y, 1} = {y_stride, x_stride}
+    uint64_t global_dim[] = {static_cast<uint64_t>(dim_y), static_cast<uint64_t>(dim_x)};
+    uint64_t global_stride[] = {static_cast<uint64_t>(stride_y), 1ULL};
+    uint32_t box_dim[] = {box_dim_y, box_dim_x};
     uint32_t element_strides[] = {1, 1};
 
     return cuTensorMapEncodeTiled(
@@ -139,7 +140,14 @@ int main(int argc, char **argv) {
     printf("Block size: %d x %d\n", BLOCK_M, BLOCK_N);
     printf("Grid: (1, 1, 1) - single block test\n\n");
 
-    // 初始化
+    // 初始化 Driver API (cuTensorMapEncodeTiled 需要)
+    CHECK_CU(cuInit(0));
+    CUdevice device;
+    CHECK_CU(cuDeviceGet(&device, 0));
+    CUcontext context;
+    CHECK_CU(cuCtxCreate(&context, 0, device));
+
+    // 初始化 Runtime API
     CHECK_RT(cudaSetDevice(0));
     cudaDeviceProp prop;
     CHECK_RT(cudaGetDeviceProperties(&prop, 0));
@@ -250,5 +258,9 @@ int main(int argc, char **argv) {
     CHECK_RT(cudaStreamDestroy(stream));
 
     printf("\nDone!\n");
+
+    // 清理 Driver API context
+    CHECK_CU(cuCtxDestroy(context));
+
     return errors > 0 ? 1 : 0;
 }
