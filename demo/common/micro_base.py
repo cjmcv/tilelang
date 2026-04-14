@@ -26,6 +26,7 @@ import tilelang
 import tilelang.language as T
 
 from common.pkt_util import TestUtil, TorchRef
+from common.micro_config import get_target_str, is_megakernel_enabled, is_enable_profiling
   
 class HparamSelectMode(IntEnum):
     HEURISTIC = 0
@@ -333,7 +334,10 @@ class BaseMicroKernel:
             
         kernel = strategy.get_kernel(selected_hparams)
         kernel.config = selected_hparams
-        latency, latency_ref, similarity = self._run_profile(kernel, strategy, selected_hparams)
+        if (is_enable_profiling()):
+            latency, latency_ref, similarity = self._run_profile(kernel, strategy, selected_hparams)
+        else:
+            latency, latency_ref, similarity = 0,0,0
         # kernel.export_sources(kernel_path=save_path+f"_src.cuh")
         msg_suffix = f"latency: {latency} ms vs [ref-{latency_ref} sim-{similarity}], idx: {selected_idx}"
         with open(save_path+f".cuh", "w", encoding="utf-8") as f:

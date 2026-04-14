@@ -16,6 +16,7 @@ import tilelang.language as T
 
 from common.pkt_util import TestUtil, TorchRef
 from common.micro_base import BaseMicroKernel, HparamSelectMode
+from common.micro_config import get_target_str, is_megakernel_enabled
 
 # TODO: megakernel约束线程维度是一维128/256，而目前gemv方案是二维线程，且语法糖约束下，
 # 无法对tn = T.get_thread_binding(0)进行二次操作，即无法由threadIdx.x // N, threadIdx.x % N, 来转换成二维。
@@ -184,7 +185,7 @@ class _GemmStrategy:
         else:
             return self.kernel_splitk_main(self.M, self.N, self.K, *selected_hparams, self.dtype, self.accum_dtype) 
     
-    @tilelang.jit(out_idx=[-1])
+    @tilelang.jit(out_idx=[-1], target=get_target_str())
     def kernel_silu_mul_main(M, N, K, BLOCK_M, BLOCK_N, BLOCK_K, split_k, num_stages, thread_num, policy, enable_rasteration, dtype=T.float16, accum_dtype=T.float32):
         
         @T.prim_func
@@ -224,7 +225,7 @@ class _GemmStrategy:
 
         return linear
         
-    @tilelang.jit(out_idx=[-1])
+    @tilelang.jit(out_idx=[-1], target=get_target_str())
     def kernel_add_main(M, N, K, BLOCK_M, BLOCK_N, BLOCK_K, split_k, num_stages, thread_num, policy, enable_rasteration, dtype=T.float16, accum_dtype=T.float32):
         @T.prim_func
         def linear(
@@ -258,7 +259,7 @@ class _GemmStrategy:
 
         return linear
     
-    @tilelang.jit(out_idx=[-1])
+    @tilelang.jit(out_idx=[-1], target=get_target_str())
     def kernel_main(M, N, K, BLOCK_M, BLOCK_N, BLOCK_K, split_k, num_stages, thread_num, policy, enable_rasteration, dtype=T.float16, accum_dtype=T.float32):
         
         @T.prim_func
@@ -285,7 +286,7 @@ class _GemmStrategy:
 
         return linear
 
-    @tilelang.jit(out_idx=[-1])
+    @tilelang.jit(out_idx=[-1], target=get_target_str())
     def kernel_splitk_main(M, N, K, block_M, block_N, block_K, split_k, num_stages, thread_num, policy, enable_rasteration, dtype=T.float16, accum_dtype=T.float32):
         splitK = K // split_k
 
@@ -388,18 +389,19 @@ template <typename T,
             dtype = "float16_t"
         head_str = head_str.replace('<dtype>', str(dtype))
                 
-        origin_source = kernel.get_kernel_source()
-        source = self.replace_header(origin_source, "extern \"C\" __global__", 1, head_str)
-        source = source.replace("blockIdx.x", "bx")
-        source = source.replace("blockIdx.y", "by")
-        source = source.replace("blockIdx.z", "bz")
-        
+        source = kernel.get_kernel_source()
         grid_dim, block_dim, dynamic_smem_buf, use_cooperative_groups = kernel.get_launch_info()[0]
-        self.layout = f"({grid_dim['blockIdx.x']}, {grid_dim['blockIdx.y']}, {grid_dim['blockIdx.z']}), ({BLOCK_N}, {BLOCK_M}, {BLOCK_K})"
-        source = source.replace("<gridx_0>", str(grid_dim['blockIdx.x']))
-        source = source.replace("<gridy_0>", str(grid_dim['blockIdx.y']))
-        source = source.replace("<gridz_0>", str(grid_dim['blockIdx.z']))
+        self.layout = f"({grid_dim['blockIdx.x']}, {grid_dim['blockIdx.y']}, {grid_dim['blockIdx.z']}), ({BLOCK_N}, {BLOCK_M}, {BLOCK_K})"        
+        if (is_megakernel_enabled()):
+            source = self.replace_header(source, "extern \"C\" __global__", 1, head_str)
+            source = source.replace("blockIdx.x", "bx")
+            source = source.replace("blockIdx.y", "by")
+            source = source.replace("blockIdx.z", "bz")
         
+            source = source.replace("<gridx_0>", str(grid_dim['blockIdx.x']))
+            source = source.replace("<gridy_0>", str(grid_dim['blockIdx.y']))
+            source = source.replace("<gridz_0>", str(grid_dim['blockIdx.z']))
+            
         extra_attr = f"\n// Strategy: {self.strategy.name}"
         extra_attr += f"\n// selected_hparams: {selected_hparams}."
         extra_attr += f"\n// smem: {dynamic_smem_buf} bytes."

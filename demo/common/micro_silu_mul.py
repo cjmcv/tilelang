@@ -4,7 +4,8 @@ import tilelang
 import tilelang.language as T
 
 from common.micro_base import BaseMicroKernel, HparamSelectMode
-    
+from common.micro_config import get_target_str, is_megakernel_enabled
+
 class _SiluMulStrategy:
     def __init__(self, M, N, dtype, accum_dtype):
         self.name = "silu_mul_tl"+f"_{M}_{N}"
@@ -47,7 +48,7 @@ class _SiluMulStrategy:
         print("selected_hparams: ", selected_hparams)
         return self.kernel_main(self.M, self.N, *selected_hparams, self.dtype, self.accum_dtype) 
 
-    @tilelang.jit(out_idx=[-1])
+    @tilelang.jit(out_idx=[-1], target=get_target_str())
     def kernel_main(M, N, BLOCK_M, BLOCK_N, threads, dtype="bfloat16", accum_dtype="float32"):
         @T.prim_func
         def silu_mul(
@@ -125,17 +126,19 @@ __device__ __forceinline__ void silu_mul_kernel_<name_suffix>(const int bx, cons
             dtype = "float16_t"
         head_str = head_str.replace('<dtype>', str(dtype))
                 
-        origin_source = kernel.get_kernel_source()
-        source = self.replace_header(origin_source, "extern \"C\" __global__", 1, head_str)
-        source = source.replace("blockIdx.x", "bx")
-        source = source.replace("blockIdx.y", "by")
-        source = source.replace("blockIdx.z", "bz")
-        
+        source = kernel.get_kernel_source()
         grid_dim, block_dim, dynamic_smem_buf, use_cooperative_groups = kernel.get_launch_info()[0]
         self.layout = f"({grid_dim['blockIdx.x']}, {grid_dim['blockIdx.y']}, {grid_dim['blockIdx.z']}), ({BLOCK_N}, {BLOCK_M}, {BLOCK_K})"
-        source = source.replace("<gridx_0>", str(grid_dim['blockIdx.x']))
-        source = source.replace("<gridy_0>", str(grid_dim['blockIdx.y']))
-        source = source.replace("<gridz_0>", str(grid_dim['blockIdx.z']))
+        
+        if (is_megakernel_enabled()):
+            source = self.replace_header(source, "extern \"C\" __global__", 1, head_str)
+            source = source.replace("blockIdx.x", "bx")
+            source = source.replace("blockIdx.y", "by")
+            source = source.replace("blockIdx.z", "bz")
+            
+            source = source.replace("<gridx_0>", str(grid_dim['blockIdx.x']))
+            source = source.replace("<gridy_0>", str(grid_dim['blockIdx.y']))
+            source = source.replace("<gridz_0>", str(grid_dim['blockIdx.z']))
         
         extra_attr = f"\n// Strategy: {self.strategy.name}"
         extra_attr += f"\n// selected_hparams: {selected_hparams}."
