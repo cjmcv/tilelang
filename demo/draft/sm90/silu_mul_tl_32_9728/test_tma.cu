@@ -1,5 +1,5 @@
 // test_tma.cu - 简单的 TMA 数据拷贝测试
-// 从全局内存 A 拷贝到全局内存 B
+// 使用普通 <<<>>> 启动，验证 TMA 基本功能
 
 #include <cuda.h>
 #include <cuda_runtime.h>
@@ -37,54 +37,61 @@ namespace {
 
 }  // anonymous namespace
 
-// TMA 2D copy kernel
+// 简化的 TMA copy kernel - 直接使用 CUtensorMap 参数，不使用 __grid_constant__
+// TileLang 的 tma_load 函数签名: tma_load(descriptor, mbarrier, smem_ptr, crd0, crd1)
+// 其中 crd0=y, crd1=x (因为 TMA 指令是 {%3, %4} 对应 {y, x})
+
 extern "C" __global__ void __launch_bounds__(256, 1)
-tma_copy_kernel(__grid_constant__ const CUtensorMap src_desc,
-                __grid_constant__ const CUtensorMap dst_desc) {
+tma_copy_kernel(CUtensorMap src_desc, CUtensorMap dst_desc) {
   extern __shared__ __align__(1024) uchar smem_buf[];
-  __shared__ uint64_t mbarrier_mem[2];
+  __shared__ uint64_t mbarrier_mem[1];
   auto mbarrier = reinterpret_cast<Barrier*>(mbarrier_mem);
 
-  // 只用 thread 0 初始化 barrier 和 prefetch descriptor
+  // Warp 0 (thread 0-31) 初始化
   if (threadIdx.x == 0) {
     mbarrier[0].init(128);  // 等待 128 threads
-    tl::prefetch_tma_descriptor(src_desc);
-    tl::prefetch_tma_descriptor(dst_desc);
   }
   __syncthreads();
 
   // Warpgroup 1: thread 0-127 做 TMA load
   if (threadIdx.x < 128) {
-    // 设置期望的 transaction 数量
-    mbarrier[0].expect_transaction(4096);  // 64 * 64 * 2 bytes = 8192 bytes? 但这里用 4096
+    // 等待 warpgroup 2 准备好
+    __syncwarp();
+
+    // 设置 transaction 数量
+    mbarrier[0].expect_transaction(8192);  // 64 * 64 * 2 = 8192 bytes
 
     // TMA load: 从 A_desc 加载数据到 smem
-    // 注意：这里用 2D TMA，box 维度是 64x64
+    // TileLang 约定: crd0=y, crd1=x
+    // 传入 (blockIdx.x * 64, 0) 表示: x = blockIdx.x * 64, y = 0
     tl::tma_load(src_desc, mbarrier[0],
                  &(((bfloat16_t*)smem_buf)[0]),
-                 (int)blockIdx.x * 64, 0);
+                 0, (int)blockIdx.x * 64);  // 注意顺序: (y, x)
   } else {
-    // Warpgroup 2: thread 128-255 等待
+    // Warpgroup 2: thread 128-255 等待 load 完成
     mbarrier[0].wait(0);
+    __syncwarp();
   }
 
   __syncthreads();
 
   // Warpgroup 1: thread 0-127 做 TMA store
   if (threadIdx.x < 128) {
-    // 设置期望的 transaction
-    mbarrier[0].expect_transaction(4096);
+    mbarrier[0].expect_transaction(8192);
 
-    // TMA store: 从 smem 存储数据到 C_desc
+    // TMA store: 从 smem 存储数据到 dst_desc
+    // 同样 (y, x) 顺序
     tl::tma_store(dst_desc,
                   &(((bfloat16_t*)smem_buf)[0]),
-                  (int)blockIdx.x * 64, 0);
+                  0, (int)blockIdx.x * 64);
     tl::tma_store_arrive();
     tl::tma_store_wait<0>();
   }
 }
 
 // 创建 2D TMA 描述符
+// TileLang tma_load 使用 coord{y, x}，即 {%3, %4}
+// 所以 global_dim[0]=y_size, global_dim[1]=x_size
 static CUresult CreateTMA2DDesc(
     CUtensorMap *desc,
     void *gmem_ptr,
@@ -96,7 +103,7 @@ static CUresult CreateTMA2DDesc(
 ) {
     CUtensorMap tensor_map;
 
-    // TileLang 约定: coord[0]=y, coord[1]=x
+    // TileLang: coord[0]=y, coord[1]=x
     uint64_t global_dim[] = {static_cast<uint64_t>(dim_y), static_cast<uint64_t>(dim_x)};
     uint64_t global_stride[] = {static_cast<uint64_t>(stride_y), 1ULL};
     uint32_t box_dim[] = {box_dim_y, box_dim_x};
@@ -158,34 +165,44 @@ int main(int argc, char **argv) {
     CHECK_RT(cudaMemcpy(d_A, h_A.data(), size, cudaMemcpyHostToDevice));
 
     // 创建 TMA 描述符
-    // 矩阵 A 和 B 都是 [M, N]，TMA 坐标 (x, y) 其中 x=blockIdx.x*64, y=0
-    // TileLang 中 coord[0]=y, coord[1]=x，所以 dim_y=N, dim_x=M
+    // 矩阵 A 和 B 都是 [M, N]
+    // kernel 中 tma_load(..., y, x) 其中 x=blockIdx.x*64, y=0
+    // TileLang coord[0]=y, coord[1]=x，所以:
+    //   global_dim[0] = dim_y = N (y 范围)
+    //   global_dim[1] = dim_x = M (x 范围)
+    //   stride_y = M (跨行 stride，元素个数)
     CUtensorMap A_desc, B_desc;
+
+    printf("Creating TMA descriptors...\n");
+    printf("  dim_y = %d, dim_x = %d, stride_y = %d\n", N, M, M);
+    printf("  box_dim_y = %d, box_dim_x = %d\n", BLOCK_N, BLOCK_M);
+
     CHECK_CU(CreateTMA2DDesc(
         &A_desc, d_A,
-        M, N,              // dim_x=M, dim_y=N (因为 coord[0]=y, coord[1]=x)
-        BLOCK_M, BLOCK_N,  // box_dim
-        M                   // stride_y = M (跨行 stride，元素个数)
+        M, N,              // dim_x=M, dim_y=N (coord[1]=x, coord[0]=y)
+        BLOCK_M, BLOCK_N,  // box_dim_x, box_dim_y
+        M                   // stride_y = M (元素个数)
     ));
+
     CHECK_CU(CreateTMA2DDesc(
         &B_desc, d_B,
         M, N,
         BLOCK_M, BLOCK_N,
         M
     ));
-    printf("TMA descriptors created\n");
+    printf("TMA descriptors created successfully\n");
 
     // Launch 配置
     int grid_x = (N + BLOCK_N - 1) / BLOCK_N;
     dim3 grid_dim(grid_x, 1, 1);
     dim3 block_dim(256, 1, 1);
-    size_t smem_size = 64 * 64 * sizeof(bfloat16_t);  // 8192 bytes
+    size_t smem_size = BLOCK_M * BLOCK_N * sizeof(bfloat16_t);  // 64 * 64 * 2 = 8192
 
     cudaStream_t stream;
     CHECK_RT(cudaStreamCreate(&stream));
 
-    printf("Launching tma_copy_kernel...\n");
-    printf("Grid: (%d,1,1), Block: (256,1,1), Smem: %zu\n\n",
+    printf("\nLaunching tma_copy_kernel...\n");
+    printf("Grid: (%d,1,1), Block: (256,1,1), Smem: %zu\n",
            grid_x, smem_size);
 
     tma_copy_kernel<<<grid_dim, block_dim, smem_size, stream>>>(A_desc, B_desc);
