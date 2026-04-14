@@ -64,7 +64,7 @@ static CUresult CreateTMA2DDesc(
 
     return cuTensorMapEncodeTiled(
         &tensor_map,
-        CU_TENSOR_MAP_DATA_TYPE_BF16,
+        CU_TENSOR_MAP_DATA_TYPE_BFLOAT16,
         2,
         gmem_ptr,
         global_dim,
@@ -74,7 +74,7 @@ static CUresult CreateTMA2DDesc(
         CU_TENSOR_MAP_INTERLEAVE_NONE,
         CU_TENSOR_MAP_SWIZZLE_NONE,
         CU_TENSOR_MAP_L2_PROMOTION_NONE,
-        CU_TENSOR_MAP_OOB_FILL_NONE
+        CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE
     );
 }
 
@@ -113,7 +113,7 @@ static void CreateSiluMulTMADescs(
     ));
 }
 
-// 使用 cuLaunchKernelEx 启动带 __grid_constant__ 的 kernel
+// 使用 cuLaunchKernelEx 启动 kernel
 static cudaError_t LaunchSiluMulKernel(
     void *A_gmem,
     void *C_gmem,
@@ -135,10 +135,6 @@ static cudaError_t LaunchSiluMulKernel(
     // 启动配置
     CUstream custream = (CUstream)stream;
 
-    CUlaunchAttribute launch_attrs[1];
-    launch_attrs[0].id = CU_LAUNCH_ATTRIBUTE_GRID_CONSTANT;
-    launch_attrs[0].value.gridConstantDesc.hostBuffer = 1;
-
     CUlaunchConfig config;
     config.gridDimX = grid_dim.x;
     config.gridDimY = grid_dim.y;
@@ -146,14 +142,14 @@ static cudaError_t LaunchSiluMulKernel(
     config.blockDimX = block_dim.x;
     config.blockDimY = block_dim.y;
     config.blockDimZ = block_dim.z;
-    config.numAttrs = 1;
-    config.attrs = launch_attrs;
-    config.stream = custream;
+    config.sharedMemBytes = smem_size;
+    config.hStream = custream;
+    config.attrs = NULL;
+    config.numAttrs = 0;
 
     // 获取 kernel 函数 (需要先加载编译好的 cubin)
     CUmodule module;
     CUfunction function;
-    CHECK_CU(cuModuleGetCurrent(&module));
     CHECK_CU(cuModuleGetFunction(&function, module, "silu_mul_kernel"));
 
     // 设置共享内存
@@ -167,7 +163,7 @@ static cudaError_t LaunchSiluMulKernel(
     void *args[] = {&A_desc, &C_desc};
 
     // 启动
-    CHECK_CU(cuLaunchKernelEx(&config, function, args));
+    CHECK_CU(cuLaunchKernelEx(&config, function, args, NULL));
 
     return cudaSuccess;
 }
@@ -195,11 +191,12 @@ int main(int argc, char **argv) {
     CHECK_CU(cuCtxCreate(&context, 0, device));
 
     // 检查架构
-    int sm_version;
-    CHECK_CU(cuDeviceGetAttribute(&sm_version, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY, device));
-    printf("Device: sm_%d.%d\n", sm_version / 10, sm_version % 10);
+    int sm_major, sm_minor;
+    CHECK_CU(cuDeviceGetAttribute(&sm_major, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, device));
+    CHECK_CU(cuDeviceGetAttribute(&sm_minor, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, device));
+    printf("Device: sm_%d.%d\n", sm_major, sm_minor);
 
-    if (sm_version < 90) {
+    if (sm_major < 90) {
         printf("ERROR: This kernel requires Hopper (sm_90a)\n");
         return 1;
     }
