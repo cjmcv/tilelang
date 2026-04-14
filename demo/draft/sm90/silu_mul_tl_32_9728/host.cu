@@ -57,6 +57,7 @@ static CUresult CreateTMA2DDesc(
 ) {
     CUtensorMap tensor_map;
 
+    // global_dim: {y_size, x_size}, 坐标约定: crd0=y, crd1=x
     uint64_t global_dim[] = {static_cast<uint64_t>(dim_y), static_cast<uint64_t>(dim_x)};
     uint64_t global_stride[] = {static_cast<uint64_t>(stride_y), 1ULL};
     uint32_t box_dim[] = {box_dim_y, box_dim_x};
@@ -90,28 +91,38 @@ static void CreateSiluMulTMADescs(
     constexpr int BLOCK_M = 32;
     constexpr int BLOCK_N = 64;
 
-    // A: [M, N*2] bfloat16, 前 N 列是 silu 输入，后 N 列是 mul 输入
-    // stride_y 是元素个数，不是字节
-    CHECK_CU(CreateTMA2DDesc(
+    // A: [M, N*2] bfloat16
+    // kernel 里 tma_load(..., x, y) 其中 x=blockIdx.x*64, y=0
+    // TMA global_dim = {y_size, x_size}，所以要交换：
+    // y_size = N*2, x_size = M, stride_y = M (沿 y 方向的跨行 stride)
+    CUresult res = CreateTMA2DDesc(
         A_desc,
         A_gmem,
-        N * 2,          // dim_x = N*2 (元素)
-        M,              // dim_y = M (元素)
-        BLOCK_N,        // box_dim_x
-        BLOCK_M,        // box_dim_y
-        N * 2          // stride_y = N*2 (元素个数)，跨行 stride
-    ));
+        M,              // dim_x = M (x_size)
+        N * 2,          // dim_y = N*2 (y_size)
+        BLOCK_M,        // box_dim_x (因为 x_size=M)
+        BLOCK_N,        // box_dim_y (因为 y_size=N*2)
+        M               // stride_y = M (元素个数，跨行 stride)
+    );
+    if (res != CUDA_SUCCESS) {
+        fprintf(stderr, "CreateTMA2DDesc A failed: %d\n", res);
+        exit(1);
+    }
 
     // C: [M, N] bfloat16
-    CHECK_CU(CreateTMA2DDesc(
+    res = CreateTMA2DDesc(
         C_desc,
         C_gmem,
-        N,              // dim_x = N (元素)
-        M,              // dim_y = M (元素)
-        BLOCK_N,        // box_dim_x
-        BLOCK_M,        // box_dim_y
-        N               // stride_y = N (元素个数)
-    ));
+        M,              // dim_x = M (x_size)
+        N,              // dim_y = N (y_size)
+        BLOCK_M,        // box_dim_x
+        BLOCK_N,        // box_dim_y
+        M               // stride_y = M (元素个数)
+    );
+    if (res != CUDA_SUCCESS) {
+        fprintf(stderr, "CreateTMA2DDesc C failed: %d\n", res);
+        exit(1);
+    }
 }
 
 // ============================================
@@ -125,29 +136,23 @@ int main(int argc, char **argv) {
     printf("=== silu_mul Kernel Launch Test ===\n");
     printf("M=%d, N=%d, Grid=(%d,%d,%d), Block=(%d,%d,%d)\n",
            M, N, 152, 1, 1, 256, 1, 1);
+    printf("Grid: (N/BLOCK_N=%d, M/BLOCK_M=%d)\n", 152, 1);
     printf("Shared memory: 16384 bytes\n\n");
 
-    // 初始化 CUDA Driver API
-    CHECK_CU(cuInit(0));
-
-    CUdevice device;
-    CHECK_CU(cuDeviceGet(&device, 0));
-
-    CUcontext context;
-    CHECK_CU(cuCtxCreate(&context, 0, device));
+    // 使用 Runtime API 初始化
+    CHECK_RT(cudaSetDevice(0));
 
     // 检查架构
-    int sm_major, sm_minor;
-    CHECK_CU(cuDeviceGetAttribute(&sm_major, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, device));
-    CHECK_CU(cuDeviceGetAttribute(&sm_minor, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, device));
-    printf("Device: sm_%d.%d\n", sm_major, sm_minor);
+    cudaDeviceProp prop;
+    CHECK_RT(cudaGetDeviceProperties(&prop, 0));
+    printf("Device: %s (sm_%d%d)\n", prop.name, prop.major, prop.minor);
 
-    if (sm_major < 9) {
+    if (prop.major < 9) {
         printf("ERROR: This kernel requires Hopper (sm_90a)\n");
         return 1;
     }
 
-    // 分配内存
+    // 分配内存 (使用 Runtime API)
     bfloat16_t *d_A = nullptr;
     bfloat16_t *d_C = nullptr;
 
@@ -157,6 +162,9 @@ int main(int argc, char **argv) {
     CHECK_RT(cudaMalloc(&d_A, A_size));
     CHECK_RT(cudaMalloc(&d_C, C_size));
 
+    printf("d_A = %p, size = %zu\n", (void*)d_A, A_size);
+    printf("d_C = %p, size = %zu\n", (void*)d_C, C_size);
+
     // 初始化输入
     std::vector<bfloat16_t> h_A(M * N2);
     for (int i = 0; i < M * N2; i++) {
@@ -164,14 +172,21 @@ int main(int argc, char **argv) {
     }
     CHECK_RT(cudaMemcpy(d_A, h_A.data(), A_size, cudaMemcpyHostToDevice));
 
-    // 创建 TMA 描述符
+    // 创建 TMA 描述符 (需要 Driver API)
+    // 注意: cuTensorMapEncodeTiled 需要正确的 CUDA context
+    CUdevice device;
+    CHECK_CU(cuInit(0));
+    CHECK_CU(cuDeviceGet(&device, 0));
+    CUcontext ctx;
+    CHECK_CU(cuCtxCreate(&ctx, 0, device));
+
     CUtensorMap A_desc, C_desc;
     CreateSiluMulTMADescs(&A_desc, &C_desc, d_A, d_C, M, N);
+    printf("TMA descriptors created successfully\n");
 
     // Grid/Block/Shared memory 维度
     dim3 grid_dim(152, 1, 1);
     dim3 block_dim(256, 1, 1);
-    // smem: A前半(4096) + A后半(4096) + C输出(8192) = 16384 bytes
     size_t smem_size = 16384;
 
     // Stream
@@ -182,7 +197,11 @@ int main(int argc, char **argv) {
     printf("Launching silu_mul_kernel...\n");
     silu_mul_kernel<<<grid_dim, block_dim, smem_size, stream>>>(A_desc, C_desc);
 
-    CHECK_RT(cudaStreamSynchronize(stream));
+    cudaError_t err = cudaStreamSynchronize(stream);
+    if (err != cudaSuccess) {
+        printf("Kernel launch failed: %s\n", cudaGetErrorName(err));
+        return 1;
+    }
     printf("Kernel completed!\n");
 
     // 验证结果
@@ -198,7 +217,7 @@ int main(int argc, char **argv) {
     CHECK_RT(cudaFree(d_A));
     CHECK_RT(cudaFree(d_C));
     CHECK_RT(cudaStreamDestroy(stream));
-    CHECK_CU(cuCtxDestroy(context));
+    CHECK_CU(cuCtxDestroy(ctx));
 
     printf("\nDone!\n");
     return 0;
