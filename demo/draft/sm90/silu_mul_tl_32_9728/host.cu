@@ -91,25 +91,26 @@ static void CreateSiluMulTMADescs(
     constexpr int BLOCK_N = 64;
 
     // A: [M, N*2] bfloat16, 前 N 列是 silu 输入，后 N 列是 mul 输入
+    // stride_y 是元素个数，不是字节
     CHECK_CU(CreateTMA2DDesc(
         A_desc,
         A_gmem,
-        N * 2,          // dim_x = N*2
-        M,              // dim_y = M
+        N * 2,          // dim_x = N*2 (元素)
+        M,              // dim_y = M (元素)
         BLOCK_N,        // box_dim_x
         BLOCK_M,        // box_dim_y
-        N * 2 * 2       // stride_y = N*2 * sizeof(bfloat16)
+        N * 2          // stride_y = N*2 (元素个数)，跨行 stride
     ));
 
     // C: [M, N] bfloat16
     CHECK_CU(CreateTMA2DDesc(
         C_desc,
         C_gmem,
-        N,              // dim_x = N
-        M,              // dim_y = M
+        N,              // dim_x = N (元素)
+        M,              // dim_y = M (元素)
         BLOCK_N,        // box_dim_x
         BLOCK_M,        // box_dim_y
-        N * 2           // stride_y = N * sizeof(bfloat16)
+        N               // stride_y = N (元素个数)
     ));
 }
 
@@ -124,7 +125,7 @@ int main(int argc, char **argv) {
     printf("=== silu_mul Kernel Launch Test ===\n");
     printf("M=%d, N=%d, Grid=(%d,%d,%d), Block=(%d,%d,%d)\n",
            M, N, 152, 1, 1, 256, 1, 1);
-    printf("Shared memory: 12288 bytes\n\n");
+    printf("Shared memory: 16384 bytes\n\n");
 
     // 初始化 CUDA Driver API
     CHECK_CU(cuInit(0));
@@ -170,7 +171,8 @@ int main(int argc, char **argv) {
     // Grid/Block/Shared memory 维度
     dim3 grid_dim(152, 1, 1);
     dim3 block_dim(256, 1, 1);
-    size_t smem_size = 12288;
+    // smem: A前半(4096) + A后半(4096) + C输出(8192) = 16384 bytes
+    size_t smem_size = 16384;
 
     // Stream
     cudaStream_t stream;
