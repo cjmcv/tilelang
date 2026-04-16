@@ -523,6 +523,14 @@ private:
                                          static_cast<int>(imm->value))}));
             return Call(op->dtype, op->op, new_args);
           }
+        } else if (!is_1d_tma_load && op->args.size() >= 2) {
+          if (const auto *imm = op->args[1].as<IntImmNode>()) {
+            Array<PrimExpr> new_args = op->args;
+            new_args.Set(1, Call(DataType::Handle(), get_mbarrier(),
+                                 {IntImm(DataType::Int(32),
+                                         static_cast<int>(imm->value))}));
+            return Call(op->dtype, op->op, new_args);
+          }
         }
         return IRMutatorWithAnalyzer::VisitExpr_(op);
       }
