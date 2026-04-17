@@ -121,6 +121,40 @@ cdef extern from "megakernel/kernel/tb_graph.h" namespace "megakernel::threadblo
         int thread_num
         vector[CppTBOperator*] operators
 
+cdef extern from "megakernel/kernel/allreduce/custom_all_reduce.h" namespace "xop":
+
+    cdef cppclass AllReduce "xop::AllReduce":
+        AllReduce(int thread_num)
+
+        AllReduce(dim3 grid_dim,
+                   dim3 block_dim,
+                   int thread_num)
+
+        CppDTensor* new_input(const CppDTensor* dtensor,
+                             int3 input_map)
+
+        dim3 grid_dim
+        dim3 block_dim
+        int thread_num
+        vector[CppTBOperator*] operators
+
+cdef class PyAllReduce:
+    cdef AllReduce* handle  # 持有C++实例指针
+
+    def __cinit__(self, int thread_num):
+        # 创建C++ AllReduce
+        self.handle = new AllReduce(thread_num)
+
+    def __dealloc__(self):
+        # 释放内存
+        if self.handle:
+            del self.handle
+
+    # 提供Python可调用的方法
+    # def add_input(self, dtensor, int x, int y, int z):
+    #     cdef int3 input_map = make_int3(x, y, z)
+    #     cdef CppDTensor* inp = self.handle.new_input(<CppDTensor*>dtensor, input_map)
+    #     return inp  # 可继续包装给Python
 ################################################################
 
 class dtype:
