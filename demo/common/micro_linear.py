@@ -16,7 +16,7 @@ import tilelang.language as T
 
 from common.pkt_util import TestUtil, TorchRef
 from common.micro_base import BaseMicroKernel, HparamSelectMode
-from common.micro_config import get_target_str, is_megakernel_enabled
+from common.micro_config import get_target_str, is_megakernel_enabled, get_pass_configs
 
 # TODO: megakernel约束线程维度是一维128/256，而目前gemv方案是二维线程，且语法糖约束下，
 # 无法对tn = T.get_thread_binding(0)进行二次操作，即无法由threadIdx.x // N, threadIdx.x % N, 来转换成二维。
@@ -184,8 +184,8 @@ class _GemmStrategy:
                 return self.kernel_main(self.M, self.N, self.K, *selected_hparams, self.dtype, self.accum_dtype) 
         else:
             return self.kernel_splitk_main(self.M, self.N, self.K, *selected_hparams, self.dtype, self.accum_dtype) 
-    
-    @tilelang.jit(out_idx=[-1], target=get_target_str())
+
+    @tilelang.jit(out_idx=[-1], target=get_target_str(), pass_configs=get_pass_configs())
     def kernel_silu_mul_main(M, N, K, BLOCK_M, BLOCK_N, BLOCK_K, split_k, num_stages, thread_num, policy, enable_rasteration, dtype=T.float16, accum_dtype=T.float32):
         
         @T.prim_func
@@ -225,7 +225,7 @@ class _GemmStrategy:
 
         return linear
         
-    @tilelang.jit(out_idx=[-1], target=get_target_str())
+    @tilelang.jit(out_idx=[-1], target=get_target_str(), pass_configs=get_pass_configs())
     def kernel_add_main(M, N, K, BLOCK_M, BLOCK_N, BLOCK_K, split_k, num_stages, thread_num, policy, enable_rasteration, dtype=T.float16, accum_dtype=T.float32):
         @T.prim_func
         def linear(
@@ -259,7 +259,7 @@ class _GemmStrategy:
 
         return linear
     
-    @tilelang.jit(out_idx=[-1], target=get_target_str())
+    @tilelang.jit(out_idx=[-1], target=get_target_str(), pass_configs=get_pass_configs())
     def kernel_main(M, N, K, BLOCK_M, BLOCK_N, BLOCK_K, split_k, num_stages, thread_num, policy, enable_rasteration, dtype=T.float16, accum_dtype=T.float32):
         
         @T.prim_func

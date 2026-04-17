@@ -4,7 +4,8 @@ import tilelang
 import tilelang.language as T
 
 from common.micro_base import BaseMicroKernel, HparamSelectMode
-    
+from common.micro_config import get_target_str, is_megakernel_enabled, get_pass_configs
+
 #####################################################################################################################
 #      overlap版本                                        #            parallel版本                                 #
 #####################################################################################################################
@@ -131,7 +132,7 @@ class _RopeStrategy:
                                         self.num_heads, self.num_kv_heads, self.head_dim,
                                         *kernel_hparam, self.dtype, self.accum_dtype) 
 
-    @tilelang.jit(out_idx=[-2, -1])
+    @tilelang.jit(out_idx=[-2, -1], target=get_target_str(), pass_configs=get_pass_configs())
     def rope_qk_overlap(batch, seqlen, num_heads, num_kv_heads, head_dim, 
                                 BLOCK_SEQ, BLOCK_HEADS_Q, BLOCK_HEADS_K, threads=128,
                                 dtype="bfloat16", accum_dtype="float32"):
@@ -248,7 +249,7 @@ class _RopeStrategy:
         
         return rope
 
-    @tilelang.jit(out_idx=[-2, -1])
+    @tilelang.jit(out_idx=[-2, -1], target=get_target_str(), pass_configs=get_pass_configs())
     def rope_qk_parallel(batch, seqlen, num_heads, num_kv_heads, head_dim, 
                         BLOCK_SEQ, BLOCK_HEADS_Q, BLOCK_HEADS_K, threads=128,
                         dtype="bfloat16", accum_dtype="float32"):

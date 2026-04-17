@@ -3,6 +3,7 @@ import itertools
 import tilelang
 import tilelang.language as T
 from common.micro_base import BaseMicroKernel, HparamSelectMode
+from common.micro_config import get_target_str, is_megakernel_enabled, get_pass_configs
 
 #####################################################################################################
 #                  短序列实现	          长序列实现                  思路
@@ -106,10 +107,7 @@ class _GqaDecodeStrategy:
         # else:
         return self.kernel_main(self.batch, self.num_heads, self.num_kv_heads, self.max_kv_seqlen, self.dim, self.is_causal, *selected_hparams, self.dtype, self.accum_dtype) 
 
-    def get_pass_configs():
-        return {tilelang.PassConfigKey.TL_DISABLE_TMA_LOWER: True, tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True}
-
-    @tilelang.jit(out_idx=[-1], pass_configs=get_pass_configs())
+    @tilelang.jit(out_idx=[-1], target=get_target_str(), pass_configs=get_pass_configs())
     def kernel_main_m64(batch, num_heads, num_kv_heads, kv_seqlen, target_kv_seqlen, dim, is_causal, block_N, block_H, num_split, num_stages, threads, dtype="bfloat16", accum_dtype="float32"):
         scale = (1.0 / dim) ** 0.5 * 1.44269504  # log2(e)
         shape_q = [batch, num_heads, dim]            # [batch, seqlen_q, num_heads, dim]
@@ -199,7 +197,7 @@ class _GqaDecodeStrategy:
                 T.copy(O_shared, Output[bid, hid * valid_block_H : (hid + 1) * valid_block_H, :])
         return flash_attn_m64
 
-    @tilelang.jit(out_idx=[-1], pass_configs=get_pass_configs())
+    @tilelang.jit(out_idx=[-1], target=get_target_str(), pass_configs=get_pass_configs())
     def kernel_main(batch, num_heads, num_kv_heads, kv_seqlen, dim, is_causal, block_N, block_H, num_split, num_stages, threads, dtype="bfloat16", accum_dtype="float32"):
         scale = (1.0 / dim) ** 0.5 * 1.44269504  # log2(e)
         shape_q = [batch, num_heads, dim]            # [batch, seqlen_q, num_heads, dim]

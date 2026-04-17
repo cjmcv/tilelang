@@ -4,7 +4,7 @@ import tilelang
 import tilelang.language as T
 
 from common.micro_base import BaseMicroKernel, HparamSelectMode
-    
+from common.micro_config import get_target_str, is_megakernel_enabled, get_pass_configs
 class _RmsNormStrategy:
     def __init__(self, M, M2, N, dtype, accum_dtype):
         self.name = "rms_norm_tl"+f"_{M+M2}_{N}"
@@ -70,7 +70,7 @@ class _RmsNormStrategy:
         else:
             return self.kernel_merge_main(self.M, self.M2, self.N, *selected_hparams, 1e-12, self.dtype, self.accum_dtype) 
         
-    @tilelang.jit(out_idx=[-1], pass_configs={"tl.disable_tma_lower": True})
+    @tilelang.jit(out_idx=[-1], target=get_target_str(), pass_configs=get_pass_configs())
     def kernel_main(M, N, BLOCK_M, BLOCK_N, threads, eps=1e-12, dtype="bfloat16", accum_dtype="float32"):
         @T.prim_func
         def rms_norm(A: T.Tensor((M, N), dtype), B: T.Tensor((1, N), dtype), C: T.Tensor((M, N), dtype)):
@@ -99,7 +99,7 @@ class _RmsNormStrategy:
 
         return rms_norm
     
-    @tilelang.jit(out_idx=[-1], pass_configs={"tl.disable_tma_lower": True})
+    @tilelang.jit(out_idx=[-1], target=get_target_str(), pass_configs=get_pass_configs())
     def kernel_merge_main(M1, M2, N, BLOCK_M, BLOCK_N, threads, eps=1e-12, dtype="bfloat16", accum_dtype="float32"):
         @T.prim_func
         def rms_norm(A: T.Tensor((M1+M2, N), dtype), B: T.Tensor((2, N), dtype), C: T.Tensor((M1+M2, N), dtype)):

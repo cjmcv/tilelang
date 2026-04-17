@@ -4,7 +4,7 @@ import tilelang
 import tilelang.language as T
 
 from common.micro_base import BaseMicroKernel, HparamSelectMode
-from common.micro_config import get_target_str, is_megakernel_enabled
+from common.micro_config import get_target_str, is_megakernel_enabled, get_pass_configs
 
 class _SiluMulStrategy:
     def __init__(self, M, N, dtype, accum_dtype):
@@ -48,7 +48,7 @@ class _SiluMulStrategy:
         print("selected_hparams: ", selected_hparams)
         return self.kernel_main(self.M, self.N, *selected_hparams, self.dtype, self.accum_dtype) 
 
-    @tilelang.jit(out_idx=[-1], target=get_target_str())
+    @tilelang.jit(out_idx=[-1], target=get_target_str(), pass_configs=get_pass_configs())
     def kernel_main(M, N, BLOCK_M, BLOCK_N, threads, dtype="bfloat16", accum_dtype="float32"):
         @T.prim_func
         def silu_mul(

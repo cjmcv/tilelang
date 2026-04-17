@@ -48,14 +48,10 @@ template <typename T,
     *(float2*)(C_local + (i * 2)) = make_float2(0x0p+0f/*0.000000e+00*/, 0x0p+0f/*0.000000e+00*/);
   }
   tl::cp_async_gs_conditional<16>(buf_dyn_shmem+(((((((int)threadIdx.x) >> 3) * 128) + (((((((int)threadIdx.x) & 63) >> 5) + ((((int)threadIdx.x) & 7) >> 2)) & 1) * 64)) + (((((((int)threadIdx.x) & 31) >> 4) + ((((int)threadIdx.x) & 3) >> 1)) & 1) * 32)) + (((((((int)threadIdx.x) & 15) >> 3) + (((int)threadIdx.x) & 1)) & 1) * 16)), A+(((int)threadIdx.x) * 8), ((((int)threadIdx.x) < 8) && (((int)threadIdx.x) < 8)));
-  //
-  // if (bx >= 19) {
   #pragma unroll
   for (int i_1 = 0; i_1 < 4; ++i_1) {
     tl::cp_async_gs<16>(buf_dyn_shmem+((((((i_1 * 2048) + ((((int)threadIdx.x) >> 3) * 128)) + (((((((int)threadIdx.x) & 63) >> 5) + ((((int)threadIdx.x) & 7) >> 2)) & 1) * 64)) + (((((((int)threadIdx.x) & 31) >> 4) + ((((int)threadIdx.x) & 3) >> 1)) & 1) * 32)) + (((((((int)threadIdx.x) & 15) >> 3) + (((int)threadIdx.x) & 1)) & 1) * 16)) + 4096), B+((((((int)bx) * 65536) + (i_1 * 16384)) + ((((int)threadIdx.x) >> 3) * 1024)) + ((((int)threadIdx.x) & 7) * 8)));
-  }    
-  // }
-  //
+  }
   tl::cp_async_commit();
   for (int k = 0; k < 15; ++k) {
     __syncthreads();
@@ -104,4 +100,4 @@ template <typename T,
 // use_cooperative_groups: 0.
 // layout: (64, 1, 1), (64, 16, 64)
 // block_dim=(128, 1, 1).
-// latency: 0.07271 ms vs [ref-0.06964 sim-1.0], idx: 25
+// latency: 0 ms vs [ref-0 sim-0], idx: 25

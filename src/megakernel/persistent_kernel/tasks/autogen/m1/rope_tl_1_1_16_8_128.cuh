@@ -84,4 +84,4 @@ __device__ __forceinline__ void rope_kernel_1_1_16_8_128(const int bx, const int
 // use_cooperative_groups: 0.
 // layout: (24, 1, 1), (1, 1, 1)
 // block_dim=(128, 1, 1).
-// latency: 0.00363 ms vs [ref-0.00446 sim-1.0], idx: 0
+// latency: 0 ms vs [ref-0 sim-0], idx: 0

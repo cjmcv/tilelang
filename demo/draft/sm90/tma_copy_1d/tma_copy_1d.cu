@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <vector>
+#include <cstddef>
 
 namespace {
 
@@ -39,141 +40,62 @@ namespace {
 //------------------------------------------------------------------------------
 extern "C" __global__ void __launch_bounds__(128, 1)
 tma_copy_1d_kernel(const float* __restrict__ src, float* dst, int num_elements) {
-    extern __shared__ __align__(16) float smem[];
+    extern __shared__ __align__(16) unsigned char smem_bytes[];
     __shared__ unsigned long long mbarrier;
 
     int tid = threadIdx.x;
     int element_idx = blockIdx.x * 128 + tid;
 
+    // 获取 shared memory 地址
+    unsigned int smem_ptr = static_cast<unsigned int>(__cvta_generic_to_shared(smem_bytes));
+    unsigned int mbar_ptr = static_cast<unsigned int>(__cvta_generic_to_shared(&mbarrier));
+
     // Thread 0 初始化 mbarrier (128 threads 对应 128 elements)
     if (tid == 0) {
-        asm volatile("mbarrier.init.shared.b64 [%0], %1;" : : "l"(&mbarrier), "r"(128));
+        asm volatile("mbarrier.init.shared::cta.b64 [%0], %1;"
+                     :: "r"(mbar_ptr), "r"(128));
     }
     __syncthreads();
 
     // Load phase: TMA load from global to shared
     if (tid < 128) {
-        asm volatile("mbarrier.arrive_shared.b64 _, [%0];" : : "l"(&mbarrier));
+        asm volatile("mbarrier.arrive.expect_tx.shared::cta.b64 _, [%0], %1;"
+                     :: "r"(mbar_ptr), "r"(128));
     }
     __syncthreads();
 
     if (element_idx < num_elements) {
         // TMA load 指令
-        void* dst_addr = static_cast<void*>(&smem[tid]);
+        unsigned long long dst_addr = smem_ptr + tid * sizeof(float);
         asm volatile(
-            "ld.global.atomic.acquire.cluster.f32 [%0], %1;"
+            "ld.global.atomic.acquire.cluster.f32 [%0], [%1];"
             : : "l"(dst_addr), "l"(src + element_idx)
         );
     }
 
     // 等待所有 TMA 加载完成
-    if (tid < 128) {
-        asm volatile("mbarrier.wait.shared.b64 _, [%0];" : : "l"(&mbarrier));
+    if (tid == 0) {
+        asm volatile("mbarrier.try_wait.parity.shared::cta.b64 P1, [%0], 0;"
+                     : : "r"(mbar_ptr));
     }
     __syncthreads();
 
     // Store phase: TMA store from shared to global
     if (tid < 128) {
-        asm volatile("mbarrier.arrive.shared.b64 _, [%0];" : : "l"(&mbarrier));
+        asm volatile("mbarrier.arrive.shared::cta.b64 _, [%0], %1;"
+                     :: "r"(mbar_ptr), "r"(128));
     }
     __syncthreads();
 
     if (element_idx < num_elements) {
-        // TMA store 指令
-        void* src_addr = static_cast<void*>(&smem[tid]);
+        float* smem_float = reinterpret_cast<float*>(smem_bytes);
+        float val = smem_float[tid];
         asm volatile(
             "st.global.release.f32 [%0], %1;"
-            : : "l"(dst + element_idx), "f"(smem[tid])
+            : : "l"(dst + element_idx), "f"(val)
         );
     }
 }
-
-//------------------------------------------------------------------------------
-// 使用 TMA 描述符的版本 (更完整的 API 用法)
-//------------------------------------------------------------------------------
-extern "C" __global__ void __launch_bounds__(128, 1)
-tma_copy_1d_desc_kernel(CUtensorMap src_desc, CUtensorMap dst_desc,
-                        int num_elements, int total_blocks) {
-    extern __shared__ __align__(16) uchar smem[];
-    __shared__ unsigned long long mbarrier;
-
-    int tid = threadIdx.x;
-    int block_offset = blockIdx.x * 128;
-
-    // Thread 0 初始化 mbarrier
-    if (tid == 0) {
-        asm volatile("mbarrier.init.shared.b64 [%0], %1;" : : "l"(&mbarrier), "r"(128));
-    }
-    __syncthreads();
-
-    // Phase 1: TMA Load (使用 descriptor)
-    if (tid < 128) {
-        asm volatile("mbarrier.arrive_shared.b64 _, [%0];" : : "l"(&mbarrier));
-    }
-    __syncthreads();
-
-    // 每个 thread 处理 1 个 element
-    if (block_offset + tid < num_elements) {
-        float* shared_buf = reinterpret_cast<float*>(smem);
-
-        // TMA 加载使用 inline asm
-        // cudatx += src_desc;  // 编译期绑定 descriptor
-        asm volatile(
-            "{ .global .指令可能需要特定语法 }"
-            ::: "memory"
-        );
-    }
-
-    __syncthreads();
-
-    // Phase 2: TMA Store
-    if (tid < 128) {
-        asm volatile("mbarrier.arrive_shared.b64 _, [%0];" : : "l"(&mbarrier));
-    }
-    __syncthreads();
-
-    if (block_offset + tid < num_elements) {
-        asm volatile(
-            "st.global.release.f32 [%0], %1;"
-            : : "l"(dst_desc), "f"(smem[tid])
-        );
-    }
-}
-
-//------------------------------------------------------------------------------
-// 简化的 TMA Load/Store wrapper (推荐实际使用)
-//------------------------------------------------------------------------------
-namespace tma {
-
-// 创建 1D TMA descriptor
-inline CUresult create_1d_desc(
-    CUtensorMap* desc,
-    void* ptr,
-    uint64_t num_elements,
-    uint32_t box_size
-) {
-    uint64_t global_dim[] = {num_elements};
-    uint64_t global_stride[] = {1ULL};
-    uint32_t box_dim[] = {box_size};
-    uint32_t element_strides[] = {1};
-
-    return cuTensorMapEncodeTiled(
-        desc,
-        CU_TENSOR_MAP_DATA_TYPE_FLOAT32,
-        1,                      // rank
-        ptr,
-        global_dim,
-        global_stride,
-        box_dim,
-        element_strides,
-        CU_TENSOR_MAP_INTERLEAVE_NONE,
-        CU_TENSOR_MAP_SWIZZLE_NONE,
-        CU_TENSOR_MAP_L2_PROMOTION_NONE,
-        CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE
-    );
-}
-
-}  // namespace tma
 
 //------------------------------------------------------------------------------
 // Host 验证函数
@@ -217,20 +139,6 @@ int main(int argc, char** argv) {
         h_src[i] = static_cast<float>(i) * 0.001f;
     }
     CHECK_RT(cudaMemcpy(d_src, h_src.data(), bytes, cudaMemcpyHostToDevice));
-
-    // 创建 TMA 描述符
-    CUtensorMap src_desc, dst_desc;
-    CUresult res = tma::create_1d_desc(&src_desc, d_src, NUM_ELEMENTS, BLOCK_SIZE);
-    if (res != CUDA_SUCCESS) {
-        fprintf(stderr, "Failed to create src descriptor: %d\n", res);
-        return 1;
-    }
-
-    res = tma::create_1d_desc(&dst_desc, d_dst, NUM_ELEMENTS, BLOCK_SIZE);
-    if (res != CUDA_SUCCESS) {
-        fprintf(stderr, "Failed to create dst descriptor: %d\n", res);
-        return 1;
-    }
 
     // 创建 stream
     cudaStream_t stream;
