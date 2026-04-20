@@ -410,6 +410,7 @@ template <typename T,
         extra_attr += f"\n// block_dim=({block_dim['threadIdx.x']}, {block_dim['threadIdx.y']}, {block_dim['threadIdx.z']})."
         source += extra_attr
         
+        # source += "/*\n" + kernel.get_host_source() + "*/\n"
         return source
     
     def get_kernel(self, mode: HparamSelectMode):

@@ -235,6 +235,11 @@ public:
       // `register_reduce_task` will register two tasks, but we only record one
       int variant_id = task_register->register_reduce_task(customized->bgraph, params);
       task_config[op] = std::make_tuple(2, 1, TASK_ALLREDUCE, variant_id);
+    } // hopper 
+    else if (name == "linear_hopper") {
+      int variant_id = task_register->register_linear_hopper_task(
+          customized->bgraph, params, false /*with_residual*/);
+      task_config[op] = std::make_tuple(2, 1, TASK_LINEAR_HOPPER, variant_id);
     }
     else {
       printf("Unsupported task name: %s\n", name.c_str());
@@ -809,11 +814,6 @@ private:
             "task.at(\"task_type\") < TASK_HOPPER_TASK_END) {");
       code.e("create_tma_desc_by_task(task_desc);");
       code.e("}");
-      // SM100 Tasks
-      code.e("if (task.at(\"task_type\") > TASK_SM100_TMA_START_TASK && "
-            "task.at(\"task_type\") < TASK_SM100_TMA_END_TASK) {");
-      code.e("create_tma_desc_by_task(task_desc);");
-      code.e("}");
       code.e("#endif");
       code.e("all_tasks.push_back(task_desc);");
       code.e("}");
@@ -1249,6 +1249,8 @@ private:
     task_type_to_name[TASK_SILU_MUL_LINEAR] = "TASK_SILU_MUL_LINEAR";
     task_type_to_name[TASK_ALLREDUCE] = "TASK_ALLREDUCE";
     task_type_to_name[TASK_REDUCE] = "TASK_REDUCE";
+    task_type_to_name[TASK_LINEAR_HOPPER] = "TASK_LINEAR_HOPPER";
+    task_type_to_name[TASK_LINEAR_WITH_RESIDUAL_HOPPER] = "TASK_LINEAR_WITH_RESIDUAL_HOPPER";
 
     code.e("__device__ __forceinline__");
     code.e("void _execute_task(TaskDesc const* task_desc,");

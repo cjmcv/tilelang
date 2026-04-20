@@ -16,6 +16,13 @@ event_name_list = {
     123: "TASK_GQA_DECODE",
     124: "TASK_ROPE",
     199: "TASK_NVSHMEM_COPY",
+    
+    150: "TASK_HOPPER_TASK_BEGIN",
+    151: "TASK_LINEAR_WITH_RESIDUAL_HOPPER",
+    152: "TASK_LINEAR_HOPPER",
+    160: "TASK_HOPPER_TASK_END",
+    
+    
 }
 
 

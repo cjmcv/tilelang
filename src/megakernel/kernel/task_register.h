@@ -363,6 +363,163 @@ public:
     }
   }
   
+  int register_linear_hopper_task(tb::TBGraph const &bgraph, std::vector<int> const &params, bool with_residual) {
+    assert(params.size() == 0);
+    int batch_size = 0, output_size = 0, reduction_size = 0, output_stride = 0;
+    std::vector<tb::TBOperator *> input_ops;
+    std::vector<tb::TBOperator *> output_ops;
+    int num_inputs = with_residual ? 3 : 2;
+    int num_outputs = 1;
+
+    assert(bgraph.operators.size() == (size_t)num_inputs + num_outputs);
+    for (auto const &op : bgraph.operators) {
+      if (input_ops.size() < (size_t)num_inputs) {
+        input_ops.push_back(static_cast<tb::TBOperator *>(op));
+      } else {
+        output_ops.push_back(static_cast<tb::TBOperator *>(op));
+      }
+    }
+
+    assert(output_ops[0]->dtensor.num_dims == 2);
+    batch_size = output_ops[0]->dtensor.dim[0];
+    output_size = output_ops[0]->dtensor.dim[1];
+    assert(input_ops[0]->dtensor.num_dims == 2);
+    reduction_size = input_ops[0]->dtensor.dim[1];
+    assert(output_ops[0]->dtensor.owner_op->op_type == type::KN_INPUT_OP);
+    kn::KNInputOp *kn_input_op =
+        static_cast<kn::KNInputOp *>(output_ops[0]->dtensor.owner_op);
+    output_stride = static_cast<int>(kn_input_op->input_strides[0]);
+
+    megakernel::transpiler::CodeKeeper code;
+    code.inc_indent();
+    // define TMAs
+    constexpr int B = 3;
+    constexpr int M = 3;
+    constexpr int S = 3;
+    constexpr int TMA_CP_ASYNC_SIZE = 64;
+    constexpr int TILE_SIZE = 128;
+    int const Kstages = output_size >= 256 ? 3 : 6;
+    int const SMEM_M_SIZE = batch_size;
+    // int const SMEM_M_SIZE = 64;
+    int const output_tma_cp_size = output_size < 64 ? output_size : 64;
+    int const output_atom_size = (output_size >= 256)   ? 256
+                                : (output_size >= 128) ? 128
+                                : (output_size >= 64)  ? 64
+                                : (output_size >= 32)  ? 32
+                                                        : 16;
+    code.e("using TMA_A = kernel::tma::tma_2d<bfloat16, $, $, $, $, $, $, $, $, "
+          "$, $, $, $, true>;",
+          B,
+          M,
+          S,
+          batch_size,        /*GMEM_ROW_*/
+          reduction_size,    /*GMEM_COL_*/
+          batch_size,        /*SMEM_ROW_*/
+          TMA_CP_ASYNC_SIZE, /*SMEM_COL_*/
+          reduction_size,    /*GMEM_STRIDE_ROW_*/
+          1,                 /*GMEM_STRIDE_COL_*/
+          1,                 /*SMEM_REPEAT_ROW_*/
+          (TILE_SIZE + TMA_CP_ASYNC_SIZE - 1) /
+              TMA_CP_ASYNC_SIZE,          /*SMEM_REPEAT_COL_*/
+          SMEM_M_SIZE * TMA_CP_ASYNC_SIZE /*SMEM_STRIDE_*/
+    );
+
+    code.e("using TMA_B = kernel::tma::tma_2d<bfloat16, $, $, $, $, $, $, $, $, "
+          "$, $, $, $, true>;",
+          B,
+          M,
+          S,
+          output_size,       /*GMEM_ROW_*/
+          reduction_size,    /*GMEM_COL_*/
+          output_atom_size,  /*SMEM_ROW_*/
+          TMA_CP_ASYNC_SIZE, /*SMEM_COL_*/
+          reduction_size,    /*GMEM_STRIDE_ROW_*/
+          1,                 /*GMEM_STRIDE_COL_*/
+          1,                 /*SMEM_REPEAT_ROW_*/
+          (TILE_SIZE + TMA_CP_ASYNC_SIZE - 1) /
+              TMA_CP_ASYNC_SIZE,               /*SMEM_REPEAT_COL_*/
+          output_atom_size * TMA_CP_ASYNC_SIZE /*SMEM_STRIDE_*/
+    );
+
+    if (with_residual) {
+      code.e(
+          "using TMA_RESIDUAL = kernel::tma::tma_2d<bfloat16, $, $, $, $, $, $, "
+          "$, $, $, $, $, $, true>;",
+          B,
+          M,
+          S,
+          batch_size,         /*GMEM_ROW_*/
+          output_size,        /*GMEM_COL_*/
+          batch_size,         /*SMEM_ROW_*/
+          output_tma_cp_size, /*SMEM_COL_*/
+          output_stride,      /*GMEM_STRIDE_ROW_*/
+          1,                  /*GMEM_STRIDE_COL_*/
+          1,                  /*SMEM_REPEAT_ROW_*/
+          (output_atom_size + output_tma_cp_size - 1) /
+              output_tma_cp_size,         /*SMEM_REPEAT_COL_*/
+          SMEM_M_SIZE * TMA_CP_ASYNC_SIZE /*SMEM_STRIDE_*/
+      );
+    }
+
+    code.e("using TMA_OUT = kernel::tma::tma_2d<bfloat16, $, $, $, $, $, $, $, "
+          "$, $, $, $, $, true>;",
+          B,
+          M,
+          S,
+          batch_size,         /*GMEM_ROW_*/
+          output_size,        /*GMEM_COL_*/
+          batch_size,         /*SMEM_ROW_*/
+          output_tma_cp_size, /*SMEM_COL_*/
+          output_stride,      /*GMEM_STRIDE_ROW_*/
+          1,                  /*GMEM_STRIDE_COL_*/
+          1,                  /*SMEM_REPEAT_ROW_*/
+          (output_atom_size + output_tma_cp_size - 1) /
+              output_tma_cp_size,         /*SMEM_REPEAT_COL_*/
+          SMEM_M_SIZE * TMA_CP_ASYNC_SIZE /*SMEM_STRIDE_*/
+    );
+    code.inc_indent();
+    code.e("TMA_A "
+          "tma_a(static_cast<CUtensorMap*>(task_desc->input_tma_desc_ptrs[0][0])"
+          ");");
+    code.e("TMA_B "
+          "tma_b(static_cast<CUtensorMap*>(task_desc->input_tma_desc_ptrs[1][0])"
+          ");");
+    if (with_residual) {
+      code.e("TMA_RESIDUAL "
+            "tma_residual(static_cast<CUtensorMap*>(task_desc->input_tma_desc_"
+            "ptrs[2][0]));");
+    }
+    code.e("TMA_OUT "
+          "tma_out(static_cast<CUtensorMap*>(task_desc->output_tma_desc_ptrs[0]["
+          "0]));");
+    // code.e("printf(\"linear_kernel_hopper start\");");
+
+    code.e("kernel::linear_kernel_hopper<bfloat16, $, $, $, $, TMA_A, TMA_B, "
+          "TMA_OUT, $, $>(",
+          batch_size,
+          output_size,
+          reduction_size,
+          Kstages,
+          with_residual ? "TMA_RESIDUAL" : "void",
+          output_stride);
+    code.e("    tma_a,");
+    code.e("    tma_b,");
+    code.e("    tma_out, ");
+    if (with_residual) {
+      code.e("    &tma_residual");
+    } else {
+      code.e("    nullptr");
+    }
+    code.e(");");
+
+    if (with_residual) {
+      return register_task_variant(TASK_LINEAR_WITH_RESIDUAL_HOPPER,
+                                  code.to_string());
+    } else {
+      return register_task_variant(TASK_LINEAR_HOPPER, code.to_string());
+    }
+  }
+  
   int register_silu_mul_task(tb::TBGraph const &bgraph, std::vector<int> const &params){
     assert(params.size() == 0);
     int batch_size = 0, output_size = 0, input_stride, output_stride;

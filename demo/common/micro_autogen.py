@@ -14,6 +14,7 @@ from .micro_rmsnorm import MicroRmsNorm
 from .micro_silu_mul import MicroSiluMul
 from .micro_gqa_decode import MicroGqaDecode
 from common.micro_rope import MicroRope
+from common.micro_config import get_target_str, is_megakernel_enabled, is_enable_profiling
 
 class MicroAutoGen:
     def __init__(self, model_tag, batch_size, hidden_size, intermediate_size, max_kv_seqlen, num_heads, num_kv_heads, head_dim):
@@ -73,11 +74,11 @@ class MicroAutoGen:
         megakernel_home = os.getenv("MEGAKERNEL_HOME", default=None)
         if megakernel_home is None:
             raise EnvironmentError("The environment variable MEGAKERNEL_HOME is not set.")
-        code_path = megakernel_home + f"/src/megakernel/persistent_kernel/tasks/autogen/m{self.batch_size}/"
+        code_path = megakernel_home + f"/src/megakernel/persistent_kernel/tasks/{get_target_str()}/m{self.batch_size}/"
         code_dir = Path(code_path)
         code_dir.mkdir(parents=True, exist_ok=True)
         
-        config_path = megakernel_home + f"/demo/common/autogen/"
+        config_path = megakernel_home + f"/demo/common/{get_target_str()}/"
         config_dir = Path(config_path)
         config_dir.mkdir(parents=True, exist_ok=True)
         

@@ -624,7 +624,7 @@ if __name__ == "__main__":
     seqlen_kv=2048
     
     # test_rms_norm(mk, layout, max_batch_size, batch_size, hidden_size)
-    # test_linear(mk, max_batch_size, batch_size, intermediate_size*2, hidden_size, layout.linear1_layout)
+    test_linear(mk, max_batch_size, batch_size, intermediate_size*2, hidden_size, layout.linear1_layout)
     # test_silu_mul(mk, layout, max_batch_size, batch_size, intermediate_size) # 5us vs 2us，需要加速
     # test_linear_residual(mk, max_batch_size, batch_size, hidden_size, intermediate_size, layout.linear2_layout)
     
@@ -639,7 +639,7 @@ if __name__ == "__main__":
     # test_parallel_rms_norm(mk, layout, max_batch_size, batch_size, hidden_size)
     # test_rope_fused(mk, layout, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim)
     
-    test_prefetch_weight(mk, max_batch_size, batch_size, (num_heads+2*num_kv_heads)*head_dim, hidden_size, layout.qkv_proj_layout)
-    print("Test single_mega completed.")
+    # test_prefetch_weight(mk, max_batch_size, batch_size, (num_heads+2*num_kv_heads)*head_dim, hidden_size, layout.qkv_proj_layout)
+    # print("Test single_mega completed.")
     # ncu --set full --section "SpeedOfLight_RooflineChart" -k "kernel" -o my_profile python demo/single_linear.py --nc
     # ncu --set full --section "SpeedOfLight_RooflineChart" -k "persistent_kernel" -o my_profile python demo/single_linear.py

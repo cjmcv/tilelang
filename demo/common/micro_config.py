@@ -5,26 +5,24 @@ Import this module in other micro_*.py files to use these variables.
 import os
 import tilelang
 
-# =============================================================================
-# GPU Architecture Configuration
-# =============================================================================
-# Target GPU architecture for CUDA code generation
-# Supported values: "sm_90a", "sm_89", "sm_80", "sm_86", "sm_89", etc.
-TARGET_ARCH = "sm_89"
+TEST_TEMP_HOPPER = True
 
-# =============================================================================
-# Megakernel Configuration
-# =============================================================================
-# Whether to generate megakernel conversion code
-# When True, generates additional wrapper code for combining multiple kernels
-ENABLE_MEGAKERNEL = True
+if TEST_TEMP_HOPPER == True:
+    TARGET_ARCH = "sm_90a"
+    ENABLE_MEGAKERNEL = False
+    PASS_CONFIGS = {
+        tilelang.PassConfigKey.TL_DISABLE_TMA_LOWER: False,
+        tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
+    }
+else:
+    TARGET_ARCH = "sm_89"
+    ENABLE_MEGAKERNEL = True
+    PASS_CONFIGS = {
+        tilelang.PassConfigKey.TL_DISABLE_TMA_LOWER: True,
+        tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
+    }
+
 ENABLE_PROFILING = False
-
-# =============================================================================
-# TMA (Tensor Memory Access) Configuration
-# =============================================================================
-# Enable TMA operations in generated kernels
-# ENABLE_TMA = True
 
 # =============================================================================
 # Utility Functions
@@ -34,10 +32,7 @@ def get_target_str():
     return f"cuda -arch={TARGET_ARCH}"
 
 def get_pass_configs():
-    return {
-        tilelang.PassConfigKey.TL_DISABLE_TMA_LOWER: True,
-        tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
-    }
+    return PASS_CONFIGS
 
 # def is_tma_enabled():
 #     """Check if TMA should be enabled based on architecture"""

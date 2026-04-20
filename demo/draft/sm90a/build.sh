@@ -7,9 +7,9 @@
 
 rm a.out
 nvcc -gencode arch=compute_90a,code=sm_90a \
-     -I../../../../3rdparty/cutlass/include \
-     -I../../../../src/ \
-     host.cu \
+     -I../../../3rdparty/cutlass/include \
+     -I../../../src/ \
+     main.cu \
      -lcuda
 
 echo "Compile Done!"
