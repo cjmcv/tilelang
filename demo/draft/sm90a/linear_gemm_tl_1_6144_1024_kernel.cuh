@@ -21,17 +21,24 @@ TL_DEVICE void my_tma_load(void *smem_ptr, void const *gmem_ptr,
                :);
 }
 
-extern "C" __global__ void __launch_bounds__(128, 1) 
+extern "C" __global__ void __launch_bounds__(128, 1)
 linear_kernel(__grid_constant__ const CUtensorMap A_desc) {
   extern __shared__ __align__(1024) uchar buf_dyn_shmem[];
   __shared__ uint64_t mbarrier_mem[1];
   auto mbarrier = reinterpret_cast<Barrier*>(mbarrier_mem);
-  
+
+  // Prefetch TMA descriptor
+  if (tl::tl_shuffle_elect<0>()) {
+    tl::prefetch_tma_descriptor(A_desc);
+  }
+  tl::fence_barrier_init();
+  __syncthreads();
+
   if (threadIdx.x == 0) {
     mbarrier[0].init(128);
   }
   __syncthreads();
-  
+
   if (threadIdx.x == 0) {
     mbarrier[0].expect_transaction(2048);
     tl::tma_load(A_desc, mbarrier[0], &(((bfloat16_t*)buf_dyn_shmem)[0]), 0, 0);
