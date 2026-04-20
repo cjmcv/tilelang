@@ -110,13 +110,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    // Initialize Driver API only for cuTensorMapEncodeTiled
-    CHECK_CU(cuInit(0));
-    CUdevice device;
-    CHECK_CU(cuDeviceGet(&device, 0));
-    // Don't call cuCtxSetCurrent - let runtime API manage context
-
-    // Allocate device memory (use cudaMalloc for consistency with runtime API)
+    // Allocate device memory for tensor A
     bfloat16_t *d_A = nullptr;
     CHECK_RT(cudaMalloc(&d_A, M * K * sizeof(bfloat16_t)));
 
@@ -127,22 +121,49 @@ int main(int argc, char **argv) {
     }
     CHECK_RT(cudaMemcpy(d_A, h_A.data(), M * K * sizeof(bfloat16_t), cudaMemcpyHostToDevice));
 
-    // Create A_desc for tensor [1, 1024] -> TMA [1024, 1], box [64, 1]
-    CUtensorMap A_desc;
-    CUresult res = CreateTMA2DDesc(
-        &A_desc,
+    // Allocate device memory for TMA descriptor
+    CUtensorMap *d_A_desc;
+    CHECK_RT(cudaMalloc(&d_A_desc, sizeof(CUtensorMap)));
+
+    // Create A_desc on host and copy to device
+    CUtensorMap A_desc_host;
+    uint64_t global_dim[] = {
+        static_cast<uint64_t>(K),    // dim0 = K = 1024
+        static_cast<uint64_t>(M),     // dim1 = M = 1
+        1ULL, 1ULL, 1ULL
+    };
+    uint64_t global_stride[] = {
+        sizeof(bfloat16_t),           // dim0 stride = 2 bytes
+        static_cast<uint64_t>(K) * sizeof(bfloat16_t),  // dim1 stride = 2048 bytes
+        0ULL, 0ULL, 0ULL
+    };
+    uint32_t box_dim[] = {64, 1, 1, 1, 1};  // [64, 1]
+    uint32_t element_strides[] = {1, 1, 1, 1, 1};
+
+    printf("Creating A_desc...\n");
+    CUresult res = cuTensorMapEncodeTiled(
+        &A_desc_host,
+        CU_TENSOR_MAP_DATA_TYPE_BFLOAT16,
+        5,
         d_A,
-        M,                // tensor_rows = 1
-        K,                // tensor_cols = 1024
-        1,                // box_rows = 1
-        64,               // box_cols = 64
-        K                 // row_stride = 1024
+        global_dim,
+        global_stride + 1,
+        box_dim,
+        element_strides,
+        CU_TENSOR_MAP_INTERLEAVE_NONE,
+        CU_TENSOR_MAP_SWIZZLE_128B,
+        CU_TENSOR_MAP_L2_PROMOTION_NONE,
+        CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE
     );
+    printf("  cuTensorMapEncodeTiled result: %d\n", res);
     if (res != CUDA_SUCCESS) {
-        printf("CreateTMA2DDesc A failed: %d\n", res);
+        printf("ERROR: cuTensorMapEncodeTiled failed\n");
         return 1;
     }
-    printf("A_desc created successfully\n");
+
+    // Copy descriptor to device
+    CHECK_RT(cudaMemcpy(d_A_desc, &A_desc_host, sizeof(CUtensorMap), cudaMemcpyHostToDevice));
+    printf("A_desc copied to device: %p\n", (void*)d_A_desc);
 
     // Create stream and launch
     cudaStream_t stream;
@@ -152,12 +173,13 @@ int main(int argc, char **argv) {
     dim3 block_dim(THREAD_NUM, 1, 1);
 
     printf("\nLaunching linear_kernel with A_desc...\n");
-    linear_kernel<<<grid_dim, block_dim, DYNAMIC_SMEM_SIZE, stream>>>(A_desc);
+    linear_kernel<<<grid_dim, block_dim, DYNAMIC_SMEM_SIZE, stream>>>(*d_A_desc);
 
     CHECK_RT(cudaStreamSynchronize(stream));
     printf("Kernel completed!\n");
 
     // Cleanup
+    CHECK_RT(cudaFree(d_A_desc));
     CHECK_RT(cudaFree(d_A));
     CHECK_RT(cudaStreamDestroy(stream));
 

@@ -34,7 +34,7 @@ linear_kernel(__grid_constant__ const CUtensorMap A_desc) {
   
   if (threadIdx.x == 0) {
     mbarrier[0].expect_transaction(2048);
-    my_tma_load(A_desc, mbarrier[0], &(((bfloat16_t*)buf_dyn_shmem)[0]), 0, 0);
+    tl::tma_load(A_desc, mbarrier[0], &(((bfloat16_t*)buf_dyn_shmem)[0]), 0, 0);
   }
 }
 // extern "C" __global__ void linear_kernel(__grid_constant__ const CUtensorMap A_desc, __grid_constant__ const CUtensorMap B_desc, __grid_constant__ const CUtensorMap C_desc);
