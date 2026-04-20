@@ -123,7 +123,7 @@ int main(int argc, char **argv) {
 
     // Allocate device memory for TMA descriptor
     CUtensorMap *d_A_desc;
-    CHECK_RT(cudaMalloc(&d_A_desc, sizeof(CUtensorMap)));
+    CHECK_RT(cudaMalloc((void**)&d_A_desc, sizeof(CUtensorMap)));
 
     // Create A_desc on host and copy to device
     CUtensorMap A_desc_host;
