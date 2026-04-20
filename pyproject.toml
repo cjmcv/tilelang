@@ -5,7 +5,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 authors = [{ name = "TileLang Contributors" }, { name = "Tile-AI" }]
 maintainers = [{ name = "Lei Wang", email = "leiwang1999@outlook.com" }]
-license = "MIT"
+license = { text = "MIT" }
 keywords = ["BLAS", "CUDA", "HIP", "Code Generation", "TVM"]
 classifiers = [
     "Development Status :: 4 - Beta",

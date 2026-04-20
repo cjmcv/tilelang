@@ -38,9 +38,12 @@ cmake -B build -G Ninja && cmake --build build --parallel 8
 # 3. megakernel 编译
 python megakernel_setup.py build_ext --inplace
 
-# 4. 使用tilelang
+# 4. 使用tilelang [option]
 export MEGAKERNEL_HOME=/home/cjmcv/project/megakernel && export PYTHONPATH=$MEGAKERNEL_HOME:$PYTHONPATH
 export MEGAKERNEL_HOME=/data/team/cjm/mg89 && export PYTHONPATH=$MEGAKERNEL_HOME:$PYTHONPATH
+export MEGAKERNEL_HOME=/root/tilelang && export PYTHONPATH=$MEGAKERNEL_HOME:$PYTHONPATH
+export PATH=/usr/local/cuda/bin:$PATH
+
 
 pushd demo && python micro_test.py && popd
 pushd demo && python fused_mlp.py && popd
