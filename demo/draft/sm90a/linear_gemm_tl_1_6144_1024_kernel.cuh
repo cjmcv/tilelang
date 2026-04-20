@@ -9,6 +9,18 @@
 #include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>
 #endif
 
+template <typename BarrierType = uint64_t>
+TL_DEVICE void my_tma_load(void *smem_ptr, void const *gmem_ptr,
+                        BarrierType &smem_mbar, uint32_t size) {
+  uint32_t smem_int_mbar =
+      smem_ptr_to_uint(reinterpret_cast<uint64_t *>(&smem_mbar));
+  uint32_t smem_int_ptr = smem_ptr_to_uint(smem_ptr);
+  asm volatile("cp.async.bulk.shared::cluster.global.mbarrier::complete_tx::"
+               "bytes [%0], [%1], %2, [%3]; \n" ::"r"(smem_int_ptr),
+               "l"((void const *)gmem_ptr), "r"(size), "r"(smem_int_mbar)
+               :);
+}
+
 extern "C" __global__ void __launch_bounds__(128, 1) 
 linear_kernel(__grid_constant__ const CUtensorMap A_desc) {
   extern __shared__ __align__(1024) uchar buf_dyn_shmem[];
@@ -22,7 +34,7 @@ linear_kernel(__grid_constant__ const CUtensorMap A_desc) {
   
   if (threadIdx.x == 0) {
     mbarrier[0].expect_transaction(2048);
-    tl::tma_load(A_desc, mbarrier[0], &(((bfloat16_t*)buf_dyn_shmem)[0]), 0, 0);
+    my_tma_load(A_desc, mbarrier[0], &(((bfloat16_t*)buf_dyn_shmem)[0]), 0, 0);
   }
 }
 // extern "C" __global__ void linear_kernel(__grid_constant__ const CUtensorMap A_desc, __grid_constant__ const CUtensorMap B_desc, __grid_constant__ const CUtensorMap C_desc);

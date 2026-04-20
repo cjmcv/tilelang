@@ -58,7 +58,14 @@ static CUresult CreateTMA2DDesc(
     uint32_t box_dim[] = {box_cols, box_rows, 1, 1, 1};
     uint32_t element_strides[] = {1, 1, 1, 1, 1};
 
-    return cuTensorMapEncodeTiled(
+    printf("CreateTMA2DDesc: tensor=[%u,%u] box=[%u,%u] stride=%u\n",
+           tensor_rows, tensor_cols, box_rows, box_cols, row_stride);
+    printf("  global_dim: {%lu, %lu}\n", global_dim[0], global_dim[1]);
+    printf("  global_stride: {%lu, %lu}\n", global_stride[0], global_stride[1]);
+    printf("  box_dim: {%u, %u}\n", box_dim[0], box_dim[1]);
+    printf("  gmem_ptr: %p\n", gmem_ptr);
+
+    CUresult result = cuTensorMapEncodeTiled(
         &tensor_map,
         CU_TENSOR_MAP_DATA_TYPE_BFLOAT16,
         5,
@@ -72,6 +79,13 @@ static CUresult CreateTMA2DDesc(
         CU_TENSOR_MAP_L2_PROMOTION_NONE,
         CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE
     );
+
+    printf("  cuTensorMapEncodeTiled result: %d\n", result);
+
+    // Copy to output
+    *desc = tensor_map;
+
+    return result;
 }
 
 int main(int argc, char **argv) {
