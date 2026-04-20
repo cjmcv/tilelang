@@ -59,13 +59,15 @@ static CUresult CreateTMA2DDesc(
     // - global_dim[0] = tensor_cols (dim1 of tensor, K for weight)
     // - global_dim[1] = tensor_rows (dim0 of tensor, N for weight)
     uint64_t global_dim[] = {
-        static_cast<uint64_t>(tensor_cols),  // fastest varying
-        static_cast<uint64_t>(tensor_rows),
+        static_cast<uint64_t>(tensor_cols),  // dim0 = tensor_cols (K for A, N for B/C)
+        static_cast<uint64_t>(tensor_rows),  // dim1 = tensor_rows (M for A, K for B, M for C)
         1ULL, 1ULL, 1ULL
     };
+    // TMA expects byte strides, not element strides!
+    // global_stride[d] = byte offset to reach dim d+1 from element [0,0,...]
     uint64_t global_stride[] = {
-        1ULL,                                                    // dim0 stride (sizeof(T) in bytes)
-        static_cast<uint64_t>(row_stride),                       // dim1 stride in bytes
+        sizeof(bfloat16_t),                                          // dim0 stride = sizeof(bfloat16_t) = 2 bytes
+        static_cast<uint64_t>(row_stride) * sizeof(bfloat16_t),      // dim1 stride = row_stride * sizeof(bfloat16)
         0ULL, 0ULL, 0ULL
     };
     uint32_t box_dim[] = {box_cols, box_rows, 1, 1, 1};
