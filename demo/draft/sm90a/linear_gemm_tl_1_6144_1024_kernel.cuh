@@ -22,7 +22,6 @@ linear_kernel(__grid_constant__ const CUtensorMap A_desc) {
   
   if (threadIdx.x == 0) {
     mbarrier[0].expect_transaction(2048);
-    tl::fence_proxy_async();
     tl::tma_load(A_desc, mbarrier[0], &(((bfloat16_t*)buf_dyn_shmem)[0]), 0, 0);
   }
 }
