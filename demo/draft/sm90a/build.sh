@@ -6,7 +6,9 @@
 # -L../build/tvm -ltvm_ffi \
 
 rm a.out
-nvcc -gencode arch=compute_90a,code=sm_90a \
+nvcc -arch=sm_90 \
+     --no-jit-fallback \
+     -std=c++20 \
      -I../../../3rdparty/cutlass/include \
      -I../../../src/ \
      main.cu \

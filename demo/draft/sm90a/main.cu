@@ -121,12 +121,8 @@ int main(int argc, char **argv) {
     }
     CHECK_RT(cudaMemcpy(d_A, h_A.data(), M * K * sizeof(bfloat16_t), cudaMemcpyHostToDevice));
 
-    // Allocate device memory for TMA descriptor
-    CUtensorMap *d_A_desc;
-    CHECK_RT(cudaMalloc((void**)&d_A_desc, sizeof(CUtensorMap)));
-
-    // Create A_desc on host and copy to device
-    CUtensorMap A_desc_host;
+    // Create A_desc on host (stack)
+    CUtensorMap A_desc;
     uint64_t global_dim[] = {
         static_cast<uint64_t>(K),    // dim0 = K = 1024
         static_cast<uint64_t>(M),     // dim1 = M = 1
@@ -142,7 +138,7 @@ int main(int argc, char **argv) {
 
     printf("Creating A_desc...\n");
     CUresult res = cuTensorMapEncodeTiled(
-        &A_desc_host,
+        &A_desc,
         CU_TENSOR_MAP_DATA_TYPE_BFLOAT16,
         5,
         d_A,
@@ -161,10 +157,6 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    // Copy descriptor to device
-    CHECK_RT(cudaMemcpy(d_A_desc, &A_desc_host, sizeof(CUtensorMap), cudaMemcpyHostToDevice));
-    printf("A_desc copied to device: %p\n", (void*)d_A_desc);
-
     // Create stream and launch
     cudaStream_t stream;
     CHECK_RT(cudaStreamCreate(&stream));
@@ -173,13 +165,12 @@ int main(int argc, char **argv) {
     dim3 block_dim(THREAD_NUM, 1, 1);
 
     printf("\nLaunching linear_kernel with A_desc...\n");
-    linear_kernel<<<grid_dim, block_dim, DYNAMIC_SMEM_SIZE, stream>>>(*d_A_desc);
+    linear_kernel<<<grid_dim, block_dim, DYNAMIC_SMEM_SIZE, stream>>>(A_desc);
 
     CHECK_RT(cudaStreamSynchronize(stream));
     printf("Kernel completed!\n");
 
     // Cleanup
-    CHECK_RT(cudaFree(d_A_desc));
     CHECK_RT(cudaFree(d_A));
     CHECK_RT(cudaStreamDestroy(stream));
 
