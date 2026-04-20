@@ -238,7 +238,7 @@ int main(int argc, char **argv) {
            GRID_X, GRID_Y, GRID_Z, THREAD_NUM, DYNAMIC_SMEM_SIZE);
 
     linear_kernel<<<grid_dim, block_dim, DYNAMIC_SMEM_SIZE, stream>>>(
-        A_desc, B_desc, C_desc);
+        A_desc);//, B_desc, C_desc
 
     CHECK_RT(cudaStreamSynchronize(stream));
     printf("Kernel completed!\n");

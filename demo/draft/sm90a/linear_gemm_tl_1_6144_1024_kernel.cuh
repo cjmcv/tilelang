@@ -26,7 +26,6 @@ linear_kernel(__grid_constant__ const CUtensorMap A_desc) {
     tl::tma_load(A_desc, mbarrier[0], &(((bfloat16_t*)buf_dyn_shmem)[0]), 0, 0);
   }
 }
-
 // extern "C" __global__ void linear_kernel(__grid_constant__ const CUtensorMap A_desc, __grid_constant__ const CUtensorMap B_desc, __grid_constant__ const CUtensorMap C_desc);
 // extern "C" __global__ void __launch_bounds__(128, 1) linear_kernel(__grid_constant__ const CUtensorMap A_desc, __grid_constant__ const CUtensorMap B_desc, __grid_constant__ const CUtensorMap C_desc) {
 //   extern __shared__ __align__(1024) uchar buf_dyn_shmem[];
