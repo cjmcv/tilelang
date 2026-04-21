@@ -522,7 +522,8 @@ class TLCUDASourceWrapper:
         host_func = self.create_dispatch_func(code, function_informations)
         # Combine the source, initialization function, and host function to form the complete library code
         lib_code = self.source + init_func + host_func
-        return lib_code
+        # return lib_code
+        return init_func + host_func
 
     def get_stream_type(self) -> dict[str, str]:
         return {"name": "stream=cudaStreamDefault", "type": "cudaStream_t"}
@@ -565,60 +566,6 @@ class TLCUDASourceWrapper:
                 if "tir.is_global_func" in attr and attr["tir.is_global_func"]:
                     return function
             raise ValueError("Cannot find primary function in the module.")
-
-
-class TLHIPSourceWrapper(TLCUDASourceWrapper):
-    """
-    A wrapper class for the TileLang HIP backend.
-    """
-
-    _TYPE_MAP = {
-        "float32": "float",
-        "float16": "half_t",
-        "bfloat16": "bfloat16_t",
-        "float8_e4m3": "fp8_e4_t",
-        "float8_e4m3fn": "fp8_e4_t",
-        "float8_e5m2": "fp8_e5_t",
-        "float8_e4m3fnuz": "fp8_e4_t",
-        "e4m3fnuz_float8": "fp8_e4_t",
-        "float64": "double",
-        "int64": "int64_t",
-        "int32": "int",
-        "uint32": "unsigned int",
-        "bool": "int8_t",
-        "int8": "int8_t",
-        "uint8": "uint8_t",
-        "int16": "int16_t",
-        "uint16": "uint16_t",
-        "uchar": "uint8_t",
-    }
-
-    def __init__(
-        self,
-        scheduled_ir_module: IRModule,
-        source: str,
-        target: Target,
-        device_mod: IRModule | None = None,
-        host_mod: IRModule | None = None,
-        pass_configs: dict[str, Any] | None = None,
-    ):
-        super().__init__(scheduled_ir_module, source, target, device_mod, host_mod, pass_configs)
-
-    def get_init_func(self):
-        # Initialize an empty string for the CUDA function call
-        call_str = """"""
-        # If dynamic shared memory buffer is specified, prepare the cudaFuncSetAttribute call
-        for function_name, dynamic_smem_buf in self.dynamic_smem_buf.items():
-            if dynamic_smem_buf is not None:
-                # Format the cudaFuncSetAttribute call for dynamic shared memory
-                call_str += PREDEF_ATTRIBUTE_SET_DYNAMIC_MEMORY_HIP.format(function_name, dynamic_smem_buf)
-        # Format the initialization function using the call_str
-        init_funcs = PREDEF_INIT_FUNC.format(call_str)
-        return init_funcs
-
-    def get_stream_type(self) -> dict[str, str]:
-        return {"name": "stream=hipStreamDefault", "type": "hipStream_t"}
-
 
 class TLCPUSourceWrapper:
     _TYPE_MAP = {
@@ -797,33 +744,6 @@ class TLCPUSourceWrapper:
                     return function
             raise ValueError("Cannot find primary function in the module.")
 
-
-class TLMetalSourceWrapper:
-    def __init__(
-        self,
-        scheduled_ir_module: IRModule,
-        source: str,
-        target: Target,
-        device_mod: IRModule | None = None,
-        host_mod: IRModule | None = None,
-        pass_configs: dict[str, Any] | None = None,
-    ):
-        self.mod = scheduled_ir_module
-        self.target = target
-        self.source = source
-        self.pass_configs = pass_configs
-        self.device_mod = device_mod
-        self.host_mod = host_mod
-        self.lib_code = self.update_lib_code(source)
-
-    def update_lib_code(self, code: str):
-        self.lib_code = code
-        return self.lib_code
-
-
-# TLCuTeDSLSourceWrapper has been moved to tilelang.jit.adapter.cutedsl.wrapper
-
-
 class TLWrapper(BaseWrapper):
     """
     A wrapper class for the TileLang backend.
@@ -859,12 +779,8 @@ class TLWrapper(BaseWrapper):
         assert self.scheduled_ir_module is not None, "Please assign optimized module first."
         if is_cuda_target(self.target):
             wrapper_class = TLCUDASourceWrapper
-        elif is_hip_target(self.target):
-            wrapper_class = TLHIPSourceWrapper
         elif is_cpu_target(self.target):
             wrapper_class = TLCPUSourceWrapper
-        elif is_metal_target(self.target):
-            wrapper_class = TLMetalSourceWrapper
         else:
             raise ValueError(f"Unsupported platform: {self.arch.platform}")
         wrapper = wrapper_class(

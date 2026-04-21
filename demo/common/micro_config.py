@@ -8,7 +8,7 @@ import tilelang
 TEST_TEMP_HOPPER = True
 
 if TEST_TEMP_HOPPER == True:
-    TARGET_ARCH = "sm_120" # "sm_90"
+    TARGET_ARCH = "sm_90" # "sm_120"
     ENABLE_MEGAKERNEL = False
     PASS_CONFIGS = {
         tilelang.PassConfigKey.TL_DISABLE_TMA_LOWER: False,

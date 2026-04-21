@@ -51,6 +51,7 @@ def main():
     # print("CUDA Source:")
     # print(kernel.get_kernel_source())
     # print(kernel.get_host_source())
+    print(kernel.get_dispatch_source())
     
     # benchmark
     profiler = kernel.get_profiler()
