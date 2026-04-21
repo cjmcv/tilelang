@@ -18,6 +18,7 @@ from tilelang.engine.param import CompiledArtifact, KernelParam
 from tilelang.jit.tvm_ffi import (
     BaseKernelAdapter,
     TVMFFIKernelAdapter,
+    CythonKernelAdapter,
 )
 from tilelang.utils.profiler import Profiler, TensorSupplyType
 from tilelang.utils.target import determine_target
@@ -108,6 +109,7 @@ class JITKernel(Generic[_P, _T]):
         # Validate the execution backend.
         assert execution_backend in [
             "tvm_ffi",
+            "cython"
         ], f"Invalid execution backend. {execution_backend}"
         
         # Print log on compilation starts
@@ -215,10 +217,10 @@ class JITKernel(Generic[_P, _T]):
                 enable_host_codegen=enable_host_codegen,
                 enable_device_compile=enable_device_compile,
             )
-
         self.artifact = artifact
         # print("artifact: ", artifact)
         # Create an adapter based on the specified execution backend.
+        
         if execution_backend == "tvm_ffi":
             # Use TVMFFIKernelAdapter for interoperability with PyTorch via DLPack.
             # But we need to ensure that the runtime is enabled and the runtime module is not None.
@@ -236,10 +238,53 @@ class JITKernel(Generic[_P, _T]):
                 pass_configs=pass_configs,
                 compile_flags=compile_flags,
             )
+        elif execution_backend == "cython":
+            adapter = CythonKernelAdapter(
+                params=artifact.params,
+                result_idx=out_idx,
+                target=target,
+                func_or_mod=tilelang_func,
+                host_mod=artifact.host_mod,
+                device_mod=artifact.device_mod,
+                device_kernel_source=artifact.kernel_source,
+                verbose=verbose,
+                pass_configs=pass_configs,
+                compile_flags=compile_flags,
+            )
         else:
             # Handle invalid backend.
             raise ValueError(f"Invalid execution backend: {execution_backend}")
 
+        ## CJM
+        with tvm.transform.PassContext(opt_level=3, config=pass_configs), self.target:
+            my_artifact = tilelang.lower(
+                tilelang_func,
+                target=target,
+                target_host=target_host,
+                enable_host_codegen=False,
+                enable_device_compile=False,
+            )
+            
+        from tilelang.jit.wrapper import TLWrapper
+        from tvm import runtime, tir
+        if isinstance(tilelang_func, tir.PrimFunc):
+            ir_module = tvm.IRModule({tilelang_func.attrs["global_symbol"]: tilelang_func})
+        else:
+            ir_module = tilelang_func
+        self.wrapper = TLWrapper(self.target)
+        self.wrapper.assign_optimized_module(ir_module)
+        self.wrapper.assign_pass_configs(pass_configs)
+        self.wrapper.assign_host_module(my_artifact.host_mod)
+        self.wrapper.assign_device_module(my_artifact.device_mod)
+        self.host_kernel_source = self.wrapper.wrap(my_artifact.kernel_source)
+        # print("target", self.target)
+        # print("ir_module", ir_module)
+        # print("pass_configs", pass_configs)
+        # print("host_mod", artifact.host_mod)
+        # print("device_mod", artifact.device_mod)
+        # print("kernel_source", artifact.kernel_source)
+        print("host_kernel_source", self.host_kernel_source)
+        
         return adapter
 
     @classmethod

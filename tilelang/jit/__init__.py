@@ -48,7 +48,7 @@ _Ret = TypeVar("_Ret")
 def compile(
     func: PrimFunc[_KP, _T] = None,
     out_idx: list[int] | int | None = None,
-    execution_backend: Literal["auto", "tvm_ffi"] = "auto",
+    execution_backend: Literal["auto", "tvm_ffi", "cython"] = "auto",
     target: str | Target = "auto",
     target_host: str | Target | None = None,
     verbose: bool = False,
@@ -91,7 +91,7 @@ def compile(
     requested_backend = execution_backend
     # from tilelang.jit.execution_backend import resolve_execution_backend, allowed_backends_for_target
 
-    execution_backend = "tvm_ffi" # resolve_execution_backend(requested_backend, target)
+    # execution_backend = "tvm_ffi" # resolve_execution_backend(requested_backend, target)
     if verbose:
         allowed_now = ["tvm_ffi"] # allowed_backends_for_target(target, include_unavailable=False)
         logger.info(

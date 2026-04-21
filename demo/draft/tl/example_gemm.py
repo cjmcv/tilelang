@@ -28,7 +28,7 @@ def matmul(M, N, K, block_M, block_N, block_K, dtype=T.float16, accum_dtype=T.fl
 
 def main():
     program = matmul(1024, 1024, 1024, 128, 128, 32)
-    kernel = tilelang.compile(program, out_idx=-1, target="cuda", execution_backend="tvm_ffi") # cython
+    kernel = tilelang.compile(program, out_idx=-1, target="cuda", execution_backend="tvm_ffi") # tvm_ffi / cython
     
     import torch
 
@@ -50,7 +50,7 @@ def main():
     # Get CUDA Source
     # print("CUDA Source:")
     # print(kernel.get_kernel_source())
-    print(kernel.get_host_source())
+    # print(kernel.get_host_source())
     
     # benchmark
     profiler = kernel.get_profiler()
