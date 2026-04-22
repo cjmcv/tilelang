@@ -392,7 +392,7 @@ template <typename T,
         source = kernel.get_kernel_source()
         grid_dim, block_dim, dynamic_smem_buf, use_cooperative_groups = kernel.get_launch_info()[0]
         self.layout = f"({grid_dim['blockIdx.x']}, {grid_dim['blockIdx.y']}, {grid_dim['blockIdx.z']}), ({BLOCK_N}, {BLOCK_M}, {BLOCK_K})"        
-        if (is_megakernel_enabled()):
+        if (get_target_str() == "sm_89"):
             source = self.replace_header(source, "extern \"C\" __global__", 1, head_str)
             source = source.replace("blockIdx.x", "bx")
             source = source.replace("blockIdx.y", "by")
@@ -401,6 +401,8 @@ template <typename T,
             source = source.replace("<gridx_0>", str(grid_dim['blockIdx.x']))
             source = source.replace("<gridy_0>", str(grid_dim['blockIdx.y']))
             source = source.replace("<gridz_0>", str(grid_dim['blockIdx.z']))
+        else:
+            source = source.replace("linear_kernel", self.strategy.name) 
             
         extra_attr = f"\n// Strategy: {self.strategy.name}"
         extra_attr += f"\n// selected_hparams: {selected_hparams}."
@@ -410,7 +412,8 @@ template <typename T,
         extra_attr += f"\n// block_dim=({block_dim['threadIdx.x']}, {block_dim['threadIdx.y']}, {block_dim['threadIdx.z']})."
         source += extra_attr
         
-        source += "\n\n/*\n" + kernel.get_dispatch_source() + "*/\n"
+        dispatch_source = kernel.get_dispatch_source().replace('call', "create_"+self.strategy.name)
+        source += "\n\n" + dispatch_source + "\n"
         return source
     
     def get_kernel(self, mode: HparamSelectMode):

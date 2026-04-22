@@ -1,0 +1,155 @@
+#include <tl_templates/cuda/instruction/mma.h>
+#include <tl_templates/cuda/gemm.h>
+#include <tl_templates/cuda/copy.h>
+#include <tl_templates/cuda/reduce.h>
+#include <tl_templates/cuda/ldsm.h>
+#include <tl_templates/cuda/threadblock_swizzle.h>
+#include <tl_templates/cuda/debug.h>
+#ifdef ENABLE_BF16
+#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>
+#endif
+
+extern "C" __global__ void linear_gemm_tl_1_6144_1024(__grid_constant__ const CUtensorMap A_desc, __grid_constant__ const CUtensorMap B_desc, __grid_constant__ const CUtensorMap C_desc);
+extern "C" __global__ void __launch_bounds__(128, 1) linear_gemm_tl_1_6144_1024(__grid_constant__ const CUtensorMap A_desc, __grid_constant__ const CUtensorMap B_desc, __grid_constant__ const CUtensorMap C_desc) {
+  extern __shared__ __align__(1024) uchar buf_dyn_shmem[];
+  float C_local[8];
+  bfloat16_t A_local[8];
+  bfloat16_t B_local[8];
+  __shared__ uint64_t mbarrier_mem[6];
+  auto mbarrier = reinterpret_cast<Barrier*>(mbarrier_mem);
+  if (tl::tl_shuffle_elect<0>()) {
+    tl::prefetch_tma_descriptor(A_desc);
+    tl::prefetch_tma_descriptor(B_desc);
+    tl::prefetch_tma_descriptor(C_desc);
+    mbarrier[0].init(128);
+    mbarrier[1].init(128);
+    mbarrier[2].init(128);
+    mbarrier[3].init(128);
+    mbarrier[4].init(128);
+    mbarrier[5].init(128);
+  }
+  tl::fence_barrier_init();
+  __syncthreads();
+  const dim3 blockIdx = tl::rasterization2DRow<10>();
+  #pragma unroll
+  for (int i = 0; i < 4; ++i) {
+    *(float2*)(C_local + (i * 2)) = make_float2(0x0p+0f/*0.000000e+00*/, 0x0p+0f/*0.000000e+00*/);
+  }
+  for (int k = 0; k < 16; ++k) {
+    mbarrier[((k % 3) + 3)].wait((((k % 6) / 3) ^ 1));
+    __syncthreads();
+    if (((int)threadIdx.x) == 0) {
+      mbarrier[(k % 3)].expect_transaction(2048);
+      tl::fence_proxy_async();
+      tl::tma_load(A_desc, mbarrier[(k % 3)], (&(((bfloat16_t*)buf_dyn_shmem)[(((k % 3) * 1024) + 12288)])), (k * 64), 0);
+      mbarrier[(k % 3)].expect_transaction(8192);
+      tl::fence_proxy_async();
+      tl::tma_load(B_desc, mbarrier[(k % 3)], (&(((bfloat16_t*)buf_dyn_shmem)[((k % 3) * 4096)])), (k * 64), (((int)blockIdx.x) * 64));
+    }
+    mbarrier[(k % 3)].arrive();
+    mbarrier[(k % 3)].wait(((k % 6) / 3));
+    __syncthreads();
+    for (int ki = 0; ki < 4; ++ki) {
+      tl::ptx_ldmatrix_x4((&(((bfloat16_t*)buf_dyn_shmem)[(((((k % 3) * 1024) + (((((int)threadIdx.x) & 15) >> 3) * 512)) + ((((((((int)threadIdx.x) & 15) * 64) + (((((((int)threadIdx.x) & 7) >> 2) + (ki >> 1)) & 1) * 32)) + (((((((int)threadIdx.x) & 3) >> 1) + (ki & 1)) & 1) * 16)) + (((((((int)threadIdx.x) & 31) >> 4) + (((int)threadIdx.x) & 1)) & 1) * 8)) & 511)) + 12288)])) + 0, A_local + 0);
+      tl::ptx_ldmatrix_x4((&(((bfloat16_t*)buf_dyn_shmem)[(((((((k % 3) * 4096) + ((((int)threadIdx.x) >> 4) * 512)) + ((((int)threadIdx.x) & 7) * 64)) + (((((((int)threadIdx.x) & 7) >> 2) + (ki >> 1)) & 1) * 32)) + (((((((int)threadIdx.x) & 3) >> 1) + (ki & 1)) & 1) * 16)) + (((((((int)threadIdx.x) & 15) >> 3) + (((int)threadIdx.x) & 1)) & 1) * 8))])) + 0, B_local + 0);
+      tl::mma_sync<tl::DataType::kBFloat16, tl::DataType::kBFloat16, tl::DataType::kFloat32, 16, 8, 16, false, true>(reinterpret_cast<float*>(C_local + 0), reinterpret_cast<const unsigned*>(A_local + 0), reinterpret_cast<const unsigned*>(B_local + 0));
+      tl::mma_sync<tl::DataType::kBFloat16, tl::DataType::kBFloat16, tl::DataType::kFloat32, 16, 8, 16, false, true>(reinterpret_cast<float*>(C_local + 4), reinterpret_cast<const unsigned*>(A_local + 0), reinterpret_cast<const unsigned*>(B_local + 4));
+    }
+    tl::mbarrier_cp_async_arrive(mbarrier[((k % 3) + 3)]);
+    mbarrier[((k % 3) + 3)].arrive();
+  }
+  __syncthreads();
+  tl::ptx_stmatrix_x4((&(((bfloat16_t*)buf_dyn_shmem)[(((((((int)threadIdx.x) & 15) * 64) + ((((((int)threadIdx.x) >> 6) + ((((int)threadIdx.x) & 7) >> 2)) & 1) * 32)) + (((((((int)threadIdx.x) & 63) >> 5) + ((((int)threadIdx.x) & 3) >> 1)) & 1) * 16)) + (((((((int)threadIdx.x) & 31) >> 4) + (((int)threadIdx.x) & 1)) & 1) * 8))])), __pack_half2(((bfloat16_t)C_local[0]), ((bfloat16_t)C_local[1])), __pack_half2(((bfloat16_t)C_local[2]), ((bfloat16_t)C_local[3])), __pack_half2(((bfloat16_t)C_local[4]), ((bfloat16_t)C_local[5])), __pack_half2(((bfloat16_t)C_local[6]), ((bfloat16_t)C_local[7])));
+  tl::fence_proxy_async();
+  __syncthreads();
+  if (((int)threadIdx.x) == 0) {
+    tl::tma_store(C_desc, (&(((bfloat16_t*)buf_dyn_shmem)[0])), (((int)blockIdx.x) * 64), 0);
+    tl::tma_store_arrive();
+    tl::tma_store_wait<0>();
+  }
+}
+
+
+// Strategy: linear_gemm_tl_1_6144_1024
+// selected_hparams: [16, 64, 64, 1, 3, 128, 0, True].
+// smem: 30720 bytes.
+// use_cooperative_groups: 0.
+// layout: (96, 1, 1), (64, 16, 64)
+// block_dim=(128, 1, 1).
+
+
+extern "C" int create_linear_gemm_tl_1_6144_1024(bfloat16_t* __restrict__ A, bfloat16_t* __restrict__ B, bfloat16_t* __restrict__ C, CUtensorMap* out_A_desc, CUtensorMap* out_B_desc, CUtensorMap* out_C_desc) {
+
+	CUtensorMap A_desc;
+	CUtensorMapDataType A_desc_type= (CUtensorMapDataType)9;
+	cuuint32_t A_desc_tensorRank= 2;
+	void *A_desc_globalAddress= A;
+	cuuint64_t A_desc_globalDim[2]= {1024,1};
+	cuuint64_t A_desc_globalStride[2]= {2,2048};
+	cuuint32_t A_desc_boxDim[2]= {64,16};
+	cuuint32_t A_desc_elementStrides[2]= {1,1};
+	CUtensorMapInterleave A_desc_interleave= (CUtensorMapInterleave)0;
+	CUtensorMapSwizzle A_desc_swizzle= (CUtensorMapSwizzle)3;
+	CUtensorMapL2promotion A_desc_l2Promotion= (CUtensorMapL2promotion)2;
+	CUtensorMapFloatOOBfill A_desc_oobFill= (CUtensorMapFloatOOBfill)0;
+
+	CUresult A_desc_result = CUTLASS_CUDA_DRIVER_WRAPPER_CALL(cuTensorMapEncodeTiled)(
+    &A_desc, A_desc_type, A_desc_tensorRank, A_desc_globalAddress, A_desc_globalDim, A_desc_globalStride + 1, A_desc_boxDim, A_desc_elementStrides, A_desc_interleave, A_desc_swizzle, A_desc_l2Promotion, A_desc_oobFill);
+
+	if (A_desc_result != CUDA_SUCCESS) {
+		printf("Error: Failed to initialize the TMA descriptor A_desc");
+		return -1;
+	}
+
+	CUtensorMap B_desc;
+	CUtensorMapDataType B_desc_type= (CUtensorMapDataType)9;
+	cuuint32_t B_desc_tensorRank= 2;
+	void *B_desc_globalAddress= B;
+	cuuint64_t B_desc_globalDim[2]= {1024,6144};
+	cuuint64_t B_desc_globalStride[2]= {2,2048};
+	cuuint32_t B_desc_boxDim[2]= {64,64};
+	cuuint32_t B_desc_elementStrides[2]= {1,1};
+	CUtensorMapInterleave B_desc_interleave= (CUtensorMapInterleave)0;
+	CUtensorMapSwizzle B_desc_swizzle= (CUtensorMapSwizzle)3;
+	CUtensorMapL2promotion B_desc_l2Promotion= (CUtensorMapL2promotion)2;
+	CUtensorMapFloatOOBfill B_desc_oobFill= (CUtensorMapFloatOOBfill)0;
+
+	CUresult B_desc_result = CUTLASS_CUDA_DRIVER_WRAPPER_CALL(cuTensorMapEncodeTiled)(
+    &B_desc, B_desc_type, B_desc_tensorRank, B_desc_globalAddress, B_desc_globalDim, B_desc_globalStride + 1, B_desc_boxDim, B_desc_elementStrides, B_desc_interleave, B_desc_swizzle, B_desc_l2Promotion, B_desc_oobFill);
+
+	if (B_desc_result != CUDA_SUCCESS) {
+		printf("Error: Failed to initialize the TMA descriptor A_desc");
+		return -1;
+	}
+
+	CUtensorMap C_desc;
+	CUtensorMapDataType C_desc_type= (CUtensorMapDataType)9;
+	cuuint32_t C_desc_tensorRank= 2;
+	void *C_desc_globalAddress= C;
+	cuuint64_t C_desc_globalDim[2]= {6144,1};
+	cuuint64_t C_desc_globalStride[2]= {2,12288};
+	cuuint32_t C_desc_boxDim[2]= {64,16};
+	cuuint32_t C_desc_elementStrides[2]= {1,1};
+	CUtensorMapInterleave C_desc_interleave= (CUtensorMapInterleave)0;
+	CUtensorMapSwizzle C_desc_swizzle= (CUtensorMapSwizzle)3;
+	CUtensorMapL2promotion C_desc_l2Promotion= (CUtensorMapL2promotion)2;
+	CUtensorMapFloatOOBfill C_desc_oobFill= (CUtensorMapFloatOOBfill)0;
+
+	CUresult C_desc_result = CUTLASS_CUDA_DRIVER_WRAPPER_CALL(cuTensorMapEncodeTiled)(
+    &C_desc, C_desc_type, C_desc_tensorRank, C_desc_globalAddress, C_desc_globalDim, C_desc_globalStride + 1, C_desc_boxDim, C_desc_elementStrides, C_desc_interleave, C_desc_swizzle, C_desc_l2Promotion, C_desc_oobFill);
+
+	if (C_desc_result != CUDA_SUCCESS) {
+		printf("Error: Failed to initialize the TMA descriptor A_desc");
+		return -1;
+	}
+	*out_A_desc = A_desc;
+	*out_B_desc = B_desc;
+	*out_C_desc = C_desc;
+	//	linear_kernel<<<dim3(96, 1, 1), dim3(128, 1, 1), 30720, stream>>>(A_desc, B_desc, C_desc);
+	TILELANG_CHECK_LAST_ERROR("linear_kernel");
+
+	return 0;
+}
+
+
+// latency: 0 ms vs [ref-0 sim-0], idx: 28

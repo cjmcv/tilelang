@@ -102,12 +102,13 @@ TMA_DESC_INIT_FUNC = """
     &{0}, {0}_type, {0}_tensorRank, {0}_globalAddress, {0}_globalDim, {0}_globalStride + 1, {0}_boxDim, {0}_elementStrides, {0}_interleave, {0}_swizzle, {0}_l2Promotion, {0}_oobFill);
 
 \tif ({0}_result != CUDA_SUCCESS) {{
-\t\tstd::stringstream ss;
-\t\tss << "Error: Failed to initialize the TMA descriptor {0}";
-\t\tsnprintf(error_buf, ERROR_BUF_SIZE, "%s", ss.str().c_str());
+\t\tprintf("Error: Failed to initialize the TMA descriptor A_desc");
 \t\treturn -1;
 \t}}
 """
+# \t\tstd::stringstream ss;
+# \t\tss << "Error: Failed to initialize the TMA descriptor {0}";
+# \t\tsnprintf(error_buf, ERROR_BUF_SIZE, "%s", ss.str().c_str());
 
 TMA_IM2COL_DESC_INIT_FUNC = """
 \tCUtensorMap {0};
@@ -235,15 +236,13 @@ class TLCUDASourceWrapper:
                 function_args.append({"name": param.name, "type": self._lookup_type(param.dtype)})
             else:
                 raise ValueError(f"Parameter {param} is not in the buffer map of the primary function.")
+
         # Add dynamic symbols as integer arguments
         for dyn_sym, dyn_sym_dtype in dynamic_symbolic_set:
             if dyn_sym not in [arg["name"] for arg in function_args]:
                 function_args.append({"name": dyn_sym, "type": self._lookup_type(dyn_sym_dtype)})
-
-        function_args.append(self.get_stream_type())
-
-        # Format the function arguments for declaration
-        def_args = ", ".join([f"{arg['type']} {arg['name']}" for arg in function_args])
+        
+        # function_args.append(self.get_stream_type())
 
         has_l2_persistent_map = False
         for function_name, _ in function_informations.items():
@@ -304,8 +303,18 @@ class TLCUDASourceWrapper:
             if has_l2_persistent_map:
                 kernel_launch_code += L2_PERSISTENT_MAP_RESET_HANDLE
 
+        # Add output descriptor pointers for TMA descriptors        
+        desc_output_code = ""
+        if len(desc_name_var_map) != 0:
+            for var_name in desc_name_var_map:
+                function_args.append({"name": f"out_{var_name}", "type": "CUtensorMap*"})
+                desc_output_code += f"\t*out_{var_name} = {var_name};\n"
+        print("function_args", function_args)        
+        # Format the function arguments for declaration
+        def_args = ", ".join([f"{arg['type']} {arg['name']}" for arg in function_args])
+        
         init_tma_descriptor_args = self.generate_tma_descriptor_args(desc_name_map, desc_name_var_map)
-        kernel_launch_code = init_tma_descriptor_args + kernel_launch_code
+        kernel_launch_code = init_tma_descriptor_args + desc_output_code + "\t//" +kernel_launch_code
 
         # Wrap the kernel dispatch logic in an external C function
         host_func = PREDEF_HOST_FUNC.format(def_args, kernel_launch_code)
@@ -523,7 +532,7 @@ class TLCUDASourceWrapper:
         # Combine the source, initialization function, and host function to form the complete library code
         lib_code = self.source + init_func + host_func
         # return lib_code
-        return init_func + host_func
+        return host_func
 
     def get_stream_type(self) -> dict[str, str]:
         return {"name": "stream=cudaStreamDefault", "type": "cudaStream_t"}
@@ -783,6 +792,7 @@ class TLWrapper(BaseWrapper):
             wrapper_class = TLCPUSourceWrapper
         else:
             raise ValueError(f"Unsupported platform: {self.arch.platform}")
+        
         wrapper = wrapper_class(
             scheduled_ir_module=self.scheduled_ir_module,
             source=c_source,
