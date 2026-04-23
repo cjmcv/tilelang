@@ -78,7 +78,7 @@ class MicroAutoGen:
         code_dir = Path(code_path)
         code_dir.mkdir(parents=True, exist_ok=True)
         
-        config_path = megakernel_home + f"/demo/common/{get_arch()}/"
+        config_path = megakernel_home + f"/demo/common/autogen/"
         config_dir = Path(config_path)
         config_dir.mkdir(parents=True, exist_ok=True)
         

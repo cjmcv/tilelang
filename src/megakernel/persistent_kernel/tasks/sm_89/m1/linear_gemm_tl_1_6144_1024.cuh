@@ -23,27 +23,22 @@ template <typename T,
     int PIPE_MAX = 3,
     bool FUSE_RES = false>
     __device__ __forceinline__ void linear_gemm_tl_1_6144_1024(const int bx, const int by, const int bz,
-                                                const void* __restrict__ input_ptr,
-                                                const void* __restrict__ weight_ptr,
-                                                const void* __restrict__ residual_ptr,
-                                                void* __restrict__ output_ptr,
+                                                const void* __restrict__ input_ptr, const void* __restrict__ weight_ptr, const void* __restrict__ residual_ptr, void* __restrict__ output_ptr, 
                                                 int num_active_tokens,
                                                 bool residual) {
   static_assert(THREAD_NUM==128);
   static_assert(TILE_DIM_X==64); static_assert(TILE_DIM_Y==16); static_assert(TILE_DIM_Z==64);
   static_assert(M==1); static_assert(N==6144); static_assert(K==1024);
   if (bx >= 96 || by >= 1 || bz >= 1) { return; }
-  
-  const bfloat16_t* __restrict__ A = static_cast<const bfloat16_t*>(input_ptr);
-  const bfloat16_t* __restrict__ B = static_cast<const bfloat16_t*>(weight_ptr);
-  const bfloat16_t* __restrict__ R = static_cast<const bfloat16_t*>(residual_ptr);
-  bfloat16_t* __restrict__ C = static_cast<bfloat16_t*>(output_ptr);
-  
+
+  const <dtype>* __restrict__ A = static_cast<const <dtype>*>(input_ptr);
+  const <dtype>* __restrict__ B = static_cast<const <dtype>*>(weight_ptr);
+  const <dtype>* __restrict__ R = static_cast<const <dtype>*>(residual_ptr);
+  <dtype>* __restrict__ C = static_cast<<dtype>*>(output_ptr);
   extern __shared__ __align__(1024) uchar buf_dyn_shmem[];
   float C_local[8];
   bfloat16_t A_local[8];
   bfloat16_t B_local[8];
-  const dim3 blockIdx = tl::rasterization2DRow<10>();
   #pragma unroll
   for (int i = 0; i < 4; ++i) {
     *(float2*)(C_local + (i * 2)) = make_float2(0x0p+0f/*0.000000e+00*/, 0x0p+0f/*0.000000e+00*/);
@@ -110,9 +105,18 @@ template <typename T,
 
 } // kernel
 // Strategy: linear_gemm_tl_1_6144_1024
-// selected_hparams: [16, 64, 64, 1, 3, 128, 0, True].
+// selected_hparams: [16, 64, 64, 1, 3, 128, 0, False].
 // smem: 30720 bytes.
 // use_cooperative_groups: 0.
 // layout: (96, 1, 1), (64, 16, 64)
 // block_dim=(128, 1, 1).
-// latency: 0 ms vs [ref-0 sim-0], idx: 28
+
+
+extern "C" int create_linear_gemm_tl_1_6144_1024(bfloat16_t* __restrict__ A, bfloat16_t* __restrict__ B, bfloat16_t* __restrict__ C) {
+	//	linear_kernel<<<dim3(96, 1, 1), dim3(128, 1, 1), 30720, stream>>>(A, B, C);
+
+	return 0;
+}
+
+
+// latency: 0 ms vs [ref-0 sim-0], idx: -1

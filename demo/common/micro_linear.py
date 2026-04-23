@@ -364,7 +364,7 @@ template <typename T,
         sm89_io_str = \
 '''const void* __restrict__ input_ptr, const void* __restrict__ weight_ptr, const void* __restrict__ residual_ptr, void* __restrict__ output_ptr, '''
         sm90_io_str = \
-'''const CUtensorMap A_desc, const CUtensorMap B_desc, const CUtensorMap Res_desc, const CUtensorMap C_desc, '''
+'''const CUtensorMap *A_desc, const CUtensorMap *B_desc, const CUtensorMap *Res_desc, const CUtensorMap *C_desc, '''
         sm89_io_warp_str = \
 '''
   const <dtype>* __restrict__ A = static_cast<const <dtype>*>(input_ptr);
@@ -408,6 +408,9 @@ template <typename T,
             source = source.replace("blockIdx.z", "bz")
         else:
             source = self.replace_header(source, "extern \"C\" __global__", 1, head_str)
+            source = source.replace("A_desc", "*A_desc")
+            source = source.replace("B_desc", "*B_desc")
+            source = source.replace("C_desc", "*C_desc")
             source = source.replace("<io_params>", sm90_io_str)
             source = source.replace("blockIdx.x", "bx")
             source = source.replace("blockIdx.y", "by")

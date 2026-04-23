@@ -54,10 +54,10 @@ private:
 
 __host__ void create_linear_gemm_cutensor(int M, int N, int K,
                                           void* __restrict__ A, void* __restrict__ B, void* __restrict__ C,
-                                          CUtensorMap* out_A_desc, CUtensorMap* out_B_desc, CUtensorMap* out_C_desc) {
+                                          CUtensorMap* out_A_desc, CUtensorMap* out_B_desc, CUtensorMap* out_C_desc, bool to_device) {
     if (M==1) {
         if (N==6144 && K==1024) {
-            create_linear_gemm_tl_1_6144_1024((bfloat16_t*)A, (bfloat16_t*)B, (bfloat16_t*)C, out_A_desc, out_B_desc, out_C_desc);
+            create_linear_gemm_tl_1_6144_1024((bfloat16_t*)A, (bfloat16_t*)B, (bfloat16_t*)C, out_A_desc, out_B_desc, out_C_desc, to_device);
         }
     }
 }
@@ -80,16 +80,16 @@ __host__ inline void create_tma_desc_by_task(FullTaskDesc &task_desc) {
             cudaMalloc(&desc.B_desc, sizeof(CUtensorMap));
             cudaMalloc(&desc.C_desc, sizeof(CUtensorMap));
             create_linear_gemm_cutensor(m,n,k, task_desc.inputs[0].base_ptr, task_desc.inputs[1].base_ptr, task_desc.outputs[0].base_ptr,
-                                        desc.A_desc, desc.B_desc, desc.C_desc);
+                                        desc.A_desc, desc.B_desc, desc.C_desc, true);
             TmaDescFactory::instance().insert(task_desc.task_type, task_desc.variant_id, desc);
             task_desc.inputs[0].tma_desc_ptrs[0] = desc.A_desc;
             task_desc.inputs[1].tma_desc_ptrs[0] = desc.B_desc;
             task_desc.outputs[0].tma_desc_ptrs[0] = desc.C_desc;
         }
 
-        printf("hello:%d, %d, %d, %p, %p, %p, (%lld, %lld, %lld).\n",
-            m,n,k, task_desc.inputs[0].base_ptr, task_desc.inputs[1].base_ptr, task_desc.outputs[0].base_ptr,
-            task_desc.inputs[0].tma_desc_ptrs[0].opaque[0], task_desc.inputs[1].tma_desc_ptrs[0].opaque[0], task_desc.outputs[0].tma_desc_ptrs[0].opaque[0]);
+        // printf("hello:%d, %d, %d, %p, %p, %p, (%lld, %lld, %lld).\n",
+        //     m,n,k, task_desc.inputs[0].base_ptr, task_desc.inputs[1].base_ptr, task_desc.outputs[0].base_ptr,
+        //     task_desc.inputs[0].tma_desc_ptrs[0].opaque[0], task_desc.inputs[1].tma_desc_ptrs[0].opaque[0], task_desc.outputs[0].tma_desc_ptrs[0].opaque[0]);
       break;
     }
     default:

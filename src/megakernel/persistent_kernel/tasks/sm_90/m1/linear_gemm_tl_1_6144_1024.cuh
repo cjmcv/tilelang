@@ -23,7 +23,7 @@ template <typename T,
     int PIPE_MAX = 3,
     bool FUSE_RES = false>
     __device__ __forceinline__ void linear_gemm_tl_1_6144_1024(const int bx, const int by, const int bz,
-                                                const CUtensorMap A_desc, const CUtensorMap B_desc, const CUtensorMap Res_desc, const CUtensorMap C_desc, 
+                                                const CUtensorMap *A_desc, const CUtensorMap *B_desc, const CUtensorMap *Res_desc, const CUtensorMap *C_desc, 
                                                 int num_active_tokens,
                                                 bool residual) {
   static_assert(THREAD_NUM==256);
@@ -37,9 +37,9 @@ template <typename T,
   __shared__ uint64_t mbarrier_mem[6];
   auto mbarrier = reinterpret_cast<Barrier*>(mbarrier_mem);
   if (tl::tl_shuffle_elect<0>()) {
-    tl::prefetch_tma_descriptor(A_desc);
-    tl::prefetch_tma_descriptor(B_desc);
-    tl::prefetch_tma_descriptor(C_desc);
+    tl::prefetch_tma_descriptor(*A_desc);
+    tl::prefetch_tma_descriptor(*B_desc);
+    tl::prefetch_tma_descriptor(*C_desc);
     mbarrier[0].init(256);
     mbarrier[1].init(256);
     mbarrier[2].init(256);
@@ -59,10 +59,10 @@ template <typename T,
     if (((int)threadIdx.x) == 0) {
       mbarrier[(k % 3)].expect_transaction(2048);
       tl::fence_proxy_async();
-      tl::tma_load(A_desc, mbarrier[(k % 3)], (&(((bfloat16_t*)buf_dyn_shmem)[(((k % 3) * 1024) + 12288)])), (k * 64), 0);
+      tl::tma_load(*A_desc, mbarrier[(k % 3)], (&(((bfloat16_t*)buf_dyn_shmem)[(((k % 3) * 1024) + 12288)])), (k * 64), 0);
       mbarrier[(k % 3)].expect_transaction(8192);
       tl::fence_proxy_async();
-      tl::tma_load(B_desc, mbarrier[(k % 3)], (&(((bfloat16_t*)buf_dyn_shmem)[((k % 3) * 4096)])), (k * 64), (((int)bx) * 64));
+      tl::tma_load(*B_desc, mbarrier[(k % 3)], (&(((bfloat16_t*)buf_dyn_shmem)[((k % 3) * 4096)])), (k * 64), (((int)bx) * 64));
     }
     mbarrier[(k % 3)].arrive();
     mbarrier[(k % 3)].wait(((k % 6) / 3));
@@ -80,7 +80,7 @@ template <typename T,
   tl::fence_proxy_async();
   __syncthreads();
   if (((int)threadIdx.x) == 0) {
-    tl::tma_store(C_desc, (&(((bfloat16_t*)buf_dyn_shmem)[0])), (((int)bx) * 64), 0);
+    tl::tma_store(*C_desc, (&(((bfloat16_t*)buf_dyn_shmem)[0])), (((int)bx) * 64), 0);
     tl::tma_store_arrive();
     tl::tma_store_wait<0>();
   }
@@ -96,7 +96,7 @@ template <typename T,
 // block_dim=(256, 1, 1).
 
 
-extern "C" int create_linear_gemm_tl_1_6144_1024(bfloat16_t* __restrict__ A, bfloat16_t* __restrict__ B, bfloat16_t* __restrict__ C, CUtensorMap* out_A_desc, CUtensorMap* out_B_desc, CUtensorMap* out_C_desc) {
+extern "C" int create_linear_gemm_tl_1_6144_1024(bfloat16_t* __restrict__ A, bfloat16_t* __restrict__ B, bfloat16_t* __restrict__ C, CUtensorMap* out_A_desc, CUtensorMap* out_B_desc, CUtensorMap* out_C_desc, bool to_device) {
 
 	CUtensorMap A_desc;
 	CUtensorMapDataType A_desc_type= (CUtensorMapDataType)9;
@@ -160,9 +160,15 @@ extern "C" int create_linear_gemm_tl_1_6144_1024(bfloat16_t* __restrict__ A, bfl
 		printf("Error: Failed to initialize the TMA descriptor A_desc");
 		return -1;
 	}
-	cudaMemcpy(out_A_desc, &A_desc, sizeof(CUtensorMap), cudaMemcpyHostToDevice);
-	cudaMemcpy(out_B_desc, &B_desc, sizeof(CUtensorMap), cudaMemcpyHostToDevice);
-	cudaMemcpy(out_C_desc, &C_desc, sizeof(CUtensorMap), cudaMemcpyHostToDevice);
+	if (to_device) {
+		cudaMemcpy(out_A_desc, &A_desc, sizeof(CUtensorMap), cudaMemcpyHostToDevice);
+		cudaMemcpy(out_B_desc, &B_desc, sizeof(CUtensorMap), cudaMemcpyHostToDevice);
+		cudaMemcpy(out_C_desc, &C_desc, sizeof(CUtensorMap), cudaMemcpyHostToDevice);
+	} else {
+		*out_A_desc = A_desc;
+		*out_B_desc = B_desc;
+		*out_C_desc = C_desc;
+	}
 	//	linear_kernel<<<dim3(96, 1, 1), dim3(256, 1, 1), 30720, stream>>>(A_desc, B_desc, C_desc);
 
 	return 0;

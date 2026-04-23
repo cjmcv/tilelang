@@ -308,8 +308,16 @@ class TLCUDASourceWrapper:
         if len(desc_name_var_map) != 0:
             for var_name in desc_name_var_map:
                 function_args.append({"name": f"out_{var_name}", "type": "CUtensorMap*"})
-                desc_output_code += f"\tcudaMemcpy(out_{var_name}, &{var_name}, sizeof(CUtensorMap), cudaMemcpyHostToDevice);\n"
-                # desc_output_code += f"\t*out_{var_name} = {var_name};\n"
+            function_args.append({"name": f"to_device", "type": "bool"})
+            
+            desc_output_code += f"\tif (to_device) {{\n"
+            for var_name in desc_name_var_map:
+                desc_output_code += f"\t\tcudaMemcpy(out_{var_name}, &{var_name}, sizeof(CUtensorMap), cudaMemcpyHostToDevice);\n"                
+            desc_output_code += f"\t}} else {{\n"
+            for var_name in desc_name_var_map:
+                desc_output_code += f"\t\t*out_{var_name} = {var_name};\n"
+            desc_output_code += f"\t}}\n"
+            
         print("function_args", function_args)        
         # Format the function arguments for declaration
         def_args = ", ".join([f"{arg['type']} {arg['name']}" for arg in function_args])
