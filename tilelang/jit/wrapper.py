@@ -289,9 +289,9 @@ class TLCUDASourceWrapper:
                 call_args = f"\tvoid* {function_name}_args[] = {{{', '.join(args_array)}}};\n"
                 kernel_launch_code += call_args
                 # Using cudaLaunchCooperativeKernel to launch the kernel
-                kernel_launch_code += "\tTILELANG_CHECK(cudaLaunchCooperativeKernel((void*){}, {}, {}, {}, {}, stream));\n".format(
-                    function_name, grid_str, block_str, function_name + "_args", smem_str
-                )
+                # kernel_launch_code += "\tTILELANG_CHECK(cudaLaunchCooperativeKernel((void*){}, {}, {}, {}, {}, stream));\n".format(
+                #     function_name, grid_str, block_str, function_name + "_args", smem_str
+                # )
             else:
                 args_list = parse_function_call_args(declaration, function_args, function_params, desc_name_map, desc_name_var_map)
                 assert len(function_params) == len(args_list), (
@@ -299,7 +299,7 @@ class TLCUDASourceWrapper:
                 )
                 call_args = ", ".join(args_list)
                 kernel_launch_code += f"\t{function_name}<<<{grid_str}, {block_str}, {smem_str}, stream>>>({call_args});\n"
-                kernel_launch_code += f'\tTILELANG_CHECK_LAST_ERROR("{function_name}");\n'
+                # kernel_launch_code += f'\tTILELANG_CHECK_LAST_ERROR("{function_name}");\n'
             if has_l2_persistent_map:
                 kernel_launch_code += L2_PERSISTENT_MAP_RESET_HANDLE
 

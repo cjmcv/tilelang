@@ -30,16 +30,16 @@
 #include <vector>
 
 #if defined(MEGAKERNEL_GRACE_HOPPER)
-#include "tasks/sm_90a/task_header.cuh"
+#include "tasks/sm_90/task_header.cuh"
 #elif defined(MEGAKERNEL_GRACE_BLACKWELL)
 #include "tasks/blackwell/task_header.cuh"
 #else
 #include "tasks/sm_89/task_header.cuh"
 #endif
 
-#ifdef MPK_ENABLE_TMA
-#include "tma.cuh"
-#endif
+// #ifdef MPK_ENABLE_TMA
+// #include "tma.cuh"
+// #endif
 
 #define LIKELY(x)       __builtin_expect(!!(x), 1)
 #define UNLIKELY(x)     __builtin_expect(!!(x), 0)

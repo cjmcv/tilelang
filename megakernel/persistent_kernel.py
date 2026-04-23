@@ -201,9 +201,12 @@ def get_compile_command(
             "-DNDEBUG",
         ] + (["-DMEGAKERNEL_ENABLE_PROFILER"] if profiling else [])
     elif target_cc == 90:
+        # h20=>sm90, h100=>sm90a
         specific_cmd = [
-            "-arch=sm_90a",
-            "-gencode=arch=compute_90a,code=sm_90a",
+            "-arch=sm_90",
+            "-gencode=arch=compute_90,code=sm_90",
+            # "-arch=sm_90a",
+            # "-gencode=arch=compute_90a,code=sm_90a",
             "-DMPK_ENABLE_TMA",
             "-DMEGAKERNEL_GRACE_HOPPER",
             "-DNDEBUG",

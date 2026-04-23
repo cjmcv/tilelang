@@ -9,8 +9,29 @@
 #include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>
 #endif
 
-extern "C" __global__ void linear_gemm_tl_1_6144_1024(__grid_constant__ const CUtensorMap A_desc, __grid_constant__ const CUtensorMap B_desc, __grid_constant__ const CUtensorMap C_desc);
-extern "C" __global__ void __launch_bounds__(128, 1) linear_gemm_tl_1_6144_1024(__grid_constant__ const CUtensorMap A_desc, __grid_constant__ const CUtensorMap B_desc, __grid_constant__ const CUtensorMap C_desc) {
+namespace kernel {
+
+template <typename T,
+    int THREAD_NUM,
+    int TILE_DIM_X, 
+    int TILE_DIM_Y, 
+    int TILE_DIM_Z,
+    int M,
+    int N,
+    int K,
+    int O_STRIDE = N,
+    int PIPE_MAX = 3,
+    bool FUSE_RES = false>
+    __device__ __forceinline__ void linear_gemm_tl_1_6144_1024(const int bx, const int by, const int bz,
+                                                const CUtensorMap A_desc, const CUtensorMap B_desc, const CUtensorMap Res_desc, const CUtensorMap C_desc, 
+                                                int num_active_tokens,
+                                                bool residual) {
+  if (threadIdx.x == 0)
+    printf("inside %p, %p, %p.\n", A_desc, B_desc, C_desc);
+  static_assert(THREAD_NUM==128);
+  static_assert(TILE_DIM_X==64); static_assert(TILE_DIM_Y==16); static_assert(TILE_DIM_Z==64);
+  static_assert(M==1); static_assert(N==6144); static_assert(K==1024);
+  if (bx >= 96 || by >= 1 || bz >= 1) { return; }
   extern __shared__ __align__(1024) uchar buf_dyn_shmem[];
   float C_local[8];
   bfloat16_t A_local[8];
@@ -30,7 +51,6 @@ extern "C" __global__ void __launch_bounds__(128, 1) linear_gemm_tl_1_6144_1024(
   }
   tl::fence_barrier_init();
   __syncthreads();
-  const dim3 blockIdx = tl::rasterization2DRow<10>();
   #pragma unroll
   for (int i = 0; i < 4; ++i) {
     *(float2*)(C_local + (i * 2)) = make_float2(0x0p+0f/*0.000000e+00*/, 0x0p+0f/*0.000000e+00*/);
@@ -44,7 +64,7 @@ extern "C" __global__ void __launch_bounds__(128, 1) linear_gemm_tl_1_6144_1024(
       tl::tma_load(A_desc, mbarrier[(k % 3)], (&(((bfloat16_t*)buf_dyn_shmem)[(((k % 3) * 1024) + 12288)])), (k * 64), 0);
       mbarrier[(k % 3)].expect_transaction(8192);
       tl::fence_proxy_async();
-      tl::tma_load(B_desc, mbarrier[(k % 3)], (&(((bfloat16_t*)buf_dyn_shmem)[((k % 3) * 4096)])), (k * 64), (((int)blockIdx.x) * 64));
+      tl::tma_load(B_desc, mbarrier[(k % 3)], (&(((bfloat16_t*)buf_dyn_shmem)[((k % 3) * 4096)])), (k * 64), (((int)bx) * 64));
     }
     mbarrier[(k % 3)].arrive();
     mbarrier[(k % 3)].wait(((k % 6) / 3));
@@ -63,15 +83,16 @@ extern "C" __global__ void __launch_bounds__(128, 1) linear_gemm_tl_1_6144_1024(
   tl::fence_proxy_async();
   __syncthreads();
   if (((int)threadIdx.x) == 0) {
-    tl::tma_store(C_desc, (&(((bfloat16_t*)buf_dyn_shmem)[0])), (((int)blockIdx.x) * 64), 0);
+    tl::tma_store(C_desc, (&(((bfloat16_t*)buf_dyn_shmem)[0])), (((int)bx) * 64), 0);
     tl::tma_store_arrive();
     tl::tma_store_wait<0>();
   }
 }
 
 
+} // kernel
 // Strategy: linear_gemm_tl_1_6144_1024
-// selected_hparams: [16, 64, 64, 1, 3, 128, 0, True].
+// selected_hparams: [16, 64, 64, 1, 3, 128, 0, False].
 // smem: 30720 bytes.
 // use_cooperative_groups: 0.
 // layout: (96, 1, 1), (64, 16, 64)
@@ -145,10 +166,11 @@ extern "C" int create_linear_gemm_tl_1_6144_1024(bfloat16_t* __restrict__ A, bfl
 	*out_A_desc = A_desc;
 	*out_B_desc = B_desc;
 	*out_C_desc = C_desc;
+  printf("create %p, %p, %p.\n", A_desc, B_desc, C_desc);
 	//	linear_kernel<<<dim3(96, 1, 1), dim3(128, 1, 1), 30720, stream>>>(A_desc, B_desc, C_desc);
 
 	return 0;
 }
 
 
-// latency: 0 ms vs [ref-0 sim-0], idx: 28
+// latency: 0 ms vs [ref-0 sim-0], idx: -1

@@ -237,8 +237,7 @@ public:
       task_config[op] = std::make_tuple(2, 1, TASK_ALLREDUCE, variant_id);
     } // hopper 
     else if (name == "linear_hopper") {
-      int variant_id = task_register->register_linear_hopper_task(
-          customized->bgraph, params, false /*with_residual*/);
+      int variant_id = task_register->register_linear_hopper_task(customized->bgraph, params, false /*with_residual*/, false /*with_silu_mul*/);
       task_config[op] = std::make_tuple(2, 1, TASK_LINEAR_HOPPER, variant_id);
     }
     else {
@@ -809,7 +808,7 @@ private:
 
       // create TMA desc for each task
       code.e("#ifdef MPK_ENABLE_TMA");
-      // Hopper Tasks
+      // Hopper Tasks tma cjm
       code.e("if (task.at(\"task_type\") > TASK_HOPPER_TASK_BEGIN && "
             "task.at(\"task_type\") < TASK_HOPPER_TASK_END) {");
       code.e("create_tma_desc_by_task(task_desc);");

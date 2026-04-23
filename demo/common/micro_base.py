@@ -26,7 +26,7 @@ import tilelang
 import tilelang.language as T
 
 from common.pkt_util import TestUtil, TorchRef
-from common.micro_config import get_target_str, is_megakernel_enabled, is_enable_profiling
+from common.micro_config import get_arch, get_target_str, is_megakernel_enabled, is_enable_profiling
   
 class HparamSelectMode(IntEnum):
     HEURISTIC = 0
@@ -136,8 +136,9 @@ class BaseMicroKernel:
         self.megakernel_home = os.getenv("MEGAKERNEL_HOME", default=None)
         if self.megakernel_home is None:
             raise EnvironmentError("The environment variable MEGAKERNEL_HOME is not set.")
-        prop = torch.cuda.get_device_properties(0)
-        self.base_path = self.megakernel_home + "/demo/gen/sm" + str(prop.major) + str(prop.minor) + "/"
+        # prop = torch.cuda.get_device_properties(0)
+        # str(prop.major) + str(prop.minor)
+        self.base_path = self.megakernel_home + "/demo/gen/" + get_arch() + "/"
         target_dir = Path(self.base_path)
         target_dir.mkdir(parents=True, exist_ok=True)
 

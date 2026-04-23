@@ -31,6 +31,9 @@ def get_target_str():
     """Returns the complete target string for tilelang.jit"""
     return f"cuda -arch={TARGET_ARCH}"
 
+def get_arch():
+    return TARGET_ARCH
+
 def get_pass_configs():
     return PASS_CONFIGS
 

@@ -16,7 +16,7 @@ import tilelang.language as T
 
 from common.pkt_util import TestUtil, TorchRef
 from common.micro_base import BaseMicroKernel, HparamSelectMode
-from common.micro_config import get_target_str, is_megakernel_enabled, get_pass_configs
+from common.micro_config import get_arch, get_target_str, is_megakernel_enabled, get_pass_configs
 
 # TODO: megakernel约束线程维度是一维128/256，而目前gemv方案是二维线程，且语法糖约束下，
 # 无法对tn = T.get_thread_binding(0)进行二次操作，即无法由threadIdx.x // N, threadIdx.x % N, 来转换成二维。
@@ -349,23 +349,26 @@ template <typename T,
     int PIPE_MAX = 3,
     bool FUSE_RES = false>
     __device__ __forceinline__ void <kernel_name>(const int bx, const int by, const int bz,
-                                                const void* __restrict__ input_ptr,
-                                                const void* __restrict__ weight_ptr,
-                                                const void* __restrict__ residual_ptr,
-                                                void* __restrict__ output_ptr,
+                                                <io_params>
                                                 int num_active_tokens,
                                                 bool residual) {
   static_assert(THREAD_NUM==<threads>);
   static_assert(TILE_DIM_X==<BLOCK_N>); static_assert(TILE_DIM_Y==<BLOCK_M>); static_assert(TILE_DIM_Z==<BLOCK_K>);
   static_assert(M==<M>); static_assert(N==<N>); static_assert(K==<K>);
   if (bx >= <gridx_0> || by >= <gridy_0> || bz >= <gridz_0>) { return; }
-  
+'''
+        sm89_io_str = \
+'''const void* __restrict__ input_ptr, const void* __restrict__ weight_ptr, const void* __restrict__ residual_ptr, void* __restrict__ output_ptr, '''
+        sm90_io_str = \
+'''const CUtensorMap A_desc, const CUtensorMap B_desc, const CUtensorMap Res_desc, const CUtensorMap C_desc, '''
+        sm89_io_warp_str = \
+'''
   const <dtype>* __restrict__ A = static_cast<const <dtype>*>(input_ptr);
   const <dtype>* __restrict__ B = static_cast<const <dtype>*>(weight_ptr);
   const <dtype>* __restrict__ R = static_cast<const <dtype>*>(residual_ptr);
   <dtype>* __restrict__ C = static_cast<<dtype>*>(output_ptr);
-  
-'''     
+'''
+
         if (isinstance(self.strategy, _GemvStrategy)):
             BLOCK_N, reduce_threads = selected_hparams
             BLOCK_M, BLOCK_K, threads = 1, 1, 128 # todo
@@ -392,18 +395,22 @@ template <typename T,
         source = kernel.get_kernel_source()
         grid_dim, block_dim, dynamic_smem_buf, use_cooperative_groups = kernel.get_launch_info()[0]
         self.layout = f"({grid_dim['blockIdx.x']}, {grid_dim['blockIdx.y']}, {grid_dim['blockIdx.z']}), ({BLOCK_N}, {BLOCK_M}, {BLOCK_K})"        
-        if (get_target_str() == "sm_89"):
+        if (get_arch() == "sm_89"):
+            head_str += sm89_io_warp_str
             source = self.replace_header(source, "extern \"C\" __global__", 1, head_str)
-            source = source.replace("blockIdx.x", "bx")
-            source = source.replace("blockIdx.y", "by")
-            source = source.replace("blockIdx.z", "bz")
-        
-            source = source.replace("<gridx_0>", str(grid_dim['blockIdx.x']))
-            source = source.replace("<gridy_0>", str(grid_dim['blockIdx.y']))
-            source = source.replace("<gridz_0>", str(grid_dim['blockIdx.z']))
+            source = source.replace("<io_params>", sm89_io_str)
         else:
-            source = source.replace("linear_kernel", self.strategy.name) 
+            source = self.replace_header(source, "extern \"C\" __global__", 1, head_str)
+            source = source.replace("<io_params>", sm90_io_str)
             
+        source = source.replace("blockIdx.x", "bx")
+        source = source.replace("blockIdx.y", "by")
+        source = source.replace("blockIdx.z", "bz")
+    
+        source = source.replace("<gridx_0>", str(grid_dim['blockIdx.x']))
+        source = source.replace("<gridy_0>", str(grid_dim['blockIdx.y']))
+        source = source.replace("<gridz_0>", str(grid_dim['blockIdx.z']))
+                    
         extra_attr = f"\n// Strategy: {self.strategy.name}"
         extra_attr += f"\n// selected_hparams: {selected_hparams}."
         extra_attr += f"\n// smem: {dynamic_smem_buf} bytes."
