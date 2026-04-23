@@ -20,9 +20,9 @@ namespace runtime {
 
 
 struct TmaDescTriple {
-  CUtensorMap A_desc;
-  CUtensorMap B_desc;
-  CUtensorMap C_desc;
+  CUtensorMap *A_desc;
+  CUtensorMap *B_desc;
+  CUtensorMap *C_desc;
 };
 
 class TmaDescFactory {
@@ -76,17 +76,20 @@ __host__ inline void create_tma_desc_by_task(FullTaskDesc &task_desc) {
             task_desc.inputs[1].tma_desc_ptrs[0] = desc.B_desc;
             task_desc.outputs[0].tma_desc_ptrs[0] = desc.C_desc;
         } else {
+            cudaMalloc(&desc.A_desc, sizeof(CUtensorMap));
+            cudaMalloc(&desc.B_desc, sizeof(CUtensorMap));
+            cudaMalloc(&desc.C_desc, sizeof(CUtensorMap));
             create_linear_gemm_cutensor(m,n,k, task_desc.inputs[0].base_ptr, task_desc.inputs[1].base_ptr, task_desc.outputs[0].base_ptr,
-                                        &desc.A_desc, &desc.B_desc, &desc.C_desc);
+                                        desc.A_desc, desc.B_desc, desc.C_desc);
             TmaDescFactory::instance().insert(task_desc.task_type, task_desc.variant_id, desc);
             task_desc.inputs[0].tma_desc_ptrs[0] = desc.A_desc;
             task_desc.inputs[1].tma_desc_ptrs[0] = desc.B_desc;
             task_desc.outputs[0].tma_desc_ptrs[0] = desc.C_desc;
         }
 
-        printf("hello:%d, %d, %d, %p, %p, %p, (%p, %p, %p).\n",
+        printf("hello:%d, %d, %d, %p, %p, %p, (%lld, %lld, %lld).\n",
             m,n,k, task_desc.inputs[0].base_ptr, task_desc.inputs[1].base_ptr, task_desc.outputs[0].base_ptr,
-            task_desc.inputs[0].tma_desc_ptrs[0], task_desc.inputs[1].tma_desc_ptrs[0], task_desc.outputs[0].tma_desc_ptrs[0]);
+            task_desc.inputs[0].tma_desc_ptrs[0].opaque[0], task_desc.inputs[1].tma_desc_ptrs[0].opaque[0], task_desc.outputs[0].tma_desc_ptrs[0].opaque[0]);
       break;
     }
     default:

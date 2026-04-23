@@ -99,7 +99,7 @@ struct TensorDesc {
   int bz;
   void *base_ptr;
 #ifdef MPK_ENABLE_TMA
-  CUtensorMap tma_desc_ptrs[megakernel::config::MAX_TMA_DESC_PER_TENSOR];
+  CUtensorMap *tma_desc_ptrs[megakernel::config::MAX_TMA_DESC_PER_TENSOR];
 #endif
   int data_type;
   int dim[megakernel::config::MAX_TENSOR_DIMS];
@@ -177,8 +177,8 @@ struct alignas(16) TaskDesc {
   void *input_ptrs[MAX_INPUTS_PER_TASK];
   void *output_ptrs[MAX_OUTPUTS_PER_TASK];
 #ifdef MPK_ENABLE_TMA
-  CUtensorMap input_tma_desc_ptrs[MAX_INPUTS_PER_TASK][megakernel::config::MAX_TMA_DESC_PER_TENSOR];
-  CUtensorMap output_tma_desc_ptrs[MAX_OUTPUTS_PER_TASK][megakernel::config::MAX_TMA_DESC_PER_TENSOR];
+  CUtensorMap *input_tma_desc_ptrs[MAX_INPUTS_PER_TASK][megakernel::config::MAX_TMA_DESC_PER_TENSOR];
+  CUtensorMap *output_tma_desc_ptrs[MAX_OUTPUTS_PER_TASK][megakernel::config::MAX_TMA_DESC_PER_TENSOR];
 #endif
   FullTaskDesc::TaskMetadata task_metadata;
 };

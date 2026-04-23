@@ -36,7 +36,7 @@ template <typename T,
                                                   const CUtensorMap Res_desc, const CUtensorMap C_desc, 
                                                   int num_active_tokens,
                                                   bool residual) {
-    printf("hello linear_kernel sm90.\n");
+    // printf("hello linear_kernel sm90.\n");
 #ifdef ENABLE_QWEN3_06B
   // if constexpr (FUSE_RES == true) {
   //   if constexpr (M == 1) {
@@ -53,7 +53,6 @@ template <typename T,
   // else {
     if constexpr (M == 1) {
       if constexpr (N == 6144 && K == 1024) {
-        printf("linear_gemm_tl_1_6144_1024aa.\n");
         linear_gemm_tl_1_6144_1024<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
           bx, by, bz, A_desc, B_desc, Res_desc, C_desc, num_active_tokens, residual); return;
       }

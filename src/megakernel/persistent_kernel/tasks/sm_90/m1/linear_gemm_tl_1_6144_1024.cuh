@@ -26,33 +26,31 @@ template <typename T,
                                                 const CUtensorMap A_desc, const CUtensorMap B_desc, const CUtensorMap Res_desc, const CUtensorMap C_desc, 
                                                 int num_active_tokens,
                                                 bool residual) {
-  if (threadIdx.x == 0)
-    printf("inside %p, %p, %p.\n", A_desc, B_desc, C_desc);
-  static_assert(THREAD_NUM==128);
+  static_assert(THREAD_NUM==256);
   static_assert(TILE_DIM_X==64); static_assert(TILE_DIM_Y==16); static_assert(TILE_DIM_Z==64);
   static_assert(M==1); static_assert(N==6144); static_assert(K==1024);
   if (bx >= 96 || by >= 1 || bz >= 1) { return; }
   extern __shared__ __align__(1024) uchar buf_dyn_shmem[];
-  float C_local[8];
+  float C_local[4];
   bfloat16_t A_local[8];
-  bfloat16_t B_local[8];
+  bfloat16_t B_local[4];
   __shared__ uint64_t mbarrier_mem[6];
   auto mbarrier = reinterpret_cast<Barrier*>(mbarrier_mem);
   if (tl::tl_shuffle_elect<0>()) {
     tl::prefetch_tma_descriptor(A_desc);
     tl::prefetch_tma_descriptor(B_desc);
     tl::prefetch_tma_descriptor(C_desc);
-    mbarrier[0].init(128);
-    mbarrier[1].init(128);
-    mbarrier[2].init(128);
-    mbarrier[3].init(128);
-    mbarrier[4].init(128);
-    mbarrier[5].init(128);
+    mbarrier[0].init(256);
+    mbarrier[1].init(256);
+    mbarrier[2].init(256);
+    mbarrier[3].init(256);
+    mbarrier[4].init(256);
+    mbarrier[5].init(256);
   }
   tl::fence_barrier_init();
   __syncthreads();
   #pragma unroll
-  for (int i = 0; i < 4; ++i) {
+  for (int i = 0; i < 2; ++i) {
     *(float2*)(C_local + (i * 2)) = make_float2(0x0p+0f/*0.000000e+00*/, 0x0p+0f/*0.000000e+00*/);
   }
   for (int k = 0; k < 16; ++k) {
@@ -71,15 +69,14 @@ template <typename T,
     __syncthreads();
     for (int ki = 0; ki < 4; ++ki) {
       tl::ptx_ldmatrix_x4((&(((bfloat16_t*)buf_dyn_shmem)[(((((k % 3) * 1024) + (((((int)threadIdx.x) & 15) >> 3) * 512)) + ((((((((int)threadIdx.x) & 15) * 64) + (((((((int)threadIdx.x) & 7) >> 2) + (ki >> 1)) & 1) * 32)) + (((((((int)threadIdx.x) & 3) >> 1) + (ki & 1)) & 1) * 16)) + (((((((int)threadIdx.x) & 31) >> 4) + (((int)threadIdx.x) & 1)) & 1) * 8)) & 511)) + 12288)])) + 0, A_local + 0);
-      tl::ptx_ldmatrix_x4((&(((bfloat16_t*)buf_dyn_shmem)[(((((((k % 3) * 4096) + ((((int)threadIdx.x) >> 4) * 512)) + ((((int)threadIdx.x) & 7) * 64)) + (((((((int)threadIdx.x) & 7) >> 2) + (ki >> 1)) & 1) * 32)) + (((((((int)threadIdx.x) & 3) >> 1) + (ki & 1)) & 1) * 16)) + (((((((int)threadIdx.x) & 15) >> 3) + (((int)threadIdx.x) & 1)) & 1) * 8))])) + 0, B_local + 0);
+      tl::ptx_ldmatrix_x2((&(((bfloat16_t*)buf_dyn_shmem)[(((((((k % 3) * 4096) + ((((((int)threadIdx.x) >> 5) + ((((int)threadIdx.x) & 31) >> 4)) & 7) * 512)) + ((((int)threadIdx.x) & 7) * 64)) + (((((((int)threadIdx.x) & 7) >> 2) + (ki >> 1)) & 1) * 32)) + (((((((int)threadIdx.x) & 3) >> 1) + (ki & 1)) & 1) * 16)) + (((((((int)threadIdx.x) & 15) >> 3) + (((int)threadIdx.x) & 1)) & 1) * 8))])) + 0, B_local + 0);
       tl::mma_sync<tl::DataType::kBFloat16, tl::DataType::kBFloat16, tl::DataType::kFloat32, 16, 8, 16, false, true>(reinterpret_cast<float*>(C_local + 0), reinterpret_cast<const unsigned*>(A_local + 0), reinterpret_cast<const unsigned*>(B_local + 0));
-      tl::mma_sync<tl::DataType::kBFloat16, tl::DataType::kBFloat16, tl::DataType::kFloat32, 16, 8, 16, false, true>(reinterpret_cast<float*>(C_local + 4), reinterpret_cast<const unsigned*>(A_local + 0), reinterpret_cast<const unsigned*>(B_local + 4));
     }
     tl::mbarrier_cp_async_arrive(mbarrier[((k % 3) + 3)]);
     mbarrier[((k % 3) + 3)].arrive();
   }
   __syncthreads();
-  tl::ptx_stmatrix_x4((&(((bfloat16_t*)buf_dyn_shmem)[(((((((int)threadIdx.x) & 15) * 64) + ((((((int)threadIdx.x) >> 6) + ((((int)threadIdx.x) & 7) >> 2)) & 1) * 32)) + (((((((int)threadIdx.x) & 63) >> 5) + ((((int)threadIdx.x) & 3) >> 1)) & 1) * 16)) + (((((((int)threadIdx.x) & 31) >> 4) + (((int)threadIdx.x) & 1)) & 1) * 8))])), __pack_half2(((bfloat16_t)C_local[0]), ((bfloat16_t)C_local[1])), __pack_half2(((bfloat16_t)C_local[2]), ((bfloat16_t)C_local[3])), __pack_half2(((bfloat16_t)C_local[4]), ((bfloat16_t)C_local[5])), __pack_half2(((bfloat16_t)C_local[6]), ((bfloat16_t)C_local[7])));
+  tl::ptx_stmatrix_x2((&(((bfloat16_t*)buf_dyn_shmem)[(((((((int)threadIdx.x) & 15) * 64) + ((((((int)threadIdx.x) >> 7) + ((((int)threadIdx.x) & 7) >> 2)) & 1) * 32)) + (((((((int)threadIdx.x) & 127) >> 6) + ((((int)threadIdx.x) & 3) >> 1)) & 1) * 16)) + (((((((int)threadIdx.x) & 63) >> 5) + (((int)threadIdx.x) & 1)) & 1) * 8))])), __pack_half2(((bfloat16_t)C_local[0]), ((bfloat16_t)C_local[1])), __pack_half2(((bfloat16_t)C_local[2]), ((bfloat16_t)C_local[3])));
   tl::fence_proxy_async();
   __syncthreads();
   if (((int)threadIdx.x) == 0) {
@@ -92,11 +89,11 @@ template <typename T,
 
 } // kernel
 // Strategy: linear_gemm_tl_1_6144_1024
-// selected_hparams: [16, 64, 64, 1, 3, 128, 0, False].
+// selected_hparams: [16, 64, 64, 1, 3, 256, 0, False].
 // smem: 30720 bytes.
 // use_cooperative_groups: 0.
 // layout: (96, 1, 1), (64, 16, 64)
-// block_dim=(128, 1, 1).
+// block_dim=(256, 1, 1).
 
 
 extern "C" int create_linear_gemm_tl_1_6144_1024(bfloat16_t* __restrict__ A, bfloat16_t* __restrict__ B, bfloat16_t* __restrict__ C, CUtensorMap* out_A_desc, CUtensorMap* out_B_desc, CUtensorMap* out_C_desc) {
@@ -163,11 +160,10 @@ extern "C" int create_linear_gemm_tl_1_6144_1024(bfloat16_t* __restrict__ A, bfl
 		printf("Error: Failed to initialize the TMA descriptor A_desc");
 		return -1;
 	}
-	*out_A_desc = A_desc;
-	*out_B_desc = B_desc;
-	*out_C_desc = C_desc;
-  printf("create %p, %p, %p.\n", A_desc, B_desc, C_desc);
-	//	linear_kernel<<<dim3(96, 1, 1), dim3(128, 1, 1), 30720, stream>>>(A_desc, B_desc, C_desc);
+	cudaMemcpy(out_A_desc, &A_desc, sizeof(CUtensorMap), cudaMemcpyHostToDevice);
+	cudaMemcpy(out_B_desc, &B_desc, sizeof(CUtensorMap), cudaMemcpyHostToDevice);
+	cudaMemcpy(out_C_desc, &C_desc, sizeof(CUtensorMap), cudaMemcpyHostToDevice);
+	//	linear_kernel<<<dim3(96, 1, 1), dim3(256, 1, 1), 30720, stream>>>(A_desc, B_desc, C_desc);
 
 	return 0;
 }

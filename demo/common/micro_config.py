@@ -5,7 +5,7 @@ Import this module in other micro_*.py files to use these variables.
 import os
 import tilelang
 
-TEST_TEMP_HOPPER = True
+TEST_TEMP_HOPPER = False
 
 if TEST_TEMP_HOPPER == True:
     TARGET_ARCH = "sm_90" # "sm_120"

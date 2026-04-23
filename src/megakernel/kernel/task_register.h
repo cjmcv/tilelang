@@ -405,14 +405,14 @@ public:
           with_silu_mul);
 
     code.e("    task_desc->bx, task_desc->by, task_desc->bz,");
-    code.e("    task_desc->input_tma_desc_ptrs[0][0],");
-    code.e("    task_desc->input_tma_desc_ptrs[1][0],");
+    code.e("    *task_desc->input_tma_desc_ptrs[0][0],");
+    code.e("    *task_desc->input_tma_desc_ptrs[1][0],");
     if (with_residual) {
-      code.e("    task_desc->input_tma_desc_ptrs[2][0],");
+      code.e("    *task_desc->input_tma_desc_ptrs[2][0],");
     } else {
       code.e("    CUtensorMap{},");
     }
-    code.e("    task_desc->output_tma_desc_ptrs[0][0],");
+    code.e("    *task_desc->output_tma_desc_ptrs[0][0],");
     code.e("    runtime_config.batch_size,");
     if (with_residual) {
       code.e("    runtime_config.my_gpu_id == 0);");
@@ -420,11 +420,11 @@ public:
       code.e("    false/*residual*/);");
     }
     
-    if (with_residual) {
-      return register_task_variant(TASK_LINEAR_WITH_RESIDUAL, code.to_string());
-    } else {
-      return register_task_variant(TASK_LINEAR, code.to_string());
-    }
+    // if (with_residual) {
+    //   return register_task_variant(TASK_LINEAR_WITH_RESIDUAL, code.to_string());
+    // } else {
+      return register_task_variant(TASK_LINEAR_HOPPER, code.to_string());
+    // }
   }
 
   int register_silu_mul_task(tb::TBGraph const &bgraph, std::vector<int> const &params){

@@ -118,6 +118,11 @@ class _GemmStrategy:
         else:
             self.name = "linear_gemm_tl"+f"_{M}_{N}_{K}"
             
+        if (get_arch() == "sm_89"):
+            self.thread_num=128
+        else:
+            self.thread_num=256
+            
         self.M = M
         self.N = N
         self.K = K
@@ -133,23 +138,22 @@ class _GemmStrategy:
         BLOCK_K=[32, 64, 128] # 
         splitks=[1] #, 2, 4
         num_stages=[0, 1, 2, 3]#
-        thread_nums=[128]#, 256
         policies=[T.GemmWarpPolicy.Square, T.GemmWarpPolicy.FullRow]
         enable_rasterations=[True, False]
         
         res = []
-        for m, n, k, splitk, num_stage, thread_num, policy, enable_rasteration in itertools.product(
-            BLOCK_M, BLOCK_N, BLOCK_K, splitks, num_stages, thread_nums, policies, enable_rasterations):
-            res.append([m, n, k, splitk, num_stage, thread_num, policy, enable_rasteration])
+        for m, n, k, splitk, num_stage, policy, enable_rasteration in itertools.product(
+            BLOCK_M, BLOCK_N, BLOCK_K, splitks, num_stages, policies, enable_rasterations):
+            res.append([m, n, k, splitk, num_stage, self.thread_num, policy, enable_rasteration])
 
         return res 
     
     def get_heuristic_hparams(self):
         # [BLOCK_M, BLOCK_N, BLOCK_K, splitk, num_stages, threads, policy, enable_rasteration]
         if self.strategy == MicroLinearStrategy.SILU_MUL_GEMM:
-            return [64, 128, 64, 1, 2, 128, 0, False]
+            return [64, 128, 64, 1, 2, self.thread_num, 0, False]
         else:
-            return [16, 64, 64, 1, 3, 128, 0, False]
+            return [16, 64, 64, 1, 3, self.thread_num, 0, False]
     
     def gen_test_data(self, selected_hparams):
         import torch
@@ -399,13 +403,15 @@ template <typename T,
             head_str += sm89_io_warp_str
             source = self.replace_header(source, "extern \"C\" __global__", 1, head_str)
             source = source.replace("<io_params>", sm89_io_str)
+            source = source.replace("blockIdx.x", "bx")
+            source = source.replace("blockIdx.y", "by")
+            source = source.replace("blockIdx.z", "bz")
         else:
             source = self.replace_header(source, "extern \"C\" __global__", 1, head_str)
             source = source.replace("<io_params>", sm90_io_str)
-            
-        source = source.replace("blockIdx.x", "bx")
-        source = source.replace("blockIdx.y", "by")
-        source = source.replace("blockIdx.z", "bz")
+            source = source.replace("blockIdx.x", "bx")
+            source = source.replace("blockIdx.y", "by")
+            source = source.replace("blockIdx.z", "bz")
     
         source = source.replace("<gridx_0>", str(grid_dim['blockIdx.x']))
         source = source.replace("<gridy_0>", str(grid_dim['blockIdx.y']))

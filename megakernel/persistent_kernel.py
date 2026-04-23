@@ -270,7 +270,11 @@ class PersistentKernel:
         self.trace_name = trace_name
         self.use_nvshmem = True if world_size > 1 else False
 
-        self.target_cc = torch.cuda.get_device_properties(0).major * 10 + torch.cuda.get_device_properties(0).minor
+        self.target_cc = 90 #torch.cuda.get_device_properties(0).major * 10 + torch.cuda.get_device_properties(0).minor
+        if self.target_cc >= 90:
+            self.thread_num = 256
+        else:
+            self.thread_num = 128
         # For the reuse of instance
         self.repl_weight_mapping = {}
 
@@ -323,7 +327,7 @@ class PersistentKernel:
         grid_dim, tile_dim = layout
         assert input.num_dims == 2
         assert output.num_dims == 2
-        tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128))
+        tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, self.thread_num))
         print("sync_mode", sync_mode)
         tb_graph.new_input(input, sync_mode)
         tb_graph.new_input(weight, sync_mode)
@@ -401,7 +405,7 @@ class PersistentKernel:
     
         grid_dim, tile_dim = layout
         print(grid_dim, tile_dim, sync_mode)
-        tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128))
+        tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, self.thread_num))
         tb_graph.new_input(q,       sync_mode)
         tb_graph.new_input(k,       sync_mode)
         tb_graph.new_input(cos,     sync_mode)
@@ -432,7 +436,7 @@ class PersistentKernel:
         for i in range(0, len(layout), 2):
             grid_dim, tile_dim = layout[i], layout[i+1]
             # print(grid_dim, tile_dim, sync_mode)
-            tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128))
+            tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, self.thread_num))
             tb_graph.new_input(q,       sync_mode)
             tb_graph.new_input(k_cache, sync_mode)
             tb_graph.new_input(v_cache, sync_mode)
@@ -461,7 +465,7 @@ class PersistentKernel:
         assert input.num_dims == 2  # (batch_size, hidden_size / world_size)
         assert weight.num_dims == 2  # (hidden_size, hidden_size / world_size)
         assert output.num_dims == 2  # (batch_size, hidden_size)
-        tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128))
+        tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, self.thread_num))
         tb_graph.new_input(input, sync_mode)
         tb_graph.new_input(weight, sync_mode)
         tb_graph.new_input(output, (-1, -1, -1))
@@ -491,7 +495,7 @@ class PersistentKernel:
         assert weight.num_dims == 2  # (hidden_size, hidden_size / world_size)
         assert residual.num_dims == 2  # (batch_size, hidden_size)
         assert output.num_dims == 2  # (batch_size, hidden_size)
-        tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128))
+        tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, self.thread_num))
         tb_graph.new_input(input, sync_mode)
         tb_graph.new_input(weight, sync_mode)
         tb_graph.new_input(residual, sync_mode)
@@ -524,7 +528,7 @@ class PersistentKernel:
         assert input.num_dims == 2  # (batch_size, hidden_size / world_size)
         assert weight.num_dims == 2  # (hidden_size, hidden_size / world_size)
         assert output.num_dims == 2  # (batch_size, hidden_size)
-        tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128))
+        tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, self.thread_num))
         tb_graph.new_input(input, sync_mode)
         tb_graph.new_input(weight, sync_mode)
         tb_graph.new_input(output, (-1, -1, -1))
@@ -545,7 +549,7 @@ class PersistentKernel:
         # Currently assume that input/output
         assert input.num_dims == 2 # (batch_size, 2 * intermediate_size)
         assert output.num_dims == 2 # (batch_size, intermediate_size)
-        tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, 128)) # CJM_TODO: thread_num应由megakernel初始化时指定，不能更改
+        tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, self.thread_num)) # CJM_TODO: thread_num应由megakernel初始化时指定，不能更改
         tb_graph.new_input(input, sync_mode)
         tb_graph.new_input(output, (-1, -1, -1))
         self.kn_graph.customized([input, output], tb_graph)
