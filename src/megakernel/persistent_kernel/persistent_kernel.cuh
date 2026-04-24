@@ -130,7 +130,9 @@ void static_persistent_kernel(RuntimeConfig config) {
       if (task_desc->dependent_event != EVENT_INVALID_ID) {
         // Wait until the event has been triggered enough times
         EventId event_id = task_desc->dependent_event;
+        #ifndef NDEBUG
         assert(get_event_gpu_id(event_id) == config.my_gpu_id);
+        #endif
         size_t event_index = get_event_position_index(event_id);
         
         EventCounter needed_counts = static_cast<EventCounter>(config.all_event_num_triggers[event_index]);
@@ -139,7 +141,7 @@ void static_persistent_kernel(RuntimeConfig config) {
         while (actual_counts < needed_counts) {
           actual_counts = ld_acquire_sys_u64(&config.all_event_counters[event_index]);
           // printf("dep(%d):(%d vs %d), ", event_index, actual_counts, needed_counts);
-          __nanosleep(10);
+          __nanosleep(2);
         }
       }
     }

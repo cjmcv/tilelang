@@ -218,6 +218,7 @@ def get_compile_command(
             "-gencode=arch=compute_120,code=sm_120",
             "-DMPK_ENABLE_TMA",
             "-DMEGAKERNEL_GRACE_BLACKWELL",
+            "-DNDEBUG",
         ] + (["-DMEGAKERNEL_ENABLE_PROFILER"] if profiling else [])
     elif target_cc == 100:
         specific_cmd = [

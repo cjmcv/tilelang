@@ -241,9 +241,9 @@ class BaseMicroKernel:
         
         warnup_iter = 500
         test_iter = 100
-        do_bench(lambda: ref_run(), warmup=warnup_iter*2, rep=test_iter*2, backend="cupti") # extra warnup
-        latency = do_bench(lambda: target_run(), warmup=warnup_iter, rep=test_iter, backend="cupti")
-        latency_ref = do_bench(lambda: ref_run(), warmup=warnup_iter, rep=test_iter, backend="cupti")
+        do_bench(lambda: ref_run(), warmup=warnup_iter*2, rep=test_iter*2, backend="event") # extra warnup
+        latency = do_bench(lambda: target_run(), warmup=warnup_iter, rep=test_iter, backend="event") # cupti
+        latency_ref = do_bench(lambda: ref_run(), warmup=warnup_iter, rep=test_iter, backend="event")
         return float(f"{latency:.5f}"), float(f"{latency_ref:.5f}"), float(f"{sim:.5f}")
         
     def run_tuning(self, strategy, save_path):
