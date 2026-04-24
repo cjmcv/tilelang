@@ -180,14 +180,14 @@ extern "C" int create_linear_gemm_tl_1_6144_1024(bfloat16_t* __restrict__ A, bfl
 }
 
 
-extern "C" __global__ void linear_gemm_tl(__grid_constant__ const CUtensorMap A_desc, __grid_constant__ const CUtensorMap B_desc, __grid_constant__ const CUtensorMap C_desc);
-extern "C" __global__ void __launch_bounds__(256, 1) linear_gemm_tl(__grid_constant__ const CUtensorMap A_desc, __grid_constant__ const CUtensorMap B_desc, __grid_constant__ const CUtensorMap C_desc) {
+extern "C" __global__ void linear_gemm_tl(const CUtensorMap *A_desc, const CUtensorMap *B_desc,  const CUtensorMap *C_desc);
+extern "C" __global__ void __launch_bounds__(256, 1) linear_gemm_tl(const CUtensorMap *A_desc,  const CUtensorMap *B_desc,  const CUtensorMap *C_desc) {
   kernel::linear_gemm_tl_1_6144_1024<bfloat16_t, 256, 64, 16, 64, 1, 6144, 1024, 6144, 3, false>(
     blockIdx.x, blockIdx.y, blockIdx.z,
-    &A_desc,
-    &B_desc,
+    A_desc,
+    B_desc,
     nullptr,
-    &C_desc,
+    C_desc,
     1,
     false/*residual*/);
 }
