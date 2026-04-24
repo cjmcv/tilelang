@@ -32,7 +32,7 @@
 #if defined(MEGAKERNEL_GRACE_HOPPER)
 #include "tasks/sm_90/task_header.cuh"
 #elif defined(MEGAKERNEL_GRACE_BLACKWELL)
-#include "tasks/blackwell/task_header.cuh"
+#include "tasks/sm_120/task_header.cuh"
 #else
 #include "tasks/sm_89/task_header.cuh"
 #endif

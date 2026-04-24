@@ -211,6 +211,14 @@ def get_compile_command(
             "-DMEGAKERNEL_GRACE_HOPPER",
             "-DNDEBUG",
         ] + (["-DMEGAKERNEL_ENABLE_PROFILER"] if profiling else [])
+    elif target_cc == 120:
+        # h20=>sm90, h100=>sm90a
+        specific_cmd = [
+            "-arch=sm_120",
+            "-gencode=arch=compute_120,code=sm_120",
+            "-DMPK_ENABLE_TMA",
+            "-DMEGAKERNEL_GRACE_BLACKWELL",
+        ] + (["-DMEGAKERNEL_ENABLE_PROFILER"] if profiling else [])
     elif target_cc == 100:
         specific_cmd = [
             "-arch=sm_100a",
@@ -270,7 +278,7 @@ class PersistentKernel:
         self.trace_name = trace_name
         self.use_nvshmem = True if world_size > 1 else False
 
-        self.target_cc = 90 #torch.cuda.get_device_properties(0).major * 10 + torch.cuda.get_device_properties(0).minor
+        self.target_cc = torch.cuda.get_device_properties(0).major * 10 + torch.cuda.get_device_properties(0).minor
         if self.target_cc >= 90:
             self.thread_num = 256
         else:
@@ -471,7 +479,9 @@ class PersistentKernel:
         tb_graph.new_input(output, (-1, -1, -1))
         self.kn_graph.customized([input, weight, output], tb_graph)
 
-        if self.target_cc == 100:
+        if self.target_cc == 120:
+            self.kn_graph.register_task("linear_hopper")
+        elif self.target_cc == 100:
             self.kn_graph.register_task("linear_sm100")
         elif self.target_cc == 90:
             self.kn_graph.register_task("linear_hopper")
