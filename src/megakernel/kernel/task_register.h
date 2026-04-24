@@ -405,14 +405,14 @@ public:
           with_silu_mul);
 
     code.e("    task_desc->bx, task_desc->by, task_desc->bz,");
-    code.e("    *task_desc->input_tma_desc_ptrs[0][0],");
-    code.e("    *task_desc->input_tma_desc_ptrs[1][0],");
+    code.e("    task_desc->input_tma_desc_ptrs[0][0],");
+    code.e("    task_desc->input_tma_desc_ptrs[1][0],");
     if (with_residual) {
-      code.e("    *task_desc->input_tma_desc_ptrs[2][0],");
+      code.e("    task_desc->input_tma_desc_ptrs[2][0],");
     } else {
-      code.e("    CUtensorMap{},");
+      code.e("    nullptr,");
     }
-    code.e("    *task_desc->output_tma_desc_ptrs[0][0],");
+    code.e("    task_desc->output_tma_desc_ptrs[0][0],");
     code.e("    runtime_config.batch_size,");
     if (with_residual) {
       code.e("    runtime_config.my_gpu_id == 0);");

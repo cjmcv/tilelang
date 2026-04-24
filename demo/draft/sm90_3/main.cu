@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
     constexpr int M = 1;
     constexpr int N = 6144;
     constexpr int K = 1024;
-    constexpr int THREAD_NUM = 128;
+    constexpr int THREAD_NUM = 256;
     constexpr int GRID_X = 96;
     constexpr size_t DYNAMIC_SMEM_SIZE = 30720;
 
@@ -113,12 +113,20 @@ int main(int argc, char **argv) {
         cudaFuncAttributeMaxDynamicSharedMemorySize,
         DYNAMIC_SMEM_SIZE));
 
+    cudaEvent_t start, stop;
+    CHECK_RT(cudaEventCreate(&start));
+    CHECK_RT(cudaEventCreate(&stop));
+
     printf("\nLaunching linear_gemm_tl_1_6144_1024 kernel...\n");
+    CHECK_RT(cudaEventRecord(start, stream));
     linear_gemm_tl<<<grid_dim, block_dim, DYNAMIC_SMEM_SIZE, stream>>>(
         A_desc, B_desc, C_desc);
-
+    CHECK_RT(cudaEventRecord(stop, stream));
     CHECK_RT(cudaStreamSynchronize(stream));
-    printf("Kernel completed!\n");
+
+    float elapsed_ms = 0.0f;
+    CHECK_RT(cudaEventElapsedTime(&elapsed_ms, start, stop));
+    printf("Kernel completed! Time: %.3f ms\n", elapsed_ms);
 
     // Copy result back and verify
     std::vector<bfloat16_t> h_C(M * N);
