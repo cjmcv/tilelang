@@ -153,7 +153,8 @@ class _GemmStrategy:
         if self.strategy == MicroLinearStrategy.SILU_MUL_GEMM:
             return [64, 128, 64, 1, 2, self.thread_num, 0, False]
         else:
-            return [16, 64, 64, 1, 3, self.thread_num, 0, False]
+            # return [16, 64, 64, 1, 3, self.thread_num, 0, False]
+            return [16, 64, 128, 1, 0, self.thread_num, 0, False]
     
     def gen_test_data(self, selected_hparams):
         import torch

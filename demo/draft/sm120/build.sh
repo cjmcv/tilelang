@@ -4,7 +4,7 @@ cd "$(dirname "$0")"
 
 rm -f a.out
 
-nvcc -gencode arch=compute_90,code=sm_90 \
+nvcc -gencode arch=compute_120,code=sm_120 \
      -std=c++20 \
      -I../../../3rdparty/cutlass/include \
      -I../../../src/ \

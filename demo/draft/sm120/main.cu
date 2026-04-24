@@ -182,3 +182,15 @@ int main(int argc, char **argv) {
     printf("\nDone!\n");
     return 0;
 }
+
+extern "C" __global__ void linear_gemm_tl(const CUtensorMap *A_desc, const CUtensorMap *B_desc,  const CUtensorMap *C_desc);
+extern "C" __global__ void __launch_bounds__(256, 1) linear_gemm_tl(const CUtensorMap *A_desc,  const CUtensorMap *B_desc,  const CUtensorMap *C_desc) {
+  kernel::linear_gemm_tl_1_6144_1024<bfloat16_t, 256, 64, 16, 64, 1, 6144, 1024, 6144, 3, false>(
+    blockIdx.x, blockIdx.y, blockIdx.z,
+    A_desc,
+    B_desc,
+    nullptr,
+    C_desc,
+    1,
+    false/*residual*/);
+}
