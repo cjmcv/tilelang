@@ -33,7 +33,7 @@ template <typename T,
     bool FUSE_SILU_MUL = false>
     __device__ __forceinline__ void linear_kernel(const int bx, const int by, const int bz,
                                                   const CUtensorMap *A_desc, const CUtensorMap *B_desc, 
-                                                  const CUtensorMap *es_desc, const CUtensorMap *C_desc, 
+                                                  const CUtensorMap *Res_desc, const CUtensorMap *C_desc, 
                                                   int num_active_tokens,
                                                   bool residual) {
     // printf("hello linear_kernel sm90.\n");
