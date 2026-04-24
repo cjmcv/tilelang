@@ -38,7 +38,7 @@ template <typename T,
                                                 void* __restrict__ output_ptr,
                                                 int num_active_tokens,
                                                 bool residual) {
-    printf("linear_kernel sm89.\n");
+    // printf("linear_kernel sm89.\n");
 #ifdef ENABLE_QWEN3_06B
   if constexpr (FUSE_RES == true) {
     if constexpr (M == 1) {

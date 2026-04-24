@@ -3,7 +3,7 @@ import itertools
 import tilelang
 import tilelang.language as T
 from common.micro_base import BaseMicroKernel, HparamSelectMode
-from common.micro_config import get_target_str, is_megakernel_enabled, get_pass_configs
+from common.micro_config import get_arch, get_target_str, is_megakernel_enabled, get_pass_configs
 
 #####################################################################################################
 #                  短序列实现	          长序列实现                  思路
@@ -34,6 +34,7 @@ from common.micro_config import get_target_str, is_megakernel_enabled, get_pass_
 class _GqaDecodeStrategy:
     def __init__(self, batch, max_kv_seqlen, target_kv_seqlen, num_heads, num_kv_heads, dim, is_causal, dtype, accum_dtype):
         self.name = "gqa_decode_tl"+f"_{batch}_{max_kv_seqlen}_{target_kv_seqlen}_{num_heads}_{num_kv_heads}_{dim}"
+        self.thread_num = 128
             
         self.num_heads = num_heads
         self.num_kv_heads = num_kv_heads
@@ -54,7 +55,7 @@ class _GqaDecodeStrategy:
         BLOCK_H = [64]
         num_split = [1, 2, 4, 8]
         num_stages = [1, 2, 3]
-        thread_nums = [128]
+        thread_nums = [self.thread_num]
         
         res = []
         for n, h, spilt, stage, thread_num in itertools.product(
@@ -67,8 +68,8 @@ class _GqaDecodeStrategy:
     def get_heuristic_hparams(self):
         # block_N=128, block_H=64, num_split=1, num_stages=0, threads=128
         if (self.target_kv_seqlen > 64):
-            return [64, 64, 2, 1, 128]
-        return [16, 64, 1, 1, 128]
+            return [64, 64, 2, 1, self.thread_num]
+        return [16, 64, 1, 1, self.thread_num]
     
     def gen_test_data(self, selected_hparams):
         import torch
@@ -107,7 +108,7 @@ class _GqaDecodeStrategy:
         # else:
         return self.kernel_main(self.batch, self.num_heads, self.num_kv_heads, self.max_kv_seqlen, self.dim, self.is_causal, *selected_hparams, self.dtype, self.accum_dtype) 
 
-    @tilelang.jit(out_idx=[-1], target=get_target_str(), pass_configs=get_pass_configs())
+    @tilelang.jit(out_idx=[-1], target=get_target_str(), pass_configs={"tl.disable_tma_lower": True})
     def kernel_main_m64(batch, num_heads, num_kv_heads, kv_seqlen, target_kv_seqlen, dim, is_causal, block_N, block_H, num_split, num_stages, threads, dtype="bfloat16", accum_dtype="float32"):
         scale = (1.0 / dim) ** 0.5 * 1.44269504  # log2(e)
         shape_q = [batch, num_heads, dim]            # [batch, seqlen_q, num_heads, dim]
@@ -197,7 +198,7 @@ class _GqaDecodeStrategy:
                 T.copy(O_shared, Output[bid, hid * valid_block_H : (hid + 1) * valid_block_H, :])
         return flash_attn_m64
 
-    @tilelang.jit(out_idx=[-1], target=get_target_str(), pass_configs=get_pass_configs())
+    @tilelang.jit(out_idx=[-1], target=get_target_str(), pass_configs={"tl.disable_tma_lower": True})
     def kernel_main(batch, num_heads, num_kv_heads, kv_seqlen, dim, is_causal, block_N, block_H, num_split, num_stages, threads, dtype="bfloat16", accum_dtype="float32"):
         scale = (1.0 / dim) ** 0.5 * 1.44269504  # log2(e)
         shape_q = [batch, num_heads, dim]            # [batch, seqlen_q, num_heads, dim]

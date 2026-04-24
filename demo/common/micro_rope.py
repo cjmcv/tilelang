@@ -4,7 +4,7 @@ import tilelang
 import tilelang.language as T
 
 from common.micro_base import BaseMicroKernel, HparamSelectMode
-from common.micro_config import get_target_str, is_megakernel_enabled, get_pass_configs
+from common.micro_config import get_arch, get_target_str, is_megakernel_enabled, get_pass_configs
 
 #####################################################################################################################
 #      overlap版本                                        #            parallel版本                                 #
@@ -81,6 +81,7 @@ class _RopeStrategy:
         self.dtype = dtype
         self.accum_dtype = accum_dtype
         
+        self.thread_num = 128
         self.hparam_space = self._get_hparam_space()
         print(len(self.hparam_space))
         
@@ -89,7 +90,7 @@ class _RopeStrategy:
         BLOCK_SEQ=[1]
         BLOCK_HEADS_Q=[1]
         BLOCK_HEADS_K=[1]
-        thread_nums=[128]
+        thread_nums=[self.thread_num]
         
         res = []
         for mode, seq, head_q, head_k, thread_num in itertools.product(
@@ -99,7 +100,7 @@ class _RopeStrategy:
     
     def get_heuristic_hparams(self):
         # [BLOCK_SEQ, BLOCK_HEADS_Q, BLOCK_HEADS_K, thread_nums]
-        return [0,1,1,1,128]
+        return [0,1,1,1,self.thread_num]
         
     def gen_test_data(self, selected_hparams):
         import torch
@@ -132,7 +133,7 @@ class _RopeStrategy:
                                         self.num_heads, self.num_kv_heads, self.head_dim,
                                         *kernel_hparam, self.dtype, self.accum_dtype) 
 
-    @tilelang.jit(out_idx=[-2, -1], target=get_target_str(), pass_configs=get_pass_configs())
+    @tilelang.jit(out_idx=[-2, -1], target=get_target_str(), pass_configs={"tl.disable_tma_lower": True})
     def rope_qk_overlap(batch, seqlen, num_heads, num_kv_heads, head_dim, 
                                 BLOCK_SEQ, BLOCK_HEADS_Q, BLOCK_HEADS_K, threads=128,
                                 dtype="bfloat16", accum_dtype="float32"):
@@ -249,7 +250,7 @@ class _RopeStrategy:
         
         return rope
 
-    @tilelang.jit(out_idx=[-2, -1], target=get_target_str(), pass_configs=get_pass_configs())
+    @tilelang.jit(out_idx=[-2, -1], target=get_target_str(), pass_configs={"tl.disable_tma_lower": True})
     def rope_qk_parallel(batch, seqlen, num_heads, num_kv_heads, head_dim, 
                         BLOCK_SEQ, BLOCK_HEADS_Q, BLOCK_HEADS_K, threads=128,
                         dtype="bfloat16", accum_dtype="float32"):

@@ -4,11 +4,13 @@ import tilelang
 import tilelang.language as T
 
 from common.micro_base import BaseMicroKernel, HparamSelectMode
-from common.micro_config import get_target_str, is_megakernel_enabled, get_pass_configs
+from common.micro_config import get_arch, get_target_str, is_megakernel_enabled, get_pass_configs
+
 class _RmsNormStrategy:
     def __init__(self, M, M2, N, dtype, accum_dtype):
         self.name = "rms_norm_tl"+f"_{M+M2}_{N}"
             
+        self.thread_num = 128
         self.M = M
         self.M2 = M2
         self.N = N
@@ -21,7 +23,7 @@ class _RmsNormStrategy:
     def _get_hparam_space(self):
         BLOCK_M=[1] #, 256
         BLOCK_N=[1] # 
-        thread_nums=[128]#
+        thread_nums=[self.thread_num]#
         
         res = []
         for m, n, thread_num in itertools.product(
@@ -31,7 +33,7 @@ class _RmsNormStrategy:
     
     def get_heuristic_hparams(self):
         # [threads]
-        return [1,1,128]
+        return [1,1,self.thread_num]
         
     def gen_test_data(self, selected_hparams):
         import torch
@@ -70,7 +72,7 @@ class _RmsNormStrategy:
         else:
             return self.kernel_merge_main(self.M, self.M2, self.N, *selected_hparams, 1e-12, self.dtype, self.accum_dtype) 
         
-    @tilelang.jit(out_idx=[-1], target=get_target_str(), pass_configs=get_pass_configs())
+    @tilelang.jit(out_idx=[-1], target=get_target_str(), pass_configs={"tl.disable_tma_lower": True})
     def kernel_main(M, N, BLOCK_M, BLOCK_N, threads, eps=1e-12, dtype="bfloat16", accum_dtype="float32"):
         @T.prim_func
         def rms_norm(A: T.Tensor((M, N), dtype), B: T.Tensor((1, N), dtype), C: T.Tensor((M, N), dtype)):
@@ -99,7 +101,7 @@ class _RmsNormStrategy:
 
         return rms_norm
     
-    @tilelang.jit(out_idx=[-1], target=get_target_str(), pass_configs=get_pass_configs())
+    @tilelang.jit(out_idx=[-1], target=get_target_str(), pass_configs={"tl.disable_tma_lower": True})
     def kernel_merge_main(M1, M2, N, BLOCK_M, BLOCK_N, threads, eps=1e-12, dtype="bfloat16", accum_dtype="float32"):
         @T.prim_func
         def rms_norm(A: T.Tensor((M1+M2, N), dtype), B: T.Tensor((2, N), dtype), C: T.Tensor((M1+M2, N), dtype)):

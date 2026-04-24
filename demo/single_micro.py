@@ -124,6 +124,8 @@ def test_rms_norm():
     N = 2560
     micro = MicroRmsNorm(M,N, dtype=T.bfloat16, accum_dtype=T.float32)
     kernel, fn, info = micro.get_kernel(HparamSelectMode.HEURISTIC) # HEURISTIC, TUNING, TUNED
+    print(kernel.get_kernel_source())
+    print(kernel.get_dispatch_source())
     
     test_data = micro.gen_test_data(kernel.config)
     def target_func():
@@ -294,7 +296,7 @@ if __name__ == "__main__":
     
     gen = MicroAutoGen(model_tag, batch_size=1, hidden_size=hidden_size, intermediate_size=intermediate_size, 
                        max_kv_seqlen=8192, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim)
-    gen.gen_qwen3_ops(layer_id=1, mode=HparamSelectMode.HEURISTIC) # HEURISTIC, TUNING, TUNED
+    gen.gen_qwen3_ops(layer_id=99, mode=HparamSelectMode.HEURISTIC) # HEURISTIC, TUNING, TUNED
     # print(">> Finish gen_qwen3_ops.")
     # print("Test single_micro completed.")
     

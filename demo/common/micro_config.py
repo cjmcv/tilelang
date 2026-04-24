@@ -5,24 +5,9 @@ Import this module in other micro_*.py files to use these variables.
 import os
 import tilelang
 
-TEST_TEMP_HOPPER = True
-
-if TEST_TEMP_HOPPER == True:
-    TARGET_ARCH = "sm_120" # "sm_120"
-    ENABLE_MEGAKERNEL = True
-    PASS_CONFIGS = {
-        tilelang.PassConfigKey.TL_DISABLE_TMA_LOWER: False,
-        tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
-    }
-else:
-    TARGET_ARCH = "sm_89"
-    ENABLE_MEGAKERNEL = True
-    PASS_CONFIGS = {
-        tilelang.PassConfigKey.TL_DISABLE_TMA_LOWER: True,
-        tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
-    }
-
-ENABLE_PROFILING = False
+TARGET_ARCH = "sm_89" # "sm_120" / "sm_90" / "sm_89"
+ENABLE_MEGAKERNEL = True
+ENABLE_PROFILING = True
 
 # =============================================================================
 # Utility Functions
@@ -35,7 +20,16 @@ def get_arch():
     return TARGET_ARCH
 
 def get_pass_configs():
-    return PASS_CONFIGS
+    if TARGET_ARCH == "sm_89":
+        return {
+            tilelang.PassConfigKey.TL_DISABLE_TMA_LOWER: True,
+            tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
+        }
+    else:
+        return {
+            tilelang.PassConfigKey.TL_DISABLE_TMA_LOWER: False,
+            tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
+        }
 
 # def is_tma_enabled():
 #     """Check if TMA should be enabled based on architecture"""

@@ -4,11 +4,12 @@ import tilelang
 import tilelang.language as T
 
 from common.micro_base import BaseMicroKernel, HparamSelectMode
-from common.micro_config import get_target_str, is_megakernel_enabled, get_pass_configs
+from common.micro_config import get_arch, get_target_str, is_megakernel_enabled, get_pass_configs
 
 class _SiluMulStrategy:
     def __init__(self, M, N, dtype, accum_dtype):
         self.name = "silu_mul_tl"+f"_{M}_{N}"
+        self.thread_num = 128
             
         self.M = M
         self.N = N
@@ -21,7 +22,7 @@ class _SiluMulStrategy:
     def _get_hparam_space(self):
         BLOCK_M=[16] #, 256
         BLOCK_N=[64] # , 128
-        thread_nums=[128]#
+        thread_nums=[self.thread_num]#
         
         res = []
         for m, n, thread_num in itertools.product(
@@ -31,7 +32,7 @@ class _SiluMulStrategy:
     
     def get_heuristic_hparams(self):
         # [BLOCK_M, BLOCK_N, threads]
-        return [32,64,128]
+        return [32,64,self.thread_num]
         
     def gen_test_data(self, selected_hparams):
         import torch
@@ -48,7 +49,7 @@ class _SiluMulStrategy:
         print("selected_hparams: ", selected_hparams)
         return self.kernel_main(self.M, self.N, *selected_hparams, self.dtype, self.accum_dtype) 
 
-    @tilelang.jit(out_idx=[-1], target=get_target_str(), pass_configs=get_pass_configs())
+    @tilelang.jit(out_idx=[-1], target=get_target_str(), pass_configs={"tl.disable_tma_lower": True})
     def kernel_main(M, N, BLOCK_M, BLOCK_N, threads, dtype="bfloat16", accum_dtype="float32"):
         @T.prim_func
         def silu_mul(

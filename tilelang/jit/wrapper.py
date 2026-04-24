@@ -318,7 +318,7 @@ class TLCUDASourceWrapper:
                 desc_output_code += f"\t\t*out_{var_name} = {var_name};\n"
             desc_output_code += f"\t}}\n"
             
-        print("function_args", function_args)        
+        # print("function_args", function_args)        
         # Format the function arguments for declaration
         def_args = ", ".join([f"{arg['type']} {arg['name']}" for arg in function_args])
         

@@ -118,11 +118,8 @@ class _GemmStrategy:
         else:
             self.name = "linear_gemm_tl"+f"_{M}_{N}_{K}"
             
-        if (get_arch() == "sm_89"):
-            self.thread_num=128
-        else:
-            self.thread_num=256
-            
+        self.thread_num=128
+
         self.M = M
         self.N = N
         self.K = K
@@ -140,11 +137,12 @@ class _GemmStrategy:
         num_stages=[0, 1, 2, 3]#
         policies=[T.GemmWarpPolicy.Square, T.GemmWarpPolicy.FullRow]
         enable_rasterations=[True, False]
+        thread_nums=[self.thread_num]
         
         res = []
-        for m, n, k, splitk, num_stage, policy, enable_rasteration in itertools.product(
-            BLOCK_M, BLOCK_N, BLOCK_K, splitks, num_stages, policies, enable_rasterations):
-            res.append([m, n, k, splitk, num_stage, self.thread_num, policy, enable_rasteration])
+        for m, n, k, splitk, num_stage, thread_num, policy, enable_rasteration in itertools.product(
+            BLOCK_M, BLOCK_N, BLOCK_K, splitks, num_stages, thread_nums, policies, enable_rasterations):
+            res.append([m, n, k, splitk, num_stage, thread_num, policy, enable_rasteration])
 
         return res 
     
@@ -382,7 +380,6 @@ template <typename T,
         # gridDim_x, gridDim_y = self.get_grid_dims(self.M, self.N, BLOCK_M, BLOCK_N)
         # print(f"gridDim: ({gridDim_x}, {gridDim_y})")
         
-        
         head_str = head_str.replace('<threads>', str(threads))
         head_str = head_str.replace('<BLOCK_M>', str(BLOCK_M))
         head_str = head_str.replace('<BLOCK_N>', str(BLOCK_N)) 
@@ -391,31 +388,28 @@ template <typename T,
         head_str = head_str.replace('<N>', str(self.N)) 
         head_str = head_str.replace('<K>', str(self.K)) 
         head_str = head_str.replace('<kernel_name>', self.strategy.name)
-        if self.dtype == T.bfloat16:
-            dtype = "bfloat16_t"
-        else:
-            dtype = "float16_t"
-        head_str = head_str.replace('<dtype>', str(dtype))
-                
+
         source = kernel.get_kernel_source()
         grid_dim, block_dim, dynamic_smem_buf, use_cooperative_groups = kernel.get_launch_info()[0]
         self.layout = f"({grid_dim['blockIdx.x']}, {grid_dim['blockIdx.y']}, {grid_dim['blockIdx.z']}), ({BLOCK_N}, {BLOCK_M}, {BLOCK_K})"        
         if (get_arch() == "sm_89"):
-            head_str += sm89_io_warp_str
+            if self.dtype == T.bfloat16:
+                dtype = "bfloat16_t"
+            else:
+                dtype = "float16_t"
+            head_str += sm89_io_warp_str.replace('<dtype>', str(dtype))
             source = self.replace_header(source, "extern \"C\" __global__", 1, head_str)
             source = source.replace("<io_params>", sm89_io_str)
-            source = source.replace("blockIdx.x", "bx")
-            source = source.replace("blockIdx.y", "by")
-            source = source.replace("blockIdx.z", "bz")
         else:
             source = self.replace_header(source, "extern \"C\" __global__", 1, head_str)
             source = source.replace("A_desc", "*A_desc")
             source = source.replace("B_desc", "*B_desc")
             source = source.replace("C_desc", "*C_desc")
             source = source.replace("<io_params>", sm90_io_str)
-            source = source.replace("blockIdx.x", "bx")
-            source = source.replace("blockIdx.y", "by")
-            source = source.replace("blockIdx.z", "bz")
+            
+        source = source.replace("blockIdx.x", "bx")
+        source = source.replace("blockIdx.y", "by")
+        source = source.replace("blockIdx.z", "bz")
     
         source = source.replace("<gridx_0>", str(grid_dim['blockIdx.x']))
         source = source.replace("<gridy_0>", str(grid_dim['blockIdx.y']))

@@ -54,16 +54,12 @@ using namespace kernel;
 // #define MPK_PAGE_SIZE 64
 
 #if defined(MEGAKERNEL_GRACE_HOPPER)
-#define WORKER_NUM_THREADS 256
-#define SINGLE_KERNEL_NUM_THREADS 256
+#define WORKER_NUM_THREADS 128
 #elif defined(MEGAKERNEL_GRACE_BLACKWELL)
-#define WORKER_NUM_THREADS 256
-#define SINGLE_KERNEL_NUM_THREADS 256
+#define WORKER_NUM_THREADS 128
 #else
 #define WORKER_NUM_THREADS 128
-#define SINGLE_KERNEL_NUM_THREADS 128
 #endif
-#define INIT_NUM_THREADS 128
 
 #ifndef CUDA_CHECK
 #define CUDA_CHECK(call)                                                       \
@@ -531,7 +527,7 @@ extern "C" void launch_persistent_kernel(int kernel_id, int batch_size, int laye
   cudaMemset(global_runtime_config[kernel_id].all_event_counters, 0, 
     sizeof(EventCounter) * global_runtime_config[kernel_id].num_events);
   static_persistent_kernel<<<dim3(global_runtime_config[kernel_id].num_workers, 1, 1),
-      dim3(SINGLE_KERNEL_NUM_THREADS, 1, 1),
+      dim3(WORKER_NUM_THREADS, 1, 1),
       MAX_DYNAMIC_SHARED_MEMORY_SIZE /*smem*/>>>(
       global_runtime_config[kernel_id]);      
 
