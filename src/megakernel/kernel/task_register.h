@@ -408,7 +408,7 @@ public:
     code.e("    task_desc->input_tma_desc_ptrs[0][0],");
     code.e("    task_desc->input_tma_desc_ptrs[1][0],");
     if (with_residual) {
-      code.e("    task_desc->input_tma_desc_ptrs[2][0],");
+      code.e("    task_desc->input_ptrs[2],"); // task_desc->input_tma_desc_ptrs[2][0]
     } else {
       code.e("    nullptr,");
     }

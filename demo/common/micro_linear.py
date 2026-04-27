@@ -242,6 +242,7 @@ class _GemmStrategy:
                 B_shared = T.alloc_shared((BLOCK_N, BLOCK_K), dtype)
                 C_local = T.alloc_fragment((BLOCK_M, BLOCK_N), accum_dtype)
                 C_shared = T.alloc_shared((BLOCK_M, BLOCK_N), dtype)
+                
                 T.use_swizzle(panel_size=10, enable=enable_rasteration)
                 T.annotate_layout({C_shared: tilelang.layout.make_swizzled_layout(C_shared)})
                 T.clear(C_local)
@@ -250,11 +251,18 @@ class _GemmStrategy:
                     T.copy(B[bx * BLOCK_N, k * BLOCK_K], B_shared)
                     T.gemm(A_shared, B_shared, C_local, transpose_B=True, policy=policy)
                 
-                R_sh = T.alloc_shared((BLOCK_M, BLOCK_N), dtype)
-                T.copy(R[by * BLOCK_M, bx * BLOCK_N], R_sh)
+                # note: 使用smem，在禁用ws+开启tma时，无法通过，会触发release[i].empty()，需要改用local。
+                #       因为在ws逻辑中，smem 写入后可以被其他线程读取, 则需要建立 Producer-Consumer 依赖。
+                #       WarpSpecializedRoleMarker 会追踪跨语句的 shared memory 访问，所以需要 acquire/release barrier 来同步。
+                #       而Fragment，写入后只被同一个线程读取，不跨线程依赖，不触发 Producer-Consumer 分析，无需 barrier 同步。
+                # 依赖链：Producer 加载 R 到 shared memory，Consumer 从 shared memory 读取 R_sh。但是 T.Parallel 里的 R_sh[i,j] 读取没有被正确识别为 R_sh 的消费者，所以出现了消费者缺失的情况。
+                # R_sh = T.alloc_shared((BLOCK_M, BLOCK_N), dtype)
+                # T.copy(R[by * BLOCK_M, bx * BLOCK_N], R_sh)
+                R_local = T.alloc_fragment((BLOCK_M, BLOCK_N), accum_dtype)
+                T.copy(R[by * BLOCK_M, bx * BLOCK_N], R_local)
                 for i, j in T.Parallel(BLOCK_M, BLOCK_N):
                     c_val = C_local[i, j]
-                    r_val = R_sh[i, j].astype(accum_dtype)
+                    r_val = R_local[i, j].astype(accum_dtype)
                     C_shared[i, j] = (c_val + r_val).astype(dtype)
                     
                 # T.copy(C_local, C_sh)
@@ -363,13 +371,17 @@ template <typename T,
         sm89_io_str = \
 '''const void* __restrict__ input_ptr, const void* __restrict__ weight_ptr, const void* __restrict__ residual_ptr, void* __restrict__ output_ptr, '''
         sm90_io_str = \
-'''const CUtensorMap *A_desc, const CUtensorMap *B_desc, const CUtensorMap *R_desc, const CUtensorMap *C_desc, '''
+'''const CUtensorMap *A_desc, const CUtensorMap *B_desc, const void* __restrict__ residual_ptr, const CUtensorMap *C_desc, '''
         sm89_io_warp_str = \
 '''
   const <dtype>* __restrict__ A = static_cast<const <dtype>*>(input_ptr);
   const <dtype>* __restrict__ B = static_cast<const <dtype>*>(weight_ptr);
   const <dtype>* __restrict__ R = static_cast<const <dtype>*>(residual_ptr);
   <dtype>* __restrict__ C = static_cast<<dtype>*>(output_ptr);
+'''
+        sm90_io_warp_str = \
+'''
+  const <dtype>* __restrict__ R = static_cast<const <dtype>*>(residual_ptr);
 '''
 
         if (isinstance(self.strategy, _GemvStrategy)):
@@ -392,15 +404,17 @@ template <typename T,
         source = kernel.get_kernel_source()
         grid_dim, block_dim, dynamic_smem_buf, use_cooperative_groups = kernel.get_launch_info()[0]
         self.layout = f"({grid_dim['blockIdx.x']}, {grid_dim['blockIdx.y']}, {grid_dim['blockIdx.z']}), ({BLOCK_N}, {BLOCK_M}, {BLOCK_K})"        
+        
+        if self.dtype == T.bfloat16:
+            dtype = "bfloat16_t"
+        else:
+            dtype = "float16_t"
         if (get_arch() == "sm_89"):
-            if self.dtype == T.bfloat16:
-                dtype = "bfloat16_t"
-            else:
-                dtype = "float16_t"
             head_str += sm89_io_warp_str.replace('<dtype>', str(dtype))
             source = self.replace_header(source, "extern \"C\" __global__", 1, head_str)
             source = source.replace("<io_params>", sm89_io_str)
         else:
+            head_str += sm90_io_warp_str.replace('<dtype>', str(dtype))
             source = self.replace_header(source, "extern \"C\" __global__", 1, head_str)
             source = source.replace("A_desc", "*A_desc")
             source = source.replace("B_desc", "*B_desc")

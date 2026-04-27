@@ -59,10 +59,10 @@ __host__ void create_linear_gemm_cutensor(int M, int N, int K,
   if (M==1) {
     // FUSE_RES == true
     if (N == 1024 && K == 3072) {
-      create_linear_gemm_add_tl_1_1024_3072((bfloat16_t*)A, (bfloat16_t*)B, (bfloat16_t*)R, (bfloat16_t*)C, out_A_desc, out_B_desc, out_C_desc, out_R_desc, to_device);
+      create_linear_gemm_add_tl_1_1024_3072((bfloat16_t*)A, (bfloat16_t*)B, (bfloat16_t*)R, (bfloat16_t*)C, out_A_desc, out_B_desc, out_C_desc, to_device);
     }
     else if (N == 1024 && K == 2048) {
-      create_linear_gemm_add_tl_1_1024_2048((bfloat16_t*)A, (bfloat16_t*)B, (bfloat16_t*)R, (bfloat16_t*)C, out_A_desc, out_B_desc, out_C_desc, out_R_desc, to_device);
+      create_linear_gemm_add_tl_1_1024_2048((bfloat16_t*)A, (bfloat16_t*)B, (bfloat16_t*)R, (bfloat16_t*)C, out_A_desc, out_B_desc, out_C_desc, to_device);
     }
     // FUSE_RES == false
     if (N==6144 && K==1024) {

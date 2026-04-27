@@ -28,7 +28,7 @@ def get_pass_configs():
     else:
         return {
             tilelang.PassConfigKey.TL_DISABLE_TMA_LOWER: False,
-            tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: False,
+            tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
         }
 
 # def is_tma_enabled():
