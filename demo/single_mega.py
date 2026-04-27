@@ -351,7 +351,7 @@ def test_gqa_decode(mk, layout, max_batch_size, batch, num_heads, num_kv_heads, 
         out_partial=out_partial,
         output=attn_out,
         sync_mode=(0, 0, 0),
-        layout=layout.gqa_decode_layout_64,
+        layout=layout.gqa_decode_layout_shortkv,
         # layout=((1, 8, 8), (64, 64, 8), (16, 1, 1), (64, 64, 8))
     )
     layers.compile_load(meta_tensors=[edge_torch], is_no_compile=args.nc, output_dir=args.output_dir)
@@ -417,7 +417,7 @@ def test_gqa_decode_multi_instance(mk, layout, max_batch_size, batch, num_heads,
         out_partial=out_partial,
         output=attn_out,
         sync_mode=(0, 0, 0),
-        layout=layout.gqa_decode_layout_64,
+        layout=layout.gqa_decode_layout_shortkv,
         # layout=((1, 8, 8), (64, 64, 8), (16, 1, 1), (64, 64, 8))
     )
     layers.compile_load(meta_tensors=[edge_torch], is_no_compile=args.nc, output_dir=args.output_dir)
