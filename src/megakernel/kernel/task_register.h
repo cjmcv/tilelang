@@ -420,11 +420,11 @@ public:
       code.e("    false/*residual*/);");
     }
     
-    // if (with_residual) {
-    //   return register_task_variant(TASK_LINEAR_WITH_RESIDUAL, code.to_string());
-    // } else {
+    if (with_residual) {
+      return register_task_variant(TASK_LINEAR_WITH_RESIDUAL_HOPPER, code.to_string());
+    } else {
       return register_task_variant(TASK_LINEAR_HOPPER, code.to_string());
-    // }
+    }
   }
 
   int register_silu_mul_task(tb::TBGraph const &bgraph, std::vector<int> const &params){

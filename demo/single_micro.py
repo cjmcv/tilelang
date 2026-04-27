@@ -201,7 +201,7 @@ def test_gemm_add():
     # K = 9728
     # config = [64,64,64,2,128,0,true]
     micro = MicroLinear(MicroLinearStrategy.GEMM_ADD, M,N,K, dtype=T.bfloat16, accum_dtype=T.float32)
-    kernel, name, info  = micro.get_kernel(HparamSelectMode.TUNED) # HEURISTIC, TUNING, TUNED
+    kernel, name, info  = micro.get_kernel(HparamSelectMode.HEURISTIC) # HEURISTIC, TUNING, TUNED
 
     test_data = micro.gen_test_data(kernel.config)
     a, b, r = test_data

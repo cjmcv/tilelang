@@ -240,6 +240,10 @@ public:
       int variant_id = task_register->register_linear_hopper_task(customized->bgraph, params, false /*with_residual*/, false /*with_silu_mul*/);
       task_config[op] = std::make_tuple(2, 1, TASK_LINEAR_HOPPER, variant_id);
     }
+    else if (name == "linear_with_residual_hopper") {
+      int variant_id = task_register->register_linear_hopper_task(customized->bgraph, params, true /*with_residual*/, false /*with_silu_mul*/);
+      task_config[op] = std::make_tuple(2, 1, TASK_LINEAR_WITH_RESIDUAL_HOPPER, variant_id);
+    }
     else {
       printf("Unsupported task name: %s\n", name.c_str());
       assert(false && "Unsupported task type");

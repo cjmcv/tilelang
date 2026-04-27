@@ -5,9 +5,9 @@ Import this module in other micro_*.py files to use these variables.
 import os
 import tilelang
 
-TARGET_ARCH = "sm_89" # "sm_120" / "sm_90" / "sm_89"
+TARGET_ARCH = "sm_120" # "sm_120" / "sm_90" / "sm_89"
 ENABLE_MEGAKERNEL = True
-ENABLE_PROFILING = True
+ENABLE_PROFILING = False
 
 # =============================================================================
 # Utility Functions
@@ -28,7 +28,7 @@ def get_pass_configs():
     else:
         return {
             tilelang.PassConfigKey.TL_DISABLE_TMA_LOWER: False,
-            tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
+            tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: False,
         }
 
 # def is_tma_enabled():

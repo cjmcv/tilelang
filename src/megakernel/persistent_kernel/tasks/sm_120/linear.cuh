@@ -2,10 +2,10 @@
 
 #ifdef ENABLE_QWEN3_06B
 #include "m1/linear_gemm_tl_1_6144_1024.cuh"
-// #include "m1/linear_gemm_add_tl_1_1024_3072.cuh"
-// // attn
-// #include "m1/linear_gemm_tl_1_4096_1024.cuh"
-// #include "m1/linear_gemm_add_tl_1_1024_2048.cuh"
+#include "m1/linear_gemm_add_tl_1_1024_3072.cuh"
+// attn
+#include "m1/linear_gemm_tl_1_4096_1024.cuh"
+#include "m1/linear_gemm_add_tl_1_1024_2048.cuh"
 #endif
 
 // #ifdef ENABLE_QWEN3_4B
@@ -33,35 +33,35 @@ template <typename T,
     bool FUSE_SILU_MUL = false>
     __device__ __forceinline__ void linear_kernel(const int bx, const int by, const int bz,
                                                   const CUtensorMap *A_desc, const CUtensorMap *B_desc, 
-                                                  const CUtensorMap *Res_desc, const CUtensorMap *C_desc, 
+                                                  const CUtensorMap *R_desc, const CUtensorMap *C_desc, 
                                                   int num_active_tokens,
                                                   bool residual) {
     // printf("hello linear_kernel sm90.\n");
 #ifdef ENABLE_QWEN3_06B
-  // if constexpr (FUSE_RES == true) {
-  //   if constexpr (M == 1) {
-  //     if constexpr (N == 1024 && K == 3072) {
-  //       linear_gemm_add_tl_1_1024_3072<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
-  //         bx, by, bz, input_ptr, weight_ptr, residual_ptr, output_ptr, num_active_tokens, residual); return;
-  //     }
-  //     else if constexpr (N == 1024 && K == 2048) {
-  //       linear_gemm_add_tl_1_1024_2048<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
-  //         bx, by, bz, input_ptr, weight_ptr, residual_ptr, output_ptr, num_active_tokens, residual); return;
-  //     }
-  //   } 
-  // }
-  // else {
+  if constexpr (FUSE_RES == true) {
+    if constexpr (M == 1) {
+      if constexpr (N == 1024 && K == 3072) {
+        linear_gemm_add_tl_1_1024_3072<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
+          bx, by, bz, A_desc, B_desc, R_desc, C_desc, num_active_tokens, residual); return;
+      }
+      else if constexpr (N == 1024 && K == 2048) {
+        linear_gemm_add_tl_1_1024_2048<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
+          bx, by, bz, A_desc, B_desc, R_desc, C_desc, num_active_tokens, residual); return;
+      }
+    } 
+  }
+  else {
     if constexpr (M == 1) {
       if constexpr (N == 6144 && K == 1024) {
         linear_gemm_tl_1_6144_1024<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
-          bx, by, bz, A_desc, B_desc, Res_desc, C_desc, num_active_tokens, residual); return;
+          bx, by, bz, A_desc, B_desc, R_desc, C_desc, num_active_tokens, residual); return;
       }
-      // else if constexpr (N == 4096 && K == 1024) {
-      //   linear_gemm_tl_1_4096_1024<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
-      //     bx, by, bz, input_ptr, weight_ptr, residual_ptr, output_ptr, num_active_tokens, residual); return;
-      // }
+      else if constexpr (N == 4096 && K == 1024) {
+        linear_gemm_tl_1_4096_1024<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
+          bx, by, bz, A_desc, B_desc, R_desc, C_desc, num_active_tokens, residual); return;
+      }
     }
-  // }
+  }
 #endif // ENABLE_QWEN3_06B
 
 // #ifdef ENABLE_QWEN3_4B
@@ -69,11 +69,11 @@ template <typename T,
 //     if constexpr (M == 1) {    
 //       if constexpr (N == 2560 && K == 9728) {
 //         linear_gemm_add_tl_1_2560_9728<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
-//           bx, by, bz, input_ptr, weight_ptr, residual_ptr, output_ptr, num_active_tokens, residual); return;
+//           bx, by, bz, A_desc, B_desc, R_desc, C_desc, num_active_tokens, residual); return;
 //       }
 //       else if constexpr (N == 2560 && K == 4096) {
 //         linear_gemm_add_tl_1_2560_4096<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
-//           bx, by, bz, input_ptr, weight_ptr, residual_ptr, output_ptr, num_active_tokens, residual); return;
+//           bx, by, bz, A_desc, B_desc, R_desc, C_desc, num_active_tokens, residual); return;
 //       }
 //     } 
 //   }
@@ -81,11 +81,11 @@ template <typename T,
 //     if constexpr (M == 1) {
 //       if constexpr (N == 19456 && K == 2560) {
 //         linear_gemm_tl_1_19456_2560<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
-//           bx, by, bz, input_ptr, weight_ptr, residual_ptr, output_ptr, num_active_tokens, residual); return;
+//           bx, by, bz, A_desc, B_desc, R_desc, C_desc, num_active_tokens, residual); return;
 //       }
 //       else if constexpr (N == 6144 && K == 2560) {
 //         linear_gemm_tl_1_6144_2560<T, THREAD_NUM, TILE_DIM_X, TILE_DIM_Y, TILE_DIM_Z, M, N, K, O_STRIDE, PIPE_MAX, FUSE_RES>(
-//           bx, by, bz, input_ptr, weight_ptr, residual_ptr, output_ptr, num_active_tokens, residual); return;
+//           bx, by, bz, A_desc, B_desc, R_desc, C_desc, num_active_tokens, residual); return;
 //       }
 //     }
 //   }

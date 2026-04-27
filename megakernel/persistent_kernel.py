@@ -279,11 +279,8 @@ class PersistentKernel:
         self.trace_name = trace_name
         self.use_nvshmem = True if world_size > 1 else False
 
-        self.target_cc = torch.cuda.get_device_properties(0).major * 10 + torch.cuda.get_device_properties(0).minor
-        if self.target_cc >= 90:
-            self.thread_num = 256
-        else:
-            self.thread_num = 128
+        self.target_cc = 120 #torch.cuda.get_device_properties(0).major * 10 + torch.cuda.get_device_properties(0).minor
+        self.thread_num = 128
         # For the reuse of instance
         self.repl_weight_mapping = {}
 
@@ -513,14 +510,12 @@ class PersistentKernel:
         tb_graph.new_input(output, (-1, -1, -1))
         self.kn_graph.customized([input, weight, residual, output], tb_graph)
         
-        if self.target_cc == 100:
+        if self.target_cc == 120:
+            self.kn_graph.register_task("linear_with_residual_hopper")
+        elif self.target_cc == 100:
             self.kn_graph.register_task("linear_with_residual_sm100")
         elif self.target_cc == 90:
-            if weight.dim(0) // grid_dim[0] <= 64:
-                # self.kn_graph.register_task("linear_cutlass_with_residual_hopper")
-                self.kn_graph.register_task("linear_swapAB_with_residual_hopper")
-            else:
-                self.kn_graph.register_task("linear_swapAB_with_residual_hopper")
+            self.kn_graph.register_task("linear_with_residual_hopper")
         elif self.target_cc == 80 or self.target_cc == 89:
             self.kn_graph.register_task("linear_with_residual")
         else:

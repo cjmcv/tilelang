@@ -323,6 +323,9 @@ class TLCUDASourceWrapper:
         def_args = ", ".join([f"{arg['type']} {arg['name']}" for arg in function_args])
         
         init_tma_descriptor_args = self.generate_tma_descriptor_args(desc_name_map, desc_name_var_map)
+        # hardcode: R因“Warning: Layout inference failed for buffer R_sh. The buffer cannot be inferred with current layout inference rules”，被更名为“R_1”，需要改回来
+        init_tma_descriptor_args = init_tma_descriptor_args.replace("void *R_desc_globalAddress= R_1", "void *R_desc_globalAddress= R")
+        # print("init_tma_descriptor_args", init_tma_descriptor_args)
         kernel_launch_code = init_tma_descriptor_args + desc_output_code + "\t//" +kernel_launch_code
 
         # Wrap the kernel dispatch logic in an external C function
