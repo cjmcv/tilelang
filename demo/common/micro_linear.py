@@ -118,7 +118,7 @@ class _GemmStrategy:
         else:
             self.name = "linear_gemm_tl"+f"_{M}_{N}_{K}"
             
-        self.thread_num = get_thread_num()
+        self.thread_num = 128 # get_thread_num() # ws下blocksize==thread_num(消费者)+128(生产者)
 
         self.M = M
         self.N = N
@@ -363,7 +363,7 @@ template <typename T,
                                                 <io_params>
                                                 int num_active_tokens,
                                                 bool residual) {
-  static_assert(THREAD_NUM==<threads>);
+  // static_assert(THREAD_NUM==<threads>);
   static_assert(TILE_DIM_X==<BLOCK_N>); static_assert(TILE_DIM_Y==<BLOCK_M>); static_assert(TILE_DIM_Z==<BLOCK_K>);
   static_assert(M==<M>); static_assert(N==<N>); static_assert(K==<K>);
   if (bx >= <gridx_0> || by >= <gridy_0> || bz >= <gridz_0>) { return; }
