@@ -71,7 +71,7 @@ class _RmsNormStrategy:
             return self.kernel_main(self.M, self.N, *selected_hparams, 1e-12, self.dtype, self.accum_dtype) 
         else:
             return self.kernel_merge_main(self.M, self.M2, self.N, *selected_hparams, 1e-12, self.dtype, self.accum_dtype) 
-        
+    
     @tilelang.jit(out_idx=[-1], target=get_target_str(), pass_configs={"tl.disable_tma_lower": True})
     def kernel_main(M, N, BLOCK_M, BLOCK_N, threads, eps=1e-12, dtype="bfloat16", accum_dtype="float32"):
         @T.prim_func
@@ -87,7 +87,10 @@ class _RmsNormStrategy:
                 T.copy(A[bx * BLOCK_M : (bx + 1) * BLOCK_M, :], A_shared)
                 T.copy(B[0:1, :], B_shared)
                 
-                T.copy(A_shared, A_local)
+                # note: 在sm120, M=BLOCK_M=1, N=1024, threads=256时，下面的A拷贝需要加上“coalesced_width=1”转为标量处理才能正常生成kernel。
+                # 因为向量化读取使用 float4 = 4 × 32位 = 8 x bfloat16，N = 1024 x bfloat16，所需线程数 = 1024 / 8 = 128 个线程。
+                # coalesced_width=1时，转用uint32 = 2 x bfloat16，1024 / 2 = 512 可以满足。
+                T.copy(A_shared, A_local) #, coalesced_width=1
                 T.copy(B_shared, B_local)
                 
                 for i, j in T.Parallel(BLOCK_M, N):
@@ -100,7 +103,7 @@ class _RmsNormStrategy:
                 T.copy(A_local, C[bx * BLOCK_M : (bx + 1) * BLOCK_M, :])
 
         return rms_norm
-    
+        
     @tilelang.jit(out_idx=[-1], target=get_target_str(), pass_configs={"tl.disable_tma_lower": True})
     def kernel_merge_main(M1, M2, N, BLOCK_M, BLOCK_N, threads, eps=1e-12, dtype="bfloat16", accum_dtype="float32"):
         @T.prim_func
