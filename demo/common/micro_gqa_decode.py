@@ -34,7 +34,7 @@ from common.micro_config import get_arch, get_thread_num, get_target_str, is_meg
 class _GqaDecodeStrategy:
     def __init__(self, batch, max_kv_seqlen, target_kv_seqlen, num_heads, num_kv_heads, dim, is_causal, dtype, accum_dtype):
         self.name = "gqa_decode_tl"+f"_{batch}_{max_kv_seqlen}_{target_kv_seqlen}_{num_heads}_{num_kv_heads}_{dim}"
-        self.thread_num = get_thread_num()
+        self.thread_num = 128 # get_thread_num()
             
         self.num_heads = num_heads
         self.num_kv_heads = num_kv_heads
@@ -521,8 +521,8 @@ __device__ __forceinline__ void flashattn_kernel_<name_suffix>(const int bx, con
                                                    void* __restrict__ output_partial_ptr) {
   static_assert(THREAD_NUM==<threads>);
   static_assert(M==<BATCH>); static_assert(HEAD==<HEAD>); static_assert(GROUPS==<GROUPS>); static_assert(DIM==<DIM>);
-  if constexpr (SUB_KERNEL_ID == 0) { if (bx >= <gridx_0> || by >= <gridy_0> || bz >= <gridz_0>) { return; } }
-  if constexpr (SUB_KERNEL_ID == 1) { if (bx >= <gridx_1> || by >= <gridy_1> || bz >= <gridz_1>) { return; } }
+  if constexpr (SUB_KERNEL_ID == 0) { if (bx >= <gridx_0> || by >= <gridy_0> || bz >= <gridz_0> || threadIdx.x >= 128) { return; } }
+  if constexpr (SUB_KERNEL_ID == 1) { if (bx >= <gridx_1> || by >= <gridy_1> || bz >= <gridz_1> || threadIdx.x >= 128) { return; } }
   const <dtype>* __restrict__ Q = static_cast<const <dtype>*>(q);
   const <dtype>* __restrict__ K = static_cast<const <dtype>*>(k);
   const <dtype>* __restrict__ V = static_cast<const <dtype>*>(v);

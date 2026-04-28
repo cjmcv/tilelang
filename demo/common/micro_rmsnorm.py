@@ -10,7 +10,7 @@ class _RmsNormStrategy:
     def __init__(self, M, M2, N, dtype, accum_dtype):
         self.name = "rms_norm_tl"+f"_{M+M2}_{N}"
             
-        self.thread_num = get_thread_num()
+        self.thread_num = 128 # get_thread_num()
         self.M = M
         self.M2 = M2
         self.N = N
@@ -156,7 +156,7 @@ __device__ __forceinline__ void rms_norm_kernel_<name_suffix>(const int bx, cons
   static_assert(THREAD_NUM==<threads>);
   static_assert(TILE_DIM_X==<BLOCK_N>); static_assert(TILE_DIM_Y==<BLOCK_M>); static_assert(TILE_DIM_Z==<BLOCK_K>);
   static_assert(M==<M>); static_assert(N==<N>);
-  if (bx >= <gridx_0> || by >= <gridy_0> || bz >= <gridz_0>) { return; }
+  if (bx >= <gridx_0> || by >= <gridy_0> || bz >= <gridz_0> || threadIdx.x >= 128) { return; }
   
   const <dtype>* __restrict__ A = static_cast<const <dtype>*>(input_ptr);
   const <dtype>* __restrict__ B = static_cast<const <dtype>*>(weight_ptr);
