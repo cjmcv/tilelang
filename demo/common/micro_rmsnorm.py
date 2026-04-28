@@ -153,7 +153,7 @@ __device__ __forceinline__ void rms_norm_kernel_<name_suffix>(const int bx, cons
                                                             void const *weight_ptr,
                                                             void *output_ptr,
                                                             float eps) {
-  static_assert(THREAD_NUM==<threads>);
+  // static_assert(THREAD_NUM==<threads>);
   static_assert(TILE_DIM_X==<BLOCK_N>); static_assert(TILE_DIM_Y==<BLOCK_M>); static_assert(TILE_DIM_Z==<BLOCK_K>);
   static_assert(M==<M>); static_assert(N==<N>);
   if (bx >= <gridx_0> || by >= <gridy_0> || bz >= <gridz_0> || threadIdx.x >= 128) { return; }

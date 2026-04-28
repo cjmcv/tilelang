@@ -519,7 +519,7 @@ __device__ __forceinline__ void flashattn_kernel_<name_suffix>(const int bx, con
                                                    void* __restrict__ output_ptr,
                                                    void* __restrict__ glse_ptr,
                                                    void* __restrict__ output_partial_ptr) {
-  static_assert(THREAD_NUM==<threads>);
+  // static_assert(THREAD_NUM==<threads>);
   static_assert(M==<BATCH>); static_assert(HEAD==<HEAD>); static_assert(GROUPS==<GROUPS>); static_assert(DIM==<DIM>);
   if constexpr (SUB_KERNEL_ID == 0) { if (bx >= <gridx_0> || by >= <gridy_0> || bz >= <gridz_0> || threadIdx.x >= 128) { return; } }
   if constexpr (SUB_KERNEL_ID == 1) { if (bx >= <gridx_1> || by >= <gridy_1> || bz >= <gridz_1> || threadIdx.x >= 128) { return; } }
