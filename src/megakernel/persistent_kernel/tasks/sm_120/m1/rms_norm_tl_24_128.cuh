@@ -25,7 +25,7 @@ __device__ __forceinline__ void rms_norm_kernel_16_8_128(const int bx, const int
   static_assert(THREAD_NUM==128);
   static_assert(TILE_DIM_X==1); static_assert(TILE_DIM_Y==1); static_assert(TILE_DIM_Z==1);
   static_assert(M==24); static_assert(N==128);
-  if (bx >= 24 || by >= 1 || bz >= 1) { return; }
+  if (bx >= 24 || by >= 1 || bz >= 1 || threadIdx.x >= 128) { return; }
   
   const bfloat16_t* __restrict__ A = static_cast<const bfloat16_t*>(input_ptr);
   const bfloat16_t* __restrict__ B = static_cast<const bfloat16_t*>(weight_ptr);

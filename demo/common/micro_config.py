@@ -19,6 +19,12 @@ def get_target_str():
 def get_arch():
     return TARGET_ARCH
 
+def get_thread_num():
+    if TARGET_ARCH == "sm_89":
+        return 128
+    else:
+        return 256
+    
 def get_pass_configs():
     if TARGET_ARCH == "sm_89":
         return {
@@ -28,7 +34,7 @@ def get_pass_configs():
     else:
         return {
             tilelang.PassConfigKey.TL_DISABLE_TMA_LOWER: False,
-            tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
+            tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: False,
         }
 
 # def is_tma_enabled():

@@ -3,7 +3,7 @@ import itertools
 import tilelang
 import tilelang.language as T
 from common.micro_base import BaseMicroKernel, HparamSelectMode
-from common.micro_config import get_arch, get_target_str, is_megakernel_enabled, get_pass_configs
+from common.micro_config import get_arch, get_thread_num, get_target_str, is_megakernel_enabled, get_pass_configs
 
 #####################################################################################################
 #                  短序列实现	          长序列实现                  思路
@@ -34,7 +34,7 @@ from common.micro_config import get_arch, get_target_str, is_megakernel_enabled,
 class _GqaDecodeStrategy:
     def __init__(self, batch, max_kv_seqlen, target_kv_seqlen, num_heads, num_kv_heads, dim, is_causal, dtype, accum_dtype):
         self.name = "gqa_decode_tl"+f"_{batch}_{max_kv_seqlen}_{target_kv_seqlen}_{num_heads}_{num_kv_heads}_{dim}"
-        self.thread_num = 128
+        self.thread_num = get_thread_num()
             
         self.num_heads = num_heads
         self.num_kv_heads = num_kv_heads
@@ -100,7 +100,7 @@ class _GqaDecodeStrategy:
         return torch_ref
         
     def get_kernel(self, selected_hparams):
-        print("selected_hparams: ", selected_hparams)
+        # print("selected_hparams: ", selected_hparams)
         _, _, num_split, _, _ = selected_hparams
         # if (self.target_kv_seqlen < 16 and num_split == 1):
         #     print("self.target_kv_seqlen < 16")

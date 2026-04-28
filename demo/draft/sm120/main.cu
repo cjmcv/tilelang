@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
     constexpr int K = 1024;
     constexpr int THREAD_NUM = 256;
     constexpr int GRID_X = 96;
-    constexpr size_t DYNAMIC_SMEM_SIZE = 30720;
+    constexpr size_t DYNAMIC_SMEM_SIZE = 61440;
 
     printf("=== Linear GEMM TMA Demo ===\n");
     printf("Tensor A: [%d, %d], B: [%d, %d], C: [%d, %d]\n", M, K, N, K, M, N);

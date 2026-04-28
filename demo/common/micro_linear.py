@@ -16,7 +16,7 @@ import tilelang.language as T
 
 from common.pkt_util import TestUtil, TorchRef
 from common.micro_base import BaseMicroKernel, HparamSelectMode
-from common.micro_config import get_arch, get_target_str, is_megakernel_enabled, get_pass_configs
+from common.micro_config import get_arch, get_thread_num, get_target_str, is_megakernel_enabled, get_pass_configs
 
 # TODO: megakernel约束线程维度是一维128/256，而目前gemv方案是二维线程，且语法糖约束下，
 # 无法对tn = T.get_thread_binding(0)进行二次操作，即无法由threadIdx.x // N, threadIdx.x % N, 来转换成二维。
@@ -118,7 +118,7 @@ class _GemmStrategy:
         else:
             self.name = "linear_gemm_tl"+f"_{M}_{N}_{K}"
             
-        self.thread_num=128
+        self.thread_num = get_thread_num()
 
         self.M = M
         self.N = N

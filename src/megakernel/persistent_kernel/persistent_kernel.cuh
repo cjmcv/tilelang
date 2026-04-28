@@ -54,9 +54,9 @@ using namespace kernel;
 // #define MPK_PAGE_SIZE 64
 
 #if defined(MEGAKERNEL_GRACE_HOPPER)
-#define WORKER_NUM_THREADS 128
+#define WORKER_NUM_THREADS 256
 #elif defined(MEGAKERNEL_GRACE_BLACKWELL)
-#define WORKER_NUM_THREADS 128
+#define WORKER_NUM_THREADS 256
 #else
 #define WORKER_NUM_THREADS 128
 #endif

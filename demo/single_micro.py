@@ -120,8 +120,8 @@ def test_silu_mul():
     profile(target_func, torch_ref)
     
 def test_rms_norm():
-    M = 32
-    N = 2560
+    M = 1
+    N = 1024
     micro = MicroRmsNorm(M,N, dtype=T.bfloat16, accum_dtype=T.float32)
     kernel, fn, info = micro.get_kernel(HparamSelectMode.HEURISTIC) # HEURISTIC, TUNING, TUNED
     print(kernel.get_kernel_source())

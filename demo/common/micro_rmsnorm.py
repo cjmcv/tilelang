@@ -4,13 +4,13 @@ import tilelang
 import tilelang.language as T
 
 from common.micro_base import BaseMicroKernel, HparamSelectMode
-from common.micro_config import get_arch, get_target_str, is_megakernel_enabled, get_pass_configs
+from common.micro_config import get_arch, get_thread_num, get_target_str, is_megakernel_enabled, get_pass_configs
 
 class _RmsNormStrategy:
     def __init__(self, M, M2, N, dtype, accum_dtype):
         self.name = "rms_norm_tl"+f"_{M+M2}_{N}"
             
-        self.thread_num = 128
+        self.thread_num = get_thread_num()
         self.M = M
         self.M2 = M2
         self.N = N

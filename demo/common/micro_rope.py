@@ -4,7 +4,7 @@ import tilelang
 import tilelang.language as T
 
 from common.micro_base import BaseMicroKernel, HparamSelectMode
-from common.micro_config import get_arch, get_target_str, is_megakernel_enabled, get_pass_configs
+from common.micro_config import get_arch, get_thread_num, get_target_str, is_megakernel_enabled, get_pass_configs
 
 #####################################################################################################################
 #      overlap版本                                        #            parallel版本                                 #
@@ -81,7 +81,7 @@ class _RopeStrategy:
         self.dtype = dtype
         self.accum_dtype = accum_dtype
         
-        self.thread_num = 128
+        self.thread_num = get_thread_num()
         self.hparam_space = self._get_hparam_space()
         print(len(self.hparam_space))
         
