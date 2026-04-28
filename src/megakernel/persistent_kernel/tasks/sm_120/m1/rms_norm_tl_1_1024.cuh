@@ -22,10 +22,10 @@ __device__ __forceinline__ void rms_norm_kernel_1_1024(const int bx, const int b
                                                             void const *weight_ptr,
                                                             void *output_ptr,
                                                             float eps) {
-  static_assert(THREAD_NUM==128);
+  // static_assert(THREAD_NUM==128);
   static_assert(TILE_DIM_X==1); static_assert(TILE_DIM_Y==1); static_assert(TILE_DIM_Z==1);
   static_assert(M==1); static_assert(N==1024);
-  if (bx >= 1 || by >= 1 || bz >= 1) { return; }
+  if (bx >= 1 || by >= 1 || bz >= 1 || threadIdx.x >= 128) { return; }
   
   const bfloat16_t* __restrict__ A = static_cast<const bfloat16_t*>(input_ptr);
   const bfloat16_t* __restrict__ B = static_cast<const bfloat16_t*>(weight_ptr);

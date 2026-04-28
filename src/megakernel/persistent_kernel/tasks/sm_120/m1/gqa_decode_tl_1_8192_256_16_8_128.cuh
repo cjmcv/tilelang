@@ -28,7 +28,7 @@ __device__ __forceinline__ void flashattn_kernel_1_8192_256_16_8_128__0(const in
                                                    void* __restrict__ output_ptr,
                                                    void* __restrict__ glse_ptr,
                                                    void* __restrict__ output_partial_ptr) {
-  static_assert(THREAD_NUM==128);
+  // static_assert(THREAD_NUM==128);
   static_assert(M==1); static_assert(HEAD==16); static_assert(GROUPS==8); static_assert(DIM==128);
   if constexpr (SUB_KERNEL_ID == 0) { if (bx >= 1 || by >= 8 || bz >= 2 || threadIdx.x >= 128) { return; } }
   if constexpr (SUB_KERNEL_ID == 1) { if (bx >= 16 || by >= 1 || bz >= 1 || threadIdx.x >= 128) { return; } }
@@ -360,7 +360,7 @@ __device__ __forceinline__ void flashattn_kernel_1_8192_256_16_8_128__1(const in
                                                    void* __restrict__ output_ptr,
                                                    void* __restrict__ glse_ptr,
                                                    void* __restrict__ output_partial_ptr) {
-  static_assert(THREAD_NUM==128);
+  // static_assert(THREAD_NUM==128);
   static_assert(M==1); static_assert(HEAD==16); static_assert(GROUPS==8); static_assert(DIM==128);
   if constexpr (SUB_KERNEL_ID == 0) { if (bx >= 1 || by >= 8 || bz >= 2 || threadIdx.x >= 128) { return; } }
   if constexpr (SUB_KERNEL_ID == 1) { if (bx >= 16 || by >= 1 || bz >= 1 || threadIdx.x >= 128) { return; } }
