@@ -122,11 +122,15 @@ template <int thread_extent> TL_DEVICE bool tl_shuffle_elect() {
 }
 
 template <uint32_t RegCount> TL_DEVICE void warpgroup_reg_alloc() {
+#if __CUDA_ARCH_LIST__ == 900
   asm volatile("setmaxnreg.inc.sync.aligned.u32 %0;\n" : : "n"(RegCount));
+#endif
 }
 
 template <uint32_t RegCount> TL_DEVICE void warpgroup_reg_dealloc() {
+#if __CUDA_ARCH_LIST__ == 900
   asm volatile("setmaxnreg.dec.sync.aligned.u32 %0;\n" : : "n"(RegCount));
+#endif
 }
 #endif
 

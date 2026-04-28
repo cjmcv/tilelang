@@ -280,7 +280,11 @@ class PersistentKernel:
         self.use_nvshmem = True if world_size > 1 else False
 
         self.target_cc = 120 #torch.cuda.get_device_properties(0).major * 10 + torch.cuda.get_device_properties(0).minor
-        self.thread_num = 128
+        if self.target_cc >= 90:
+            self.thread_num = 256
+        else:
+            self.thread_num = 128
+            
         # For the reuse of instance
         self.repl_weight_mapping = {}
 
