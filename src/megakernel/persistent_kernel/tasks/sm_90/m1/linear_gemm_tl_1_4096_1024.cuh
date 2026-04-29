@@ -22,14 +22,14 @@ template <typename T,
     int O_STRIDE = N,
     int PIPE_MAX = 3,
     bool FUSE_RES = false>
-    __device__ __forceinline__ void linear_gemm_tl_1_6144_1024(const int bx, const int by, const int bz,
+    __device__ __forceinline__ void linear_gemm_tl_1_4096_1024(const int bx, const int by, const int bz,
                                                 const CUtensorMap *A_desc, const CUtensorMap *B_desc, const void* __restrict__ residual_ptr, const CUtensorMap *C_desc, 
                                                 int num_active_tokens,
                                                 bool residual) {
   // static_assert(THREAD_NUM==128);
   static_assert(TILE_DIM_X==64); static_assert(TILE_DIM_Y==16); static_assert(TILE_DIM_Z==128);
-  static_assert(M==1); static_assert(N==6144); static_assert(K==1024);
-  if (bx >= 96 || by >= 1 || bz >= 1) { return; }
+  static_assert(M==1); static_assert(N==4096); static_assert(K==1024);
+  if (bx >= 64 || by >= 1 || bz >= 1) { return; }
 
   const bfloat16_t* __restrict__ R = static_cast<const bfloat16_t*>(residual_ptr);
   extern __shared__ __align__(1024) uchar buf_dyn_shmem[];
@@ -93,15 +93,15 @@ template <typename T,
 
 
 } // kernel
-// Strategy: linear_gemm_tl_1_6144_1024
+// Strategy: linear_gemm_tl_1_4096_1024
 // selected_hparams: [16, 64, 128, 1, 0, 128, 0, False].
 // smem: 20480 bytes.
 // use_cooperative_groups: 0.
-// layout: (96, 1, 1), (64, 16, 128)
+// layout: (64, 1, 1), (64, 16, 128)
 // block_dim=(256, 1, 1).
 
 
-extern "C" int create_linear_gemm_tl_1_6144_1024(bfloat16_t* __restrict__ A, bfloat16_t* __restrict__ B, bfloat16_t* __restrict__ C, CUtensorMap* out_A_desc, CUtensorMap* out_B_desc, CUtensorMap* out_C_desc, bool to_device) {
+extern "C" int create_linear_gemm_tl_1_4096_1024(bfloat16_t* __restrict__ A, bfloat16_t* __restrict__ B, bfloat16_t* __restrict__ C, CUtensorMap* out_A_desc, CUtensorMap* out_B_desc, CUtensorMap* out_C_desc, bool to_device) {
 
 	CUtensorMap A_desc;
 	CUtensorMapDataType A_desc_type= (CUtensorMapDataType)9;
@@ -128,7 +128,7 @@ extern "C" int create_linear_gemm_tl_1_6144_1024(bfloat16_t* __restrict__ A, bfl
 	CUtensorMapDataType B_desc_type= (CUtensorMapDataType)9;
 	cuuint32_t B_desc_tensorRank= 2;
 	void *B_desc_globalAddress= B;
-	cuuint64_t B_desc_globalDim[2]= {1024,6144};
+	cuuint64_t B_desc_globalDim[2]= {1024,4096};
 	cuuint64_t B_desc_globalStride[2]= {2,2048};
 	cuuint32_t B_desc_boxDim[2]= {64,64};
 	cuuint32_t B_desc_elementStrides[2]= {1,1};
@@ -149,8 +149,8 @@ extern "C" int create_linear_gemm_tl_1_6144_1024(bfloat16_t* __restrict__ A, bfl
 	CUtensorMapDataType C_desc_type= (CUtensorMapDataType)9;
 	cuuint32_t C_desc_tensorRank= 2;
 	void *C_desc_globalAddress= C;
-	cuuint64_t C_desc_globalDim[2]= {6144,1};
-	cuuint64_t C_desc_globalStride[2]= {2,12288};
+	cuuint64_t C_desc_globalDim[2]= {4096,1};
+	cuuint64_t C_desc_globalStride[2]= {2,8192};
 	cuuint32_t C_desc_boxDim[2]= {64,16};
 	cuuint32_t C_desc_elementStrides[2]= {1,1};
 	CUtensorMapInterleave C_desc_interleave= (CUtensorMapInterleave)0;
@@ -174,7 +174,7 @@ extern "C" int create_linear_gemm_tl_1_6144_1024(bfloat16_t* __restrict__ A, bfl
 		*out_B_desc = B_desc;
 		*out_C_desc = C_desc;
 	}
-	//	linear_kernel<<<dim3(96, 1, 1), dim3(256, 1, 1), 20480, stream>>>(A_desc, B_desc, C_desc);
+	//	linear_kernel<<<dim3(64, 1, 1), dim3(256, 1, 1), 20480, stream>>>(A_desc, B_desc, C_desc);
 
 	return 0;
 }

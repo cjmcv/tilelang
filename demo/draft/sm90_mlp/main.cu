@@ -38,6 +38,42 @@ namespace {
 
 }  // anonymous namespace
 
+// #define TEST_MEGA 1
+// __global__ void __launch_bounds__(256, 1) mega_mlp(void const *rms_input_ptr, void const *rms_weight_ptr, void *rms_output_ptr,
+//                                                    const CUtensorMap *gemm_A_desc,  const CUtensorMap *gemm_B_desc,  const CUtensorMap *gemm_C_desc,
+//                                                    void const *silu_mul_input_ptr, void *silu_mul_output_ptr,
+//                                                    const CUtensorMap *gemm_add_A_desc,  const CUtensorMap *gemm_add_B_desc,  const CUtensorMap *gemm_add_C_desc, const void* __restrict__ gemm_add_R_ptr,) {
+//     kernel::rms_norm_kernel_1_1024<bfloat16_t, 256, 1, 1, 1, 1, 1024>(
+//         blockIdx.x, blockIdx.y, blockIdx.z,
+//         rms_input_ptr,
+//         rms_weight_ptr,
+//         rms_output_ptr,
+//         1e-12f);
+    
+//     kernel::linear_gemm_tl_1_6144_1024<bfloat16_t, 256, 64, 16, 128, 1, 6144, 1024, 6144, 3, false>(
+//         blockIdx.x, blockIdx.y, blockIdx.z,
+//         gemm_A_desc,
+//         gemm_B_desc,
+//         nullptr,
+//         gemm_C_desc,
+//         1,
+//         false/*residual*/);
+
+//     kernel::silu_mul_kernel_1_3072<bfloat16_t, 256, 64, 32, 1, 1, 3072, 6144, 3072>(
+//         blockIdx.x, blockIdx.y, blockIdx.z,
+//         silu_mul_input_ptr,
+//         silu_mul_output_ptr,
+//         1);
+
+//     kernel::linear_gemm_add_tl_1_1024_3072<bfloat16_t, 256, 64, 16, 128, 1, 1024, 3072, 1024, 3, true>(
+//       blockIdx.x, blockIdx.y, blockIdx.z,
+//       gemm_add_A_desc,
+//       gemm_add_B_desc,
+//       gemm_add_R_ptr,
+//       gemm_add_C_desc,
+//       1,
+//       false/*residual*/);
+// }
 
 int main(int argc, char **argv) {
     // MLP dimensions
@@ -175,6 +211,21 @@ int main(int argc, char **argv) {
     CHECK_RT(cudaEventCreate(&stop));
 
     printf("\n=== Running MLP kernels ===\n");
+
+    // Warmup runs
+    printf("\nWarmup: running 10 iterations...\n");
+    for (int i = 0; i < 10; i++) {
+        rms_norm_tl<<<dim3(1, 1, 1), dim3(RMS_NORM_BLOCK, 1, 1), RMS_NORM_SMEM_SIZE, stream>>>(
+            d_input, d_w_rms_norm, d_rms_out);
+        linear_gemm_tl<<<dim3(GEMM1_GRID_X, 1, 1), dim3(GEMM1_THREAD_NUM, 1, 1), GEMM1_SMEM_SIZE, stream>>>(
+            A1_desc, B1_desc, C1_desc);
+        silu_mul_tl<<<dim3(SILU_MUL_GRID_X, 1, 1), dim3(SILU_MUL_THREAD_NUM, 1, 1), SILU_MUL_SMEM_SIZE, stream>>>(
+            d_mlp_mid, d_silu_mul_out);
+        linear_gemm_add_tl<<<dim3(GEMM2_GRID_X, 1, 1), dim3(GEMM2_THREAD_NUM, 1, 1), GEMM2_SMEM_SIZE, stream>>>(
+            A2_desc, B2_desc, C2_desc, (void *)d_input);
+    }
+    CHECK_RT(cudaStreamSynchronize(stream));
+    printf("Warmup done!\n");
 
 // ========== Step 1: rms_norm ==========
     printf("\n[Step 1] rms_norm: input -> rms_out\n");
