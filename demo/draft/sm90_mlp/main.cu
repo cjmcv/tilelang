@@ -47,7 +47,8 @@ int main(int argc, char **argv) {
     constexpr int GATED_UP_SIZE = INTERMEDIATE_SIZE * 2;  // 6144
 
     // Kernel configurations
-    constexpr int RMS_NORM_BLOCK = 128;
+    constexpr int RMS_NORM_BLOCK = 256;
+    constexpr size_t RMS_NORM_SMEM_SIZE = 4096;
     constexpr int GEMM1_GRID_X = 96;
     constexpr int GEMM1_THREAD_NUM = 256;
     constexpr size_t GEMM1_SMEM_SIZE = 61440;
@@ -175,10 +176,14 @@ int main(int argc, char **argv) {
 
     printf("\n=== Running MLP kernels ===\n");
 
-    // ========== Step 1: rms_norm ==========
+// ========== Step 1: rms_norm ==========
     printf("\n[Step 1] rms_norm: input -> rms_out\n");
+    CHECK_RT(cudaFuncSetAttribute(
+        rms_norm_tl,
+        cudaFuncAttributeMaxDynamicSharedMemorySize,
+        RMS_NORM_SMEM_SIZE));
     CHECK_RT(cudaEventRecord(start, stream));
-    rms_norm_tl<<<dim3(1, 1, 1), dim3(RMS_NORM_BLOCK, 1, 1), 0, stream>>>(
+rms_norm_tl<<<dim3(1, 1, 1), dim3(RMS_NORM_BLOCK, 1, 1), RMS_NORM_SMEM_SIZE, stream>>>(
         d_input, d_w_rms_norm, d_rms_out);
     CHECK_RT(cudaEventRecord(stop, stream));
     CHECK_RT(cudaStreamSynchronize(stream));
