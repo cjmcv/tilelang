@@ -5,7 +5,7 @@ Import this module in other micro_*.py files to use these variables.
 import os
 import tilelang
 
-TARGET_ARCH = "sm_120" # "sm_120" / "sm_90" / "sm_89"
+TARGET_ARCH = "sm_90" # "sm_120" / "sm_90" / "sm_89"
 ENABLE_MEGAKERNEL = True
 ENABLE_PROFILING = False
 

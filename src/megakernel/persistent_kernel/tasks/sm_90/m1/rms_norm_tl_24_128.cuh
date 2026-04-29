@@ -48,7 +48,7 @@ __device__ __forceinline__ void rms_norm_kernel_16_8_128(const int bx, const int
   A_powsum[0] = 0x0p+0f/*0.000000e+00*/;
   A_powsum[0] = (A_powsum[0] + A_pow_local[0]);
   __syncthreads();
-  A_powsum[0] = tl::AllReduce<tl::SumOp, 128, 1, 0>::run(A_powsum[0], (&(((float*)buf_dyn_shmem)[0])));
+  A_powsum[0] = tl::AllReduce<tl::SumOp, 128, 1, 0, 128>::run_hopper(A_powsum[0], (&(((float*)buf_dyn_shmem)[0])));
   A_powsum[0] = rsqrtf(((A_powsum[0] / 0x1p+7f/*1.280000e+02*/) + 0x1.19799812dea11p-40f/*1.000000e-12*/));
   A_local[0] = (A_local[0] * (A_powsum[0] * B_local[0]));
   C[((((int)bx) * 128) + ((int)threadIdx.x))] = ((bfloat16_t)A_local[0]);

@@ -65,7 +65,7 @@ __device__ __forceinline__ void rms_norm_kernel_1_1024(const int bx, const int b
     A_powsum[0] = (A_powsum[0] + A_pow_local[(((rv & 1) * 4) + (rv >> 1))]);
   }
   __syncthreads();
-  A_powsum[0] = tl::AllReduce<tl::SumOp, 128, 1, 0>::run(A_powsum[0], (&(((float*)buf_dyn_shmem)[0])));
+  A_powsum[0] = tl::AllReduce<tl::SumOp, 128, 1, 0, 128>::run_hopper(A_powsum[0], (&(((float*)buf_dyn_shmem)[0])));
   A_powsum[0] = rsqrtf(((A_powsum[0] / 0x1p+10f/*1.024000e+03*/) + 0x1.19799812dea11p-40f/*1.000000e-12*/));
   #pragma unroll
   for (int i_3 = 0; i_3 < 8; ++i_3) {
