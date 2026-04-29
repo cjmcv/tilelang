@@ -41,9 +41,9 @@ int main(int argc, char **argv) {
     constexpr int M = 1;
     constexpr int N = 6144;
     constexpr int K = 1024;
-    constexpr int THREAD_NUM = 128;
+    constexpr int THREAD_NUM = 256;
     constexpr int GRID_X = 96;
-    constexpr size_t DYNAMIC_SMEM_SIZE = 30720;
+    constexpr size_t DYNAMIC_SMEM_SIZE = 61440;
 
     printf("=== Linear GEMM TMA Demo ===\n");
     printf("Tensor A: [%d, %d], B: [%d, %d], C: [%d, %d]\n", M, K, N, K, M, N);
@@ -85,9 +85,13 @@ int main(int argc, char **argv) {
     CHECK_RT(cudaMemset(d_C, 0, M * N * sizeof(bfloat16_t)));
 
     // Create TMA descriptors using the create function
-    CUtensorMap A_desc, B_desc, C_desc;
+
+    CUtensorMap *A_desc, *B_desc, *C_desc;
+    cudaMalloc(&A_desc, sizeof(CUtensorMap));
+    cudaMalloc(&B_desc, sizeof(CUtensorMap));
+    cudaMalloc(&C_desc, sizeof(CUtensorMap));
     printf("\nCalling create_linear_gemm_tl_1_6144_1024...\n");
-    int ret = create_linear_gemm_tl_1_6144_1024(d_A, d_B, d_C, &A_desc, &B_desc, &C_desc);
+    int ret = create_linear_gemm_tl_1_6144_1024(d_A, d_B, d_C, A_desc, B_desc, C_desc, true);
     if (ret != 0) {
         printf("ERROR: create_linear_gemm_tl_1_6144_1024 failed with code %d\n", ret);
         // const char* err = get_last_error();
@@ -105,16 +109,24 @@ int main(int argc, char **argv) {
 
     // Set max dynamic shared memory
     CHECK_RT(cudaFuncSetAttribute(
-        linear_gemm_tl_1_6144_1024,
+        linear_gemm_tl,
         cudaFuncAttributeMaxDynamicSharedMemorySize,
         DYNAMIC_SMEM_SIZE));
 
-    printf("\nLaunching linear_gemm_tl_1_6144_1024 kernel...\n");
-    linear_gemm_tl_1_6144_1024<<<grid_dim, block_dim, DYNAMIC_SMEM_SIZE, stream>>>(
-        A_desc, B_desc, C_desc);
+    cudaEvent_t start, stop;
+    CHECK_RT(cudaEventCreate(&start));
+    CHECK_RT(cudaEventCreate(&stop));
 
+    printf("\nLaunching linear_gemm_tl_1_6144_1024 kernel...\n");
+    CHECK_RT(cudaEventRecord(start, stream));
+    linear_gemm_tl<<<grid_dim, block_dim, DYNAMIC_SMEM_SIZE, stream>>>(
+        A_desc, B_desc, C_desc);
+    CHECK_RT(cudaEventRecord(stop, stream));
     CHECK_RT(cudaStreamSynchronize(stream));
-    printf("Kernel completed!\n");
+
+    float elapsed_ms = 0.0f;
+    CHECK_RT(cudaEventElapsedTime(&elapsed_ms, start, stop));
+    printf("Kernel completed! Time: %.3f ms\n", elapsed_ms);
 
     // Copy result back and verify
     std::vector<bfloat16_t> h_C(M * N);
