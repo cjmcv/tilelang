@@ -212,7 +212,7 @@ int main(int argc, char **argv) {
     printf("\n[Step 4] gemm2 (down_proj + residual): silu_mul_out x w_down_proj + residual -> mlp_out\n");
     CHECK_RT(cudaEventRecord(start, stream));
     linear_gemm_add_tl<<<dim3(GEMM2_GRID_X, 1, 1), dim3(GEMM2_THREAD_NUM, 1, 1), GEMM2_SMEM_SIZE, stream>>>(
-        A2_desc, B2_desc, C2_desc, d_input);
+        A2_desc, B2_desc, C2_desc, (void *)d_input);
     CHECK_RT(cudaEventRecord(stop, stream));
     CHECK_RT(cudaStreamSynchronize(stream));
     float gemm2_time = 0.0f;
