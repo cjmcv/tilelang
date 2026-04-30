@@ -3,6 +3,7 @@ import torch
 from types import SimpleNamespace
 import megakernel as mi
 from common.pkt_util import Qwen3Info
+from common.micro_config import get_arch
 
 # model_tag:  "qwen3_06b" / "qwen3_4b"
 class MkLayers:
@@ -37,10 +38,16 @@ class MkLayers:
         
         self.Qwen3MegaConfig = None
         if (model_tag == "qwen3_4b"):
-            from common.autogen.qwen3_4b_mega_config import Qwen3MegaConfig4b
+            if get_arch() == "sm_89":
+                from common.autogen.sm_89.qwen3_4b_mega_config import Qwen3MegaConfig4b
+            elif get_arch() == "sm_120":
+                from common.autogen.sm_120.qwen3_4b_mega_config import Qwen3MegaConfig4b
             self.Qwen3MegaConfig = Qwen3MegaConfig4b
         elif (model_tag == "qwen3_06b"):
-            from common.autogen.qwen3_06b_mega_config import Qwen3MegaConfig06b
+            if get_arch() == "sm_89":
+                from common.autogen.sm_89.qwen3_06b_mega_config import Qwen3MegaConfig06b
+            elif get_arch() == "sm_120":
+                from common.autogen.sm_120.qwen3_06b_mega_config import Qwen3MegaConfig06b
             self.Qwen3MegaConfig = Qwen3MegaConfig06b
 
     def get_mk(self):
