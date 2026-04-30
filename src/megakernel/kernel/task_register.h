@@ -81,9 +81,10 @@ public:
 
       bool with_residual = false;
       code.e("TaskDesc* post_task_desc = task_desc->post_task;");
+      code.e("if (post_task_desc != nullptr) {");
       code.e("kernel::prefetch_kernel<bfloat16_t, $>(", bgraph.thread_num);
       code.e("    post_task_desc->bx-$, post_task_desc->by, post_task_desc->bz,", bgraph.grid_dim.x-extra_bx);
-      code.e("    static_smem,");
+      code.e("    static_smem,"); // static_smem
       code.e("    post_task_desc->input_tma_desc_ptrs[0][0],");
       code.e("    post_task_desc->input_tma_desc_ptrs[1][0],");
       if (with_residual) {
@@ -96,7 +97,7 @@ public:
       if (with_residual) {
         code.e("    runtime_config.my_gpu_id == 0);");
       } else {
-        code.e("    false/*residual*/);");
+        code.e("    false/*residual*/);}");
       }
 
     }

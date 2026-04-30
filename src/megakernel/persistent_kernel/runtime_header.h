@@ -146,7 +146,7 @@ struct alignas(16) TaskDesc {
   TaskDesc(FullTaskDesc t)
       : task_type(t.task_type), variant_id(t.variant_id),
         trigger_event(t.trigger_event), dependent_event(t.dependent_event),
-        task_metadata(t.task_metadata) {
+        task_metadata(t.task_metadata), post_task(nullptr) {
     bx = t.inputs[0].bx; // CJM_TODO 只用到了一个, 冗余
     by = t.inputs[0].by;
     bz = t.inputs[0].bz;

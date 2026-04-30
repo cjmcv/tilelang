@@ -29,6 +29,8 @@
 #include <unistd.h>
 #include <vector>
 
+#define DEBUG_PREFETCH 1
+
 #if defined(MEGAKERNEL_GRACE_HOPPER)
 #include "tasks/sm_90/task_header.cuh"
 #elif defined(MEGAKERNEL_GRACE_BLACKWELL)
@@ -124,6 +126,8 @@ void static_persistent_kernel(RuntimeConfig config) {
     TaskDesc *task_desc = &config.all_tasks[task_idx];
     size_t event_index = get_event_position_index(task_desc->dependent_event);
     EventDesc *dep_event_desc = &config.all_events[event_index];
+    // if ((task_desc->task_type != TASK_LINEAR_HOPPER && threadIdx.x == 0) || 
+    //    (task_desc->task_type == TASK_LINEAR_HOPPER && threadIdx.x == 128) ) {
     if (threadIdx.x == 0) {
       // printf("step: %d.\n", *config.step);
       if (task_desc->dependent_event != EVENT_INVALID_ID) {
@@ -144,7 +148,21 @@ void static_persistent_kernel(RuntimeConfig config) {
         }
       }
     }
-    __syncthreads();
+
+    // if (task_desc->task_type == TASK_LINEAR_HOPPER) {
+    //   // Linear层：只同步128-255号线程
+    //   // if (threadIdx.x >= 128) {
+    //   //   printf("1");
+    //   //   __syncwarp();
+    //   // }
+    //   // if (threadIdx.x >= 128) {
+    //   //   printf("2");
+    //   //   __threadfence_block();
+    //   // }
+    // } else {
+      // 其他任务：全block同步
+      __syncthreads();
+    // }
 
   #ifdef MPK_ENABLE_PROFILING
     if (task_desc->task_type != TASK_TERMINATE) {
@@ -274,9 +292,9 @@ extern "C" void init_persistent_kernel(int kernel_id,
    ///////////////////////////////////////////////
   // Static Scheduling Scheme
   // is_static_schedule
-  {
+  
     global_runtime_config[kernel_id].num_tasks = all_tasks.size();
-    int num_workers = global_runtime_config[kernel_id].num_workers;
+    // int num_workers = global_runtime_config[kernel_id].num_workers;
     int tasks_each_worker = (all_tasks.size() + num_workers - 1) / num_workers;
     int capacity_each_worker = all_tasks.size(); // (tasks_each_worker + 1) * 1.5; // each_worker: 0:len, 1:task0, 2:task1... capacity=task_num+1
     // printf("capacity_each_worker: %d.\n", capacity_each_worker);
@@ -393,15 +411,17 @@ extern "C" void init_persistent_kernel(int kernel_id,
       printf("task_num: %d.\n", task_num);
       if (task_num == 0) continue;
         
-      // // TODO: 使用配置表？或找到可自动化的方法
-      // // int sm_cnt = 20; // 142
-      // int task_id = event_task_ids[ei][0];
-      // if ((all_tasks[task_id].task_type == TASK_LINEAR || all_tasks[task_id].task_type == TASK_LINEAR_HOPPER) && all_tasks[task_id].variant_id == 0) {
-      //   wid += 1; // assign_offset: 20 - 19(fused_layout);
-      //   // wid += 74;   // 142 - 64(fused_layout);
-      //   wid = wid % num_workers;
-      // }
-      // //////////////////////////////////////
+#ifdef DEBUG_PREFETCH
+      // TODO: 使用配置表？或找到可自动化的方法
+      // int sm_cnt = 20; // 142
+      int task_id = event_task_ids[ei][0];
+      if ((all_tasks[task_id].task_type == TASK_LINEAR || all_tasks[task_id].task_type == TASK_LINEAR_HOPPER) && all_tasks[task_id].variant_id == 0) {
+        // wid += 1; // assign_offset: 20 - 19(fused_layout);
+        wid += 74;   // 142 - 64(fused_layout);
+        wid = wid % num_workers;
+      }
+#endif
+      //////////////////////////////////////
 
       int tasks_assigned = 0;
       while (tasks_assigned < task_num) {
@@ -411,16 +431,6 @@ extern "C" void init_persistent_kernel(int kernel_id,
         host_tasks_index[wid][host_tasks_index[wid][0] + 1] = event_task_ids[ei][tasks_assigned++];
         host_tasks_index[wid][0]++;
         wid = (wid + 1) % num_workers;
-      }
-    }
-      
-    // 4. 为每个worker内的task按顺序设置post_task
-    for (int i = 0; i < num_workers; i++) {
-      int num = host_tasks_index[i][0];
-      for (int j = 0; j < num - 1; j++) {
-        int id = host_tasks_index[i][j+1];
-        int post_id = host_tasks_index[i][j+2];
-        all_tasks[id].post_task = &all_tasks[post_id];
       }
     }
 
@@ -466,7 +476,7 @@ extern "C" void init_persistent_kernel(int kernel_id,
       printf("worker[%d]-(%d): ", i, num);
       for (int j=0; j<num; j++) {
         int id = host_tasks_index[i][j+1];
-        printf("%d(%d-%d), ", id, all_tasks[id].task_type, all_tasks[id].bx);
+        printf("%d(%d-%d-<%lld-%lld>), ", id, all_tasks[id].task_type, all_tasks[id].bx, &all_tasks[id], all_tasks[id].post_task);
       }
       printf("\n");
     }
@@ -483,7 +493,7 @@ extern "C" void init_persistent_kernel(int kernel_id,
     cudaMemcpy(global_runtime_config[kernel_id].static_worker_tasks_index,
                host_tasks_index_arr.data(),
                num_workers * sizeof(int*), cudaMemcpyHostToDevice);
-  }
+  
   //  Initialize all event counters
   global_runtime_config[kernel_id].all_event_counters = gpu_malloc<EventCounter>(all_events.size() * sizeof(EventCounter));
   global_runtime_config[kernel_id].all_event_num_triggers = gpu_malloc<int>(all_events.size() * sizeof(int));
@@ -505,6 +515,19 @@ extern "C" void init_persistent_kernel(int kernel_id,
              all_tasks.data(),
              all_tasks.size() * sizeof(TaskDesc),
              cudaMemcpyHostToDevice);
+
+#ifdef DEBUG_PREFETCH
+  // 为每个worker内的task按顺序设置post_task, 必须是device端内存
+  for (int i = 0; i < num_workers; i++) {
+    int num = host_tasks_index[i][0];
+    for (int j = 0; j < num - 1; j++) {
+      int id = host_tasks_index[i][j+1];
+      int post_id = host_tasks_index[i][j+2];
+      all_tasks[id].post_task = &global_runtime_config[kernel_id].all_tasks[post_id];
+    }
+  }
+#endif
+
   // Initialize all events
   global_runtime_config[kernel_id].num_events = (int)all_events.size();
   global_runtime_config[kernel_id].all_events = gpu_malloc<EventDesc>(all_events.size() * sizeof(EventDesc));
