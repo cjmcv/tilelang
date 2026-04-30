@@ -3,11 +3,20 @@ Micro kernel configuration for controlling code generation behavior.
 Import this module in other micro_*.py files to use these variables.
 """
 import os
+import torch
 import tilelang
 
-TARGET_ARCH = "sm_90" # "sm_120" / "sm_90" / "sm_89"
+# TARGET_ARCH = "sm_120" # "sm_120" / "sm_90" / "sm_89"
 ENABLE_MEGAKERNEL = True
 ENABLE_PROFILING = False
+
+target_arch = torch.cuda.get_device_properties(0).major * 10 + torch.cuda.get_device_properties(0).minor
+if target_arch == 120:
+    TARGET_ARCH = "sm_120"
+elif target_arch == 90:
+    TARGET_ARCH = "sm_90"
+else:
+    TARGET_ARCH = "sm_89"
 
 # =============================================================================
 # Utility Functions
