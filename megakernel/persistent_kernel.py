@@ -279,7 +279,7 @@ class PersistentKernel:
         self.trace_name = trace_name
         self.use_nvshmem = True if world_size > 1 else False
 
-        self.target_cc = torch.cuda.get_device_properties(0).major * 10 + torch.cuda.get_device_properties(0).minor
+        self.target_cc = 120 # torch.cuda.get_device_properties(0).major * 10 + torch.cuda.get_device_properties(0).minor
         if self.target_cc >= 90:
             self.thread_num = 256
         else:

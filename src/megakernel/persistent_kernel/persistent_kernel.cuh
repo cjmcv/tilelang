@@ -398,7 +398,7 @@ extern "C" void init_persistent_kernel(int kernel_id,
       // int task_id = event_task_ids[ei][0];
       // if ((all_tasks[task_id].task_type == TASK_LINEAR || all_tasks[task_id].task_type == TASK_LINEAR_HOPPER) && all_tasks[task_id].variant_id == 0) {
       //   wid += 1; // assign_offset: 20 - 19(fused_layout);
-      //   // wid += 78;   // 142 - 64(fused_layout);
+      //   // wid += 74;   // 142 - 64(fused_layout);
       //   wid = wid % num_workers;
       // }
       // //////////////////////////////////////
@@ -411,6 +411,16 @@ extern "C" void init_persistent_kernel(int kernel_id,
         host_tasks_index[wid][host_tasks_index[wid][0] + 1] = event_task_ids[ei][tasks_assigned++];
         host_tasks_index[wid][0]++;
         wid = (wid + 1) % num_workers;
+      }
+    }
+      
+    // 4. 为每个worker内的task按顺序设置post_task
+    for (int i = 0; i < num_workers; i++) {
+      int num = host_tasks_index[i][0];
+      for (int j = 0; j < num - 1; j++) {
+        int id = host_tasks_index[i][j+1];
+        int post_id = host_tasks_index[i][j+2];
+        all_tasks[id].post_task = &all_tasks[post_id];
       }
     }
 
