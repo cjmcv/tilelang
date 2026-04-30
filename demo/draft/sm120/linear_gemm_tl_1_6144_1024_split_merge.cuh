@@ -273,18 +273,11 @@ extern "C" int create_linear_gemm_tl_1_6144_1024(bfloat16_t* __restrict__ A, bfl
 
 #include "persistent_stage_kernel.cuh"
 
-extern "C" __global__ void linear_gemm_tl(const CUtensorMap *A_desc, const CUtensorMap *B_desc,  const CUtensorMap *C_desc);
-
-// Helper to initialize barriers (for compatibility)
-__device__ __forceinline__ void init_mbarriers(uint64_t* mbarrier_mem, int count) {
-  // Barriers are initialized inside each kernel call
-}
-
 // Global sync counters - allocated in host code or here
-__device__ __managed__ uint64_t g_sync_stage0_done = 0;
-__device__ __managed__ uint64_t g_sync_stage1_done = 0;
+__device__ __managed__ unsigned long long g_sync_stage0_done = 0;
+__device__ __managed__ unsigned long long g_sync_stage1_done = 0;
 
-extern "C" __global__ void __launch_bounds__(256, 1) linear_gemm_tl(void const *input_ptr, void const *weight_ptr, void *output_ptr, 
+extern "C" __global__ void __launch_bounds__(256, 1) linear_gemm_tl(void const *input_ptr, void const *weight_ptr, void *output_ptr,
                                                                     const CUtensorMap *A_desc,  const CUtensorMap *B_desc,  const CUtensorMap *C_desc) {
   __shared__ uint64_t mbarrier_mem[6];
 

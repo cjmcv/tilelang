@@ -56,8 +56,8 @@ private:
   PipelineMode mode_;
 
   // For split mode: pointers to global sync counters
-  uint64_t* sync_counter_stage0_done_;  // Stage 0 sets this when done
-  uint64_t* sync_counter_stage1_done_;   // Stage 1 sets this when done (for stage 2)
+  unsigned long long* sync_counter_stage0_done_;  // Stage 0 sets this when done
+  unsigned long long* sync_counter_stage1_done_;   // Stage 1 sets this when done (for stage 2)
 
   // Configuration
   int total_blocks_;
@@ -67,8 +67,8 @@ private:
 
 public:
   __device__ __forceinline__ void init(PipelineMode mode,
-                                        uint64_t* sync_counter_stage0,
-                                        uint64_t* sync_counter_stage1,
+                                        unsigned long long* sync_counter_stage0,
+                                        unsigned long long* sync_counter_stage1,
                                         int total_blocks) {
     mode_ = mode;
     sync_counter_stage0_done_ = sync_counter_stage0;
@@ -89,7 +89,7 @@ public:
   }
 
   // Allow reconfiguring sync counters (useful for dynamic adjustment)
-  __device__ __forceinline__ void set_sync_counters(uint64_t* counter_stage0, uint64_t* counter_stage1) {
+  __device__ __forceinline__ void set_sync_counters(unsigned long long* counter_stage0, unsigned long long* counter_stage1) {
     sync_counter_stage0_done_ = counter_stage0;
     sync_counter_stage1_done_ = counter_stage1;
   }
