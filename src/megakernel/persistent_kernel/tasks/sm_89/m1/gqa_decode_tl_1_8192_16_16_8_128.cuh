@@ -28,10 +28,10 @@ __device__ __forceinline__ void flashattn_kernel_1_8192_16_16_8_128(const int bx
                                                    void* __restrict__ output_ptr,
                                                    void* __restrict__ glse_ptr,
                                                    void* __restrict__ output_partial_ptr) {
-  static_assert(THREAD_NUM==128);
+  // static_assert(THREAD_NUM==128);
   static_assert(M==1); static_assert(HEAD==16); static_assert(GROUPS==8); static_assert(DIM==128);
-  if constexpr (SUB_KERNEL_ID == 0) { if (bx >= 1 || by >= 8 || bz >= 1) { return; } }
-  if constexpr (SUB_KERNEL_ID == 1) { if (bx >= 0 || by >= 0 || bz >= 0) { return; } }
+  if constexpr (SUB_KERNEL_ID == 0) { if (bx >= 1 || by >= 8 || bz >= 1 || threadIdx.x >= 128) { return; } }
+  if constexpr (SUB_KERNEL_ID == 1) { if (bx >= 0 || by >= 0 || bz >= 0 || threadIdx.x >= 128) { return; } }
   const bfloat16_t* __restrict__ Q = static_cast<const bfloat16_t*>(q);
   const bfloat16_t* __restrict__ K = static_cast<const bfloat16_t*>(k);
   const bfloat16_t* __restrict__ V = static_cast<const bfloat16_t*>(v);
@@ -300,4 +300,4 @@ __device__ __forceinline__ void flashattn_kernel_1_8192_16_16_8_128(const int bx
 // use_cooperative_groups: 0.
 // layout: (1, 8, 1), (16, 64, 1)
 // block_dim=(128, 1, 1).
-// latency: 0.01347 ms vs [ref-0.01082 sim-0.99182], idx: -1
+// latency: 0 ms vs [ref-0 sim-0], idx: -1

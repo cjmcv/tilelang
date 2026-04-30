@@ -26,7 +26,7 @@ template <typename T,
                                                 const void* __restrict__ input_ptr, const void* __restrict__ weight_ptr, const void* __restrict__ residual_ptr, void* __restrict__ output_ptr, 
                                                 int num_active_tokens,
                                                 bool residual) {
-  static_assert(THREAD_NUM==128);
+  // static_assert(THREAD_NUM==128);
   static_assert(TILE_DIM_X==64); static_assert(TILE_DIM_Y==16); static_assert(TILE_DIM_Z==128);
   static_assert(M==1); static_assert(N==6144); static_assert(K==1024);
   if (bx >= 96 || by >= 1 || bz >= 1) { return; }
@@ -98,4 +98,4 @@ extern "C" int create_linear_gemm_tl_1_6144_1024(bfloat16_t* __restrict__ A, bfl
 }
 
 
-// latency: 0.09924 ms vs [ref-0.10123 sim-1.0], idx: -1
+// latency: 0 ms vs [ref-0 sim-0], idx: -1

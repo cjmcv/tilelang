@@ -22,10 +22,10 @@ __device__ __forceinline__ void rms_norm_kernel_16_8_128(const int bx, const int
                                                             void const *weight_ptr,
                                                             void *output_ptr,
                                                             float eps) {
-  static_assert(THREAD_NUM==128);
+  // static_assert(THREAD_NUM==128);
   static_assert(TILE_DIM_X==1); static_assert(TILE_DIM_Y==1); static_assert(TILE_DIM_Z==1);
   static_assert(M==24); static_assert(N==128);
-  if (bx >= 24 || by >= 1 || bz >= 1) { return; }
+  if (bx >= 24 || by >= 1 || bz >= 1 || threadIdx.x >= 128) { return; }
   
   const bfloat16_t* __restrict__ A = static_cast<const bfloat16_t*>(input_ptr);
   const bfloat16_t* __restrict__ B = static_cast<const bfloat16_t*>(weight_ptr);
@@ -62,4 +62,4 @@ __device__ __forceinline__ void rms_norm_kernel_16_8_128(const int bx, const int
 // use_cooperative_groups: 0.
 // layout: (24, 1, 1), (1, 1, 1)
 // block_dim=(128, 1, 1).
-// latency: 0.00689 ms vs [ref-0.10232 sim-0.99999], idx: -1
+// latency: 0 ms vs [ref-0 sim-0], idx: -1

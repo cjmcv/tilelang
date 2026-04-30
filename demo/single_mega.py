@@ -525,9 +525,9 @@ def test_replace_weight(mk, max_batch_size, batch_size, N, K, spec_layout):
  
 def test_prefetch_weight(mk, max_batch_size, batch_size, N, K, spec_layout):
 
-    x_torch = torch.randn((max_batch_size, hidden_size), dtype=torch.bfloat16, device="cuda")
-    w_rms_norm_torch = torch.randn((1, hidden_size), dtype=torch.bfloat16, device="cuda")
-    rms_out_torch = torch.randn((max_batch_size, hidden_size), dtype=torch.bfloat16, device="cuda")
+    x_torch = torch.randn((max_batch_size, K), dtype=torch.bfloat16, device="cuda")
+    w_rms_norm_torch = torch.randn((1, K), dtype=torch.bfloat16, device="cuda")
+    rms_out_torch = torch.randn((max_batch_size, K), dtype=torch.bfloat16, device="cuda")
     
     w_torch = torch.randn((N, K), dtype=torch.bfloat16, device="cuda")
     out_torch = torch.zeros((max_batch_size, N), dtype=torch.bfloat16, device="cuda")
@@ -539,7 +539,7 @@ def test_prefetch_weight(mk, max_batch_size, batch_size, N, K, spec_layout):
     w_linear = mk.attach_input(torch_tensor=w_torch, name="w")
     linear_out = mk.attach_input(torch_tensor=out_torch, name="linear_out")
     
-    extra_layout = (19, 0, 0)
+    extra_layout = (19, 0, 0) # 即rms_norm后还剩下多少的sm可用于塞入预取
     fused_layout = tuple(a + b for a, b in zip(layout.rmsnorm_layout[0], extra_layout)), layout.rmsnorm_layout[1]
     mk.rmsnorm_layer(
         input=x,
@@ -631,7 +631,7 @@ if __name__ == "__main__":
     # test_linear(mk, max_batch_size, batch_size, (num_heads+2*num_kv_heads)*head_dim, hidden_size, layout.qkv_proj_layout)
     # test_rope(mk, layout, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim)
     # test_gqa_decode(mk, layout, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, seqlen_kv=seqlen_kv, head_dim=head_dim)
-    test_linear_residual(mk, max_batch_size, batch_size, hidden_size, num_heads*head_dim, layout.o_proj_layout)
+    # test_linear_residual(mk, max_batch_size, batch_size, hidden_size, num_heads*head_dim, layout.o_proj_layout)
     
     #######################################
     # test_replace_weight(mk, max_batch_size, batch_size, intermediate_size*2, hidden_size, layout.linear1_layout)
@@ -639,7 +639,7 @@ if __name__ == "__main__":
     # test_parallel_rms_norm(mk, layout, max_batch_size, batch_size, hidden_size)
     # test_rope_fused(mk, layout, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim)
     
-    # test_prefetch_weight(mk, max_batch_size, batch_size, (num_heads+2*num_kv_heads)*head_dim, hidden_size, layout.qkv_proj_layout)
+    test_prefetch_weight(mk, max_batch_size, batch_size, intermediate_size*2, hidden_size, layout.linear1_layout)
     # print("Test single_mega completed.")
     # ncu --set full --section "SpeedOfLight_RooflineChart" -k "kernel" -o my_profile python demo/single_linear.py --nc
     # ncu --set full --section "SpeedOfLight_RooflineChart" -k "persistent_kernel" -o my_profile python demo/single_linear.py
