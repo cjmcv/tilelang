@@ -405,6 +405,7 @@ public:
           with_silu_mul);
 
     code.e("    task_desc->bx, task_desc->by, task_desc->bz,");
+    code.e("    static_smem,");
     code.e("    task_desc->input_tma_desc_ptrs[0][0],");
     code.e("    task_desc->input_tma_desc_ptrs[1][0],");
     if (with_residual) {

@@ -89,4 +89,14 @@ __device__ __forceinline__ void rms_norm_kernel_1_1024(const int bx, const int b
 // use_cooperative_groups: 0.
 // layout: (1, 1, 1), (1, 1, 1)
 // block_dim=(128, 1, 1).
-// latency: 0 ms vs [ref-0 sim-0], idx: -1
+// latency: 0 ms vs [ref-0 sim-0], idx: 0
+
+extern "C" __global__ void rms_norm_tl(void const *input_ptr, void const *weight_ptr, void *output_ptr);
+extern "C" __global__ void __launch_bounds__(256, 1) rms_norm_tl(void const *input_ptr, void const *weight_ptr, void *output_ptr) {
+  kernel::rms_norm_kernel_1_1024<bfloat16_t, 256, 1, 1, 1, 1, 1024>(
+    blockIdx.x, blockIdx.y, blockIdx.z,
+    input_ptr,
+    weight_ptr,
+    output_ptr,
+    1e-12f);
+}

@@ -8,7 +8,7 @@ nvcc -gencode arch=compute_120,code=sm_120 \
      -std=c++20 \
      -I../../../3rdparty/cutlass/include \
      -I../../../src/ \
-     main.cu \
+     main_merge.cu \
      -lcuda
 
 echo "Compile Done!"

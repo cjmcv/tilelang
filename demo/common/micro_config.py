@@ -6,7 +6,7 @@ import os
 import torch
 import tilelang
 
-# TARGET_ARCH = "sm_120" # "sm_120" / "sm_90" / "sm_89"
+
 ENABLE_MEGAKERNEL = True
 ENABLE_PROFILING = False
 
@@ -17,6 +17,8 @@ elif target_arch == 90:
     TARGET_ARCH = "sm_90"
 else:
     TARGET_ARCH = "sm_89"
+    
+TARGET_ARCH = "sm_120" # "sm_120" / "sm_90" / "sm_89"
 
 # =============================================================================
 # Utility Functions

@@ -179,6 +179,7 @@ struct alignas(16) TaskDesc {
   int bz;
   void *input_ptrs[MAX_INPUTS_PER_TASK];
   void *output_ptrs[MAX_OUTPUTS_PER_TASK];
+  TaskDesc *post_task;
 #ifdef MPK_ENABLE_TMA
   CUtensorMap *input_tma_desc_ptrs[MAX_INPUTS_PER_TASK][megakernel::config::MAX_TMA_DESC_PER_TENSOR];
   CUtensorMap *output_tma_desc_ptrs[MAX_OUTPUTS_PER_TASK][megakernel::config::MAX_TMA_DESC_PER_TENSOR];

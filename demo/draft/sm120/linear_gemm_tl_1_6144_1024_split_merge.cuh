@@ -9,6 +9,8 @@
 #include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>
 #endif
 
+#include "rms_norm_tl_1_1024.cuh"
+
 namespace kernel {
 
 template <typename T,
@@ -269,38 +271,80 @@ extern "C" int create_linear_gemm_tl_1_6144_1024(bfloat16_t* __restrict__ A, bfl
 }
 
 
+#include "persistent_stage_kernel.cuh"
+
 extern "C" __global__ void linear_gemm_tl(const CUtensorMap *A_desc, const CUtensorMap *B_desc,  const CUtensorMap *C_desc);
-extern "C" __global__ void __launch_bounds__(256, 1) linear_gemm_tl(const CUtensorMap *A_desc,  const CUtensorMap *B_desc,  const CUtensorMap *C_desc) {
+
+// Helper to initialize barriers (for compatibility)
+__device__ __forceinline__ void init_mbarriers(uint64_t* mbarrier_mem, int count) {
+  // Barriers are initialized inside each kernel call
+}
+
+// Global sync counters - allocated in host code or here
+__device__ __managed__ uint64_t g_sync_stage0_done = 0;
+__device__ __managed__ uint64_t g_sync_stage1_done = 0;
+
+extern "C" __global__ void __launch_bounds__(256, 1) linear_gemm_tl(void const *input_ptr, void const *weight_ptr, void *output_ptr, 
+                                                                    const CUtensorMap *A_desc,  const CUtensorMap *B_desc,  const CUtensorMap *C_desc) {
   __shared__ uint64_t mbarrier_mem[6];
-  
-  kernel::rms_norm<bfloat16_t, 256, 64, 16, 128, 1, 6144, 1024, 6144, 3, false>(
-    blockIdx.x, blockIdx.y, blockIdx.z,
-    mbarrier_mem, 
-    A_desc,
-    B_desc,
-    nullptr,
-    C_desc,
-    1,
-    false/*residual*/);
 
-  kernel::linear_gemm_tl_1_6144_1024_1<bfloat16_t, 256, 64, 16, 128, 1, 6144, 1024, 6144, 3, false>(
-    blockIdx.x, blockIdx.y, blockIdx.z,
-    mbarrier_mem, 
-    A_desc,
-    B_desc,
-    nullptr,
-    C_desc,
-    1,
-    false/*residual*/);
+  // Initialize the persistent stage kernel in split mode
+  kernel::PersistentStageKernel stage_kernel;
+  stage_kernel.init(kernel::PipelineMode::SPLIT, &g_sync_stage0_done, &g_sync_stage1_done, gridDim.x);
 
-  kernel::linear_gemm_tl_1_6144_1024_2<bfloat16_t, 256, 64, 16, 128, 1, 6144, 1024, 6144, 3, false>(
-    blockIdx.x, blockIdx.y, blockIdx.z,
-    mbarrier_mem,
-    A_desc,
-    B_desc,
-    nullptr,
-    C_desc,
-    1,
-    false/*residual*/);
+  // Initialize global sync counters for the first block
+  if (blockIdx.x == 0 && threadIdx.x == 0) {
+    if (gridDim.x > 1) {
+      g_sync_stage0_done = 0;
+      g_sync_stage1_done = 0;
+    }
+  }
+  __syncthreads();
+
+  // Stage 0: rms_norm (only on block 0)
+  if (stage_kernel.is_stage0_block()) {
+    kernel::rms_norm_kernel_1_1024<bfloat16_t, 256, 1, 1, 1, 1, 1024>(
+      blockIdx.x, blockIdx.y, blockIdx.z,
+      input_ptr,
+      weight_ptr,
+      output_ptr,
+      1e-12f);
+
+    // Signal stage 0 completion so stage 1 can start
+    stage_kernel.signal_stage0_complete();
+  }
+
+  // Stage 1: linear_gemm_tl_1_6144_1024_1 (on blocks 1-20)
+  // NO WAIT - runs concurrently with stage 0 (rms_norm)
+  if (stage_kernel.is_stage1_block()) {
+    kernel::linear_gemm_tl_1_6144_1024_1<bfloat16_t, 256, 64, 16, 128, 1, 6144, 1024, 6144, 3, false>(
+      blockIdx.x, blockIdx.y, blockIdx.z,
+      mbarrier_mem,
+      A_desc,
+      B_desc,
+      nullptr,
+      C_desc,
+      1,
+      false/*residual*/);
+
+    // Signal stage 1 completion so stage 2 can start
+    stage_kernel.signal_stage1_complete();
+  }
+
+  // Stage 2: linear_gemm_tl_1_6144_1024_2 (on blocks 1-20)
+  if (stage_kernel.is_stage2_block()) {
+    // Wait for BOTH stage 0 (rms_norm) AND stage 1 to complete
+    stage_kernel.wait_all_previous_complete();
+
+    kernel::linear_gemm_tl_1_6144_1024_2<bfloat16_t, 256, 64, 16, 128, 1, 6144, 1024, 6144, 3, false>(
+      blockIdx.x, blockIdx.y, blockIdx.z,
+      mbarrier_mem,
+      A_desc,
+      B_desc,
+      nullptr,
+      C_desc,
+      1,
+      false/*residual*/);
+  }
 }
 // latency: 0.01266 ms vs [ref-0.01911 sim-1.0], idx: 31

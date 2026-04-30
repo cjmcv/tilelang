@@ -23,7 +23,7 @@ template <typename T,
     int PIPE_MAX = 3,
     bool FUSE_RES = false>
     __device__ __forceinline__ void linear_gemm_tl_1_151936_1024(const int bx, const int by, const int bz,
-                                                const CUtensorMap *A_desc, const CUtensorMap *B_desc, const void* __restrict__ residual_ptr, const CUtensorMap *C_desc, 
+                                                uint64_t* mbarrier_mem, const CUtensorMap *A_desc, const CUtensorMap *B_desc, const void* __restrict__ residual_ptr, const CUtensorMap *C_desc, 
                                                 int num_active_tokens,
                                                 bool residual) {
   // static_assert(THREAD_NUM==128);
@@ -36,7 +36,7 @@ template <typename T,
   float C_local[8];
   bfloat16_t A_local[8];
   bfloat16_t B_local[8];
-  __shared__ uint64_t mbarrier_mem[2];
+  // __shared__ uint64_t mbarrier_mem[2];
   auto mbarrier = reinterpret_cast<Barrier*>(mbarrier_mem);
   if (tl::tl_shuffle_elect<0>()) {
     tl::prefetch_tma_descriptor(*A_desc);

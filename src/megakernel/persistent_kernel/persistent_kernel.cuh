@@ -94,7 +94,7 @@ using namespace kernel;
 // #define MPK_ENABLE_VERBOSE
 __device__ __forceinline__ void
     _execute_task(TaskDesc const *task_desc,
-                  RuntimeConfig const &runtime_config);
+                  RuntimeConfig const &runtime_config, uint64_t* static_smem);
 
 __device__ __forceinline__ size_t get_event_gpu_id(EventId event_id) {
   return ((event_id >> 32) & 0xffff);
@@ -111,6 +111,9 @@ void static_persistent_kernel(RuntimeConfig config) {
   PROFILER_INIT(static_cast<uint64_t *>(config.profiler_buffer),
                 0, 1, (threadIdx.x % WORKER_NUM_THREADS == 0));
   #endif
+
+  __shared__ uint64_t mbarrier_mem[12];
+
   // int step = *config.step;
   const int worker_id = blockIdx.x;
   int task_num = config.static_worker_tasks_index[worker_id][0];
@@ -148,7 +151,7 @@ void static_persistent_kernel(RuntimeConfig config) {
       PROFILER_EVENT_START(task_desc->task_type, task_idx);
     }
   #endif
-    _execute_task(task_desc, config); 
+    _execute_task(task_desc, config, mbarrier_mem); 
   #ifdef MPK_ENABLE_PROFILING
     if (task_desc->task_type != TASK_TERMINATE) {
       PROFILER_EVENT_END(task_desc->task_type, task_idx);
@@ -387,12 +390,13 @@ extern "C" void init_persistent_kernel(int kernel_id,
     int wid = 0;
     for (int ei=0; ei<event_task_ids.size(); ei++) {
       int task_num = event_task_ids[ei].size();
+      printf("task_num: %d.\n", task_num);
       if (task_num == 0) continue;
         
       // // TODO: 使用配置表？或找到可自动化的方法
-      // int sm_cnt = 20; // 142
+      // // int sm_cnt = 20; // 142
       // int task_id = event_task_ids[ei][0];
-      // if (all_tasks[task_id].task_type == 120 && all_tasks[task_id].variant_id == 0) {
+      // if ((all_tasks[task_id].task_type == TASK_LINEAR || all_tasks[task_id].task_type == TASK_LINEAR_HOPPER) && all_tasks[task_id].variant_id == 0) {
       //   wid += 1; // assign_offset: 20 - 19(fused_layout);
       //   // wid += 78;   // 142 - 64(fused_layout);
       //   wid = wid % num_workers;
@@ -409,6 +413,25 @@ extern "C" void init_persistent_kernel(int kernel_id,
         wid = (wid + 1) % num_workers;
       }
     }
+
+    // // TODO:
+    // // 找到第一个任务的trigger_event作为基准
+    // int base_trigger_event = all_tasks[event_task_ids[0][0]].trigger_event;
+    // int post_task_id = 22;  // 第一个post_task对应的task id
+
+    // for (int ei = 0; ei < event_task_ids.size(); ei++) {
+    //   int task_num = event_task_ids[ei].size();
+    //   if (task_num == 0) continue;
+
+    //   for (int ti = 0; ti < task_num; ti++) {
+    //     int id = event_task_ids[ei][ti];
+    //     // 只过滤出trigger_event不同于基准的任务（即3-21）
+    //     if (all_tasks[id].trigger_event != base_trigger_event) {
+    //       all_tasks[id].post_task = &all_tasks[post_task_id];
+    //       post_task_id++;
+    //     }
+    //   }
+    // }
 
     // 前置依赖免检标记
     // TODO  
