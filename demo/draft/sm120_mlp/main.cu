@@ -90,10 +90,10 @@ int main(int argc, char **argv) {
     constexpr size_t GEMM1_SMEM_SIZE = 61440;
     constexpr int SILU_MUL_GRID_X = 48;
     constexpr int SILU_MUL_THREAD_NUM = 256;
-    constexpr size_t SILU_MUL_SMEM_SIZE = 12288;
+    constexpr size_t SILU_MUL_SMEM_SIZE = 6144;
     constexpr int GEMM2_GRID_X = 16;
     constexpr int GEMM2_THREAD_NUM = 256;
-    constexpr size_t GEMM2_SMEM_SIZE = 20480;
+    constexpr size_t GEMM2_SMEM_SIZE = 61440;
 
     printf("=== Fused MLP Demo ===\n");
     printf("MLP dimensions: hidden_size=%d, intermediate_size=%d, gated_up_size=%d\n",
