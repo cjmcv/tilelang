@@ -209,5 +209,14 @@ extern "C" int create_linear_gemm_add_tl_1_1024_3072(bfloat16_t* __restrict__ A,
 	return 0;
 }
 
-
+extern "C" __global__ void __launch_bounds__(256, 1) linear_gemm_add_tl(const CUtensorMap *A_desc,  const CUtensorMap *B_desc,  const CUtensorMap *C_desc, const void* __restrict__ R_ptr) {
+  kernel::linear_gemm_add_tl_1_1024_3072<bfloat16_t, 256, 64, 16, 128, 1, 1024, 3072, 1024, 3, true>(
+    blockIdx.x, blockIdx.y, blockIdx.z,
+    A_desc,
+    B_desc,
+    R_ptr,
+    C_desc,
+    1,
+    false/*residual*/);
+}
 // latency: 0 ms vs [ref-0 sim-0], idx: 46

@@ -107,3 +107,12 @@ __device__ __forceinline__ void silu_mul_kernel_1_3072(const int bx, const int b
 // layout: (48, 1, 1), (64, 16, 1)
 // block_dim=(256, 1, 1).
 // latency: 0 ms vs [ref-0 sim-0], idx: 0
+
+extern "C" __global__ void silu_mul_tl(void const *input_ptr, void *output_ptr);
+extern "C" __global__ void __launch_bounds__(256, 1) silu_mul_tl(void const *input_ptr, void *output_ptr) {
+  kernel::silu_mul_kernel_1_3072<bfloat16_t, 256, 64, 32, 1, 1, 3072, 6144, 3072>(
+    blockIdx.x, blockIdx.y, blockIdx.z,
+    input_ptr,
+    output_ptr,
+    1);
+}
