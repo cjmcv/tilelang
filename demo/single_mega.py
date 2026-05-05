@@ -547,7 +547,7 @@ def test_prefetch_weight(mk, max_batch_size, batch_size, N, K, spec_layout):
         output=rms_out,
         sync_mode=(0, 0, 0),
         layout=fused_layout,
-        fused_params=[99, 10, *extra_layout],
+        fused_params=[99, 11, *extra_layout],
         fused_tensor=w_linear,
     )
     

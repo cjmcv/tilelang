@@ -74,11 +74,12 @@ public:
     }
     else if (extra_func_id == 10) {
       // 权重预加载
-      // code.e("  kernel::prefetch_kernel<bfloat16_t, $>(", bgraph.thread_num);
-      // code.e("    task_desc->bx-$, task_desc->by, task_desc->bz,", bgraph.grid_dim.x-extra_bx);
-      // code.e("    runtime_config.layer_id,");
-      // code.e("    $);", input_str.c_str());
-
+      code.e("  kernel::prefetch_kernel<bfloat16_t, $>(", bgraph.thread_num);
+      code.e("    task_desc->bx-$, task_desc->by, task_desc->bz,", bgraph.grid_dim.x-extra_bx);
+      code.e("    runtime_config.layer_id,");
+      code.e("    $);", input_str.c_str());
+    }
+    else if (extra_func_id == 11) {
       bool with_residual = false;
       code.e("TaskDesc* post_task_desc = task_desc->post_task;");
       code.e("if (post_task_desc != nullptr) {");
@@ -99,7 +100,6 @@ public:
       } else {
         code.e("    false/*residual*/);}");
       }
-
     }
     code.e("  }");
   }
