@@ -14,13 +14,19 @@
 namespace kernel {
 
 template <typename T, int THREAD_NUM>
+__device__ __forceinline__ void debug_kernel(void *ptr) {
+  printf("%lld,", ptr);  
+}
+
+template <typename T, int THREAD_NUM>
 __device__ __forceinline__ void prefetch_kernel(const int bx, const int by, const int bz,
                                                 uint64_t* mbarrier_mem, const CUtensorMap *A_desc, const CUtensorMap *B_desc, 
                                                 const void* __restrict__ residual_ptr, const CUtensorMap *C_desc, 
                                                 int num_active_tokens,
                                                 bool residual) {
   // if (threadIdx.x == 0)
-  //   printf("prefetch_kernel(%d): %lld, %lld, %lld.\n", bx, A_desc, B_desc, C_desc);
+  //   printf("pre (%d, %d, %d <%d>)\n", bx,by,bz, blockIdx.x);
+  
   // const bfloat16_t* __restrict__ R = static_cast<const bfloat16_t*>(residual_ptr);
   // extern __shared__ __align__(1024) uchar buf_dyn_shmem[];
   // float C_local[8];

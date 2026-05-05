@@ -82,9 +82,13 @@ public:
     else if (extra_func_id == 11) {
       bool with_residual = false;
       code.e("TaskDesc* post_task_desc = task_desc->post_task;");
+
+      // code.e("kernel::debug_kernel<bfloat16_t, $>(", bgraph.thread_num);
+      // code.e("    post_task_desc);");
+
       code.e("if (post_task_desc != nullptr) {");
       code.e("kernel::prefetch_kernel<bfloat16_t, $>(", bgraph.thread_num);
-      code.e("    post_task_desc->bx-$, post_task_desc->by, post_task_desc->bz,", bgraph.grid_dim.x-extra_bx);
+      code.e("    post_task_desc->bx, post_task_desc->by, post_task_desc->bz,");
       code.e("    static_smem,"); // static_smem
       code.e("    post_task_desc->input_tma_desc_ptrs[0][0],");
       code.e("    post_task_desc->input_tma_desc_ptrs[1][0],");

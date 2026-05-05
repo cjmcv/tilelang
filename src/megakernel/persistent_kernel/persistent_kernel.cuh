@@ -517,16 +517,22 @@ extern "C" void init_persistent_kernel(int kernel_id,
              cudaMemcpyHostToDevice);
 
 #ifdef DEBUG_PREFETCH
-  // 为每个worker内的task按顺序设置post_task, 必须是device端内存
+  TaskDesc* d_all_tasks = global_runtime_config[kernel_id].all_tasks;
   for (int i = 0; i < num_workers; i++) {
-    int num = host_tasks_index[i][0];
-    for (int j = 0; j < num - 1; j++) {
-      int id = host_tasks_index[i][j+1];
-      int post_id = host_tasks_index[i][j+2];
-      all_tasks[id].post_task = &global_runtime_config[kernel_id].all_tasks[post_id];
-    }
+      int num = host_tasks_index[i][0];
+      for (int j = 0; j < num - 1; j++) {
+        int id = host_tasks_index[i][j+1];
+        int post_id = host_tasks_index[i][j+2];
+        
+        TaskDesc* post_task_device_addr = d_all_tasks + post_id;  // device 指针
+        cudaMemcpy(&d_all_tasks[id].post_task, 
+                  &post_task_device_addr, 
+                  sizeof(TaskDesc*), 
+                  cudaMemcpyHostToDevice);
+      }
   }
 #endif
+
 
   // Initialize all events
   global_runtime_config[kernel_id].num_events = (int)all_events.size();
