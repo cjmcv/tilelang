@@ -49,6 +49,7 @@ template <typename T,
   __syncthreads();
   if (128 <= ((int)threadIdx.x)) {
     tl::warpgroup_reg_dealloc<24>();
+    const dim3 blockIdx = tl::rasterization2DRow<10>();
     for (int k = 0; k < 8; ++k) {
       mbarrier[1].wait(((k & 1) ^ 1));
       if (tl::tl_shuffle_elect<128>()) {
@@ -65,6 +66,7 @@ template <typename T,
     }
   } else {
     tl::warpgroup_reg_alloc<240>();
+    const dim3 blockIdx = tl::rasterization2DRow<10>();
     #pragma unroll
     for (int i = 0; i < 4; ++i) {
       *(float2*)(C_local + (i * 2)) = make_float2(0x0p+0f/*0.000000e+00*/, 0x0p+0f/*0.000000e+00*/);
@@ -94,7 +96,7 @@ template <typename T,
 
 } // kernel
 // Strategy: linear_gemm_tl_1_151936_1024
-// selected_hparams: [16, 64, 128, 1, 0, 128, 0, False].
+// selected_hparams: [16, 64, 128, 1, 0, 128, <GemmWarpPolicy.FullRow: 1>, True].
 // smem: 20480 bytes.
 // use_cooperative_groups: 0.
 // layout: (2374, 1, 1), (64, 16, 128)
@@ -180,4 +182,4 @@ extern "C" int create_linear_gemm_tl_1_151936_1024(bfloat16_t* __restrict__ A, b
 }
 
 
-// latency: 0 ms vs [ref-0 sim-0], idx: -1
+// latency: 0 ms vs [ref-0 sim-0], idx: 34
