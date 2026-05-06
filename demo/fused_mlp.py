@@ -67,7 +67,7 @@ if __name__ == "__main__":
             output=rms_out,
             sync_mode=(0, 0, 0),
             layout=fused_layout,
-            fused_params=[99, 10, *prefetch_layout],
+            fused_params=[99, 11, *prefetch_layout],
             fused_tensor=prefetch_weight,
         )
     else:
@@ -104,7 +104,7 @@ if __name__ == "__main__":
             output=silu_mul_out,
             sync_mode=(0, 0, 0),
             layout=fused_layout,
-            fused_params=[99, 10, *prefetch_layout],
+            fused_params=[99, 11, *prefetch_layout],
             fused_tensor=prefetch_weight,
         )
     else:
@@ -124,7 +124,7 @@ if __name__ == "__main__":
         layout=layout.linear2_layout,
     )
 
-    layers.compile_load(enable_prefetch=False, is_no_compile=args.nc, output_dir=args.output_dir)
+    layers.compile_load(enable_prefetch=ENABLE_PREFETCH, is_no_compile=args.nc, output_dir=args.output_dir)
     
     ###
     def ref_run():

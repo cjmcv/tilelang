@@ -403,6 +403,8 @@ extern "C" void init_persistent_kernel(int kernel_id,
     // 如： w0 0 3 6 
     //      w1 1 4 7
     //      w2 2 5 8
+    int pre_task_num = 0;
+    int pre_task_start_wid = 0; // 前置任务从哪个worker id开始，则后置需要跳过对应worker id。
     int wid = 0;
     for (int ei=0; ei<event_task_ids.size(); ei++) {
       int task_num = event_task_ids[ei].size();
@@ -414,10 +416,12 @@ extern "C" void init_persistent_kernel(int kernel_id,
       int task_id = event_task_ids[ei][0];
       if (all_tasks[task_id].task_type == TASK_LINEAR || all_tasks[task_id].task_type == TASK_LINEAR_WITH_RESIDUAL || 
           all_tasks[task_id].task_type == TASK_LINEAR_HOPPER || all_tasks[task_id].task_type == TASK_LINEAR_WITH_RESIDUAL_HOPPER) {
-        wid = event_task_ids[ei-1].size() - task_num; // (前置任务数+预取任务数) - 当前任务数 = 前置实际任务数 = 当前任务需要跳过的worker数
+        wid = pre_task_start_wid + pre_task_num - task_num; // (前置任务数+预取任务数) - 当前任务数 = 前置实际任务数 = 当前任务需要跳过的worker数
         // wid += 74;   // 142 - 64(fused_layout);
         wid = wid % num_workers;
       }
+      pre_task_start_wid = wid;
+      pre_task_num = task_num;
 #endif
       //////////////////////////////////////
 
