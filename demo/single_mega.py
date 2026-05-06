@@ -565,7 +565,7 @@ def test_prefetch_weight(mk, max_batch_size, batch_size, N, K, spec_layout):
         sync_mode=(0, 1, 0), # y轴式，表示producer只有1个，对应前置算子的block数量
         layout=spec_layout,
     )
-    layers.compile_load(is_no_compile=args.nc, output_dir=args.output_dir)
+    layers.compile_load(enable_prefetch=True, is_no_compile=args.nc, output_dir=args.output_dir)
     
     def torch_ref():
         O1 = TorchRef.rms_norm(x_torch[:batch_size], w_rms_norm_torch)

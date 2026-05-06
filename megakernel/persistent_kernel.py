@@ -126,6 +126,7 @@ def get_compile_command(
     mpi_lib_path,
     py_so_path,
     profiling,
+    enable_prefetch,
     use_nvshmem,
     num_workers=None,
     num_local_schedulers=None,
@@ -182,6 +183,9 @@ def get_compile_command(
     else:
         flags = flags + ["-DENABLE_QWEN3_06B"]
         print(f"Do not supported model_tag:{model_tag}, use default flags")
+        
+    if enable_prefetch:
+        flags = flags + ["-DENABLE_PREFETCH"]
         
     if use_nvshmem:
         nvshmem_cmd = [
@@ -554,6 +558,8 @@ class PersistentKernel:
         output: DTensor,
         sync_mode: tuple, 
         layout: tuple,
+        fused_params: list = None, # flag 99, funcid, layout[3]
+        fused_tensor: DTensor = None,
     ):
         grid_dim, tile_dim = layout
         # Currently assume that input/output
@@ -562,8 +568,12 @@ class PersistentKernel:
         tb_graph = TBGraph(CyTBGraph(grid_dim, tile_dim, self.thread_num)) # CJM_TODO: thread_num应由megakernel初始化时指定，不能更改
         tb_graph.new_input(input, sync_mode)
         tb_graph.new_input(output, (-1, -1, -1))
-        self.kn_graph.customized([input, output], tb_graph)
-        self.kn_graph.register_task("silu_mul" if self.target_cc == 90 else "silu_mul")
+        if fused_tensor is not None:
+            tb_graph.new_input(fused_tensor, (-1, -1, -1))
+            self.kn_graph.customized([input, output, fused_tensor], tb_graph)
+        else:
+            self.kn_graph.customized([input, output], tb_graph)
+        self.kn_graph.register_task("silu_mul", (fused_params if fused_params is not None else []))
 
     def silu_mul_linear_with_residual_layer(
         self,
@@ -612,6 +622,7 @@ class PersistentKernel:
     def compile(self, **kwargs):
         assert not self._is_compiled
         
+        enable_prefetch = kwargs.get("enable_prefetch", False)
         output_dir = kwargs.get("output_dir", None)
         Path(output_dir).mkdir(parents=True, exist_ok=True)
         
@@ -749,6 +760,7 @@ class PersistentKernel:
             mpi_lib_path=MPI_LIB_PATH,
             py_so_path=so_path,
             profiling=True if self.profiler_tensor is not None else False,
+            enable_prefetch=enable_prefetch,
             use_nvshmem=self.use_nvshmem,
             num_workers=self.num_workers,
             num_local_schedulers=self.num_local_schedulers, 

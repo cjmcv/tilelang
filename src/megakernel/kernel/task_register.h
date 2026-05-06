@@ -46,7 +46,7 @@ public:
     return -1;
   }
 
-  void append_fused_func(tb::TBGraph const &bgraph, std::vector<int> const &params, int fused_params_start_id, megakernel::transpiler::CodeKeeper &code, std::string input_str = "") {
+  void append_fused_func(tb::TBGraph const &bgraph, std::vector<int> const &params, int fused_params_start_id, megakernel::transpiler::CodeKeeper &code, int type=0, int M=0, int N=0, std::string input_str = "") {
     if (fused_params_start_id == -1) { return ; }
 
     int extra_func_id = params[fused_params_start_id];
@@ -74,7 +74,7 @@ public:
     }
     else if (extra_func_id == 10) {
       // 权重预加载
-      code.e("  kernel::prefetch_kernel<bfloat16_t, $>(", bgraph.thread_num);
+      code.e("  kernel::prefetch_kernel<bfloat16_t, $, $, $, $>(", bgraph.thread_num, type, M, N);
       code.e("    task_desc->bx-$, task_desc->by, task_desc->bz,", bgraph.grid_dim.x-extra_bx);
       code.e("    runtime_config.layer_id,");
       code.e("    $);", input_str.c_str());
@@ -87,7 +87,7 @@ public:
       // code.e("    post_task_desc);");
 
       code.e("if (post_task_desc != nullptr) {");
-      code.e("kernel::prefetch_kernel<bfloat16_t, $>(", bgraph.thread_num);
+      code.e("kernel::prefetch_kernel<bfloat16_t, $, $, $, $>(", bgraph.thread_num, type, M, N);
       code.e("    post_task_desc->bx, post_task_desc->by, post_task_desc->bz,");
       code.e("    static_smem,"); // static_smem
       code.e("    post_task_desc->input_tma_desc_ptrs[0][0],");
@@ -277,7 +277,7 @@ public:
     code.e("    task_desc->output_ptrs[0],");
     code.e("    1e-12f);");
     if (fused_params_start_id != -1) {
-      append_fused_func(bgraph, params, fused_params_start_id, code, "task_desc->output_ptrs[1]");
+      append_fused_func(bgraph, params, fused_params_start_id, code, TASK_RMS_NORM, batch_size, hidden_dim, "task_desc->output_ptrs[1]");
     }
     return register_task_variant(TASK_RMS_NORM, code.to_string());
   }
@@ -454,16 +454,25 @@ public:
     }
   }
 
-  int register_silu_mul_task(tb::TBGraph const &bgraph, std::vector<int> const &params){
-    assert(params.size() == 0);
+  int register_silu_mul_task(tb::TBGraph const &bgraph, std::vector<int> const &params, size_t *num_inputs, size_t *num_outputs){
+    int fused_params_start_id = -1;
+    int extra_tensors = 0;
+    if (params.size() != 0) {
+      fused_params_start_id = get_fused_start_id(params);
+      int extra_func_id = params[fused_params_start_id];
+      if (extra_func_id == 10) { // 10: 表示扩展的功能是权重预加载
+        extra_tensors = 1;
+      }
+    }
+    
     int batch_size = 0, output_size = 0, input_stride, output_stride;
     std::vector<tb::TBOperator *> input_ops;
     std::vector<tb::TBOperator *> output_ops;
-    int num_inputs = 1;
-    int num_outputs = 1;
-    assert(bgraph.operators.size() == (size_t)num_inputs + num_outputs);
+    *num_inputs = 1;
+    *num_outputs = 1 + extra_tensors;
+    // assert(bgraph.operators.size() == (size_t)num_inputs + num_outputs);
     for (auto const &op : bgraph.operators) {
-      if (input_ops.size() < (size_t)num_inputs) {
+      if (input_ops.size() < *num_inputs) {
         input_ops.push_back(static_cast<tb::TBOperator *>(op));
       } else {
         output_ops.push_back(static_cast<tb::TBOperator *>(op));
@@ -494,6 +503,9 @@ public:
     code.e("    task_desc->input_ptrs[0],");
     code.e("    task_desc->output_ptrs[0],");
     code.e("    runtime_config.batch_size);");
+    if (fused_params_start_id != -1) {
+      append_fused_func(bgraph, params, fused_params_start_id, code, TASK_SILU_MUL, batch_size, output_size, "task_desc->output_ptrs[1]");
+    }
     return register_task_variant(TASK_SILU_MUL, code.to_string());
   }
 

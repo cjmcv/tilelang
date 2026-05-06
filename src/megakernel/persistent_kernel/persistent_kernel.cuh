@@ -29,8 +29,6 @@
 #include <unistd.h>
 #include <vector>
 
-#define DEBUG_PREFETCH 1
-
 #if defined(MEGAKERNEL_GRACE_HOPPER)
 #include "tasks/sm_90/task_header.cuh"
 #elif defined(MEGAKERNEL_GRACE_BLACKWELL)
@@ -411,13 +409,13 @@ extern "C" void init_persistent_kernel(int kernel_id,
       printf("task_num: %d.\n", task_num);
       if (task_num == 0) continue;
         
-#ifdef DEBUG_PREFETCH
-      // TODO: 使用配置表？或找到可自动化的方法
-      // int sm_cnt = 20; // 142
+#ifdef ENABLE_PREFETCH
+      // 只支持sm富裕的情况
       int task_id = event_task_ids[ei][0];
-      if ((all_tasks[task_id].task_type == TASK_LINEAR || all_tasks[task_id].task_type == TASK_LINEAR_HOPPER) && all_tasks[task_id].variant_id == 0) {
-        // wid += 1; // assign_offset: 20 - 19(fused_layout);
-        wid += 74;   // 142 - 64(fused_layout);
+      if (all_tasks[task_id].task_type == TASK_LINEAR || all_tasks[task_id].task_type == TASK_LINEAR_WITH_RESIDUAL || 
+          all_tasks[task_id].task_type == TASK_LINEAR_HOPPER || all_tasks[task_id].task_type == TASK_LINEAR_WITH_RESIDUAL_HOPPER) {
+        wid = event_task_ids[ei-1].size() - task_num; // (前置任务数+预取任务数) - 当前任务数 = 前置实际任务数 = 当前任务需要跳过的worker数
+        // wid += 74;   // 142 - 64(fused_layout);
         wid = wid % num_workers;
       }
 #endif
@@ -516,7 +514,7 @@ extern "C" void init_persistent_kernel(int kernel_id,
              all_tasks.size() * sizeof(TaskDesc),
              cudaMemcpyHostToDevice);
 
-#ifdef DEBUG_PREFETCH
+#ifdef ENABLE_PREFETCH
   TaskDesc* d_all_tasks = global_runtime_config[kernel_id].all_tasks;
   for (int i = 0; i < num_workers; i++) {
       int num = host_tasks_index[i][0];

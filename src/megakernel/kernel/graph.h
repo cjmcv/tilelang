@@ -226,8 +226,8 @@ public:
       int variant_id = task_register->register_linear_task(customized->bgraph, params, true /*with_residual*/, false /*with_silu_mul*/);
       task_config[op] = std::make_tuple(3, 1, TASK_LINEAR_WITH_RESIDUAL, variant_id);
     } else if (name == "silu_mul") {
-      int variant_id = task_register->register_silu_mul_task(customized->bgraph, params);
-      task_config[op] = std::make_tuple(1, 1, TASK_SILU_MUL, variant_id);
+      int variant_id = task_register->register_silu_mul_task(customized->bgraph, params, &num_inputs, &num_outputs);
+      task_config[op] = std::make_tuple(num_inputs, num_outputs, TASK_SILU_MUL, variant_id);
     } else if (name == "silu_mul_linear_with_residual") {
       int variant_id = task_register->register_silu_mul_linear_with_residual_task(customized->bgraph, params);
       task_config[op] = std::make_tuple(3, 1, TASK_SILU_MUL_LINEAR_WITH_RESIDUAL, variant_id);
@@ -357,6 +357,7 @@ private:
     
     int fence_mode = input_map.x;
     int deps_num = input_map.y; // 表示producer的数据，用于区分实际的生产节点和融合的辅助节点。辅助节点对后面任务无依赖关系。
+    // printf("deps_num: %d = (%d,%d,%d) vs (%d,%d,%d).\n", deps_num, producer_grid_dim.x, producer_grid_dim.y, producer_grid_dim.z, consumer_grid_dim.x, consumer_grid_dim.y, consumer_grid_dim.z);
     printf("input_map: (%d, %d, %d).\n", input_map.x, input_map.y, input_map.z); 
     std::vector<std::pair<std::vector<dim3>, std::vector<dim3>>> pv;
     size_t event_num = 1;

@@ -99,7 +99,8 @@ def display_task_graph(task_graph_json_filename: str, use_xdot: bool) -> None:
             dependent_event_idx = get_index_from_id(task['dependent_event'])
             trigger_event_idx = get_index_from_id(task['trigger_event'])
             g.edge(f"event_{dependent_event_idx}", f"task_{task_idx}")
-            g.edge(f"task_{task_idx}", f"event_{trigger_event_idx}")
+            if (base_event != trigger_event_idx): # 指向 base_event 的将不展示
+                g.edge(f"task_{task_idx}", f"event_{trigger_event_idx}")
 
         dot_filename = task_graph_json_filename.replace(".json", ".dot")
         g.save(dot_filename)

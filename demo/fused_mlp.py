@@ -6,7 +6,7 @@ import megakernel as mi
 from common.pkt_util import TorchRef, PerfReporter, Qwen3Info
 from common.mk_layers import MkLayers
 
-WITH_RESIDUAL = 1
+ENABLE_PREFETCH = True
 
 if __name__ == "__main__":
     max_batch_size = 1
@@ -56,13 +56,28 @@ if __name__ == "__main__":
     x_residual = x
 
     rms_out = mk.new_tensor(dims=(max_batch_size, hidden_size), dtype=mi.bfloat16, name="rms_out", io_category="cuda_tensor")
-    mk.rmsnorm_layer(
-        input=x,
-        weight=w_rms_norm,
-        output=rms_out,
-        sync_mode=(0, 0, 0),
-        layout=layout.rmsnorm_layout,
-    )
+    
+    if ENABLE_PREFETCH:
+        prefetch_weight = w_gatedup
+        prefetch_layout = (layout.linear1_layout[0][0], 0, 0) # 即rms_norm后还剩下多少的sm可用于塞入预取
+        fused_layout = tuple(a + b for a, b in zip(layout.rmsnorm_layout[0], prefetch_layout)), layout.rmsnorm_layout[1]
+        mk.rmsnorm_layer(
+            input=x,
+            weight=w_rms_norm,
+            output=rms_out,
+            sync_mode=(0, 0, 0),
+            layout=fused_layout,
+            fused_params=[99, 10, *prefetch_layout],
+            fused_tensor=prefetch_weight,
+        )
+    else:
+        mk.rmsnorm_layer(
+            input=x,
+            weight=w_rms_norm,
+            output=rms_out,
+            sync_mode=(0, 0, 0),
+            layout=layout.rmsnorm_layout,
+        )
 
     # mlp_mid_torch = torch.zeros((max_batch_size, intermediate_size*2), dtype=torch.bfloat16, device="cuda")
     # mlp_mid = mk.attach_input(torch_tensor=mlp_mid_torch, name="mlp_mid")
@@ -71,7 +86,7 @@ if __name__ == "__main__":
         input=rms_out,
         weight=w_gatedup,
         output=mlp_mid,
-        sync_mode=(0, 0, 0),
+        sync_mode=(0, layout.rmsnorm_layout[0][0], 0) if ENABLE_PREFETCH else (0, 0, 0),
         layout=layout.linear1_layout,
     )
     
@@ -79,40 +94,41 @@ if __name__ == "__main__":
     # silu_mul_out = mk.attach_input(torch_tensor=silu_mul_out_torch, name="silu_mul_out")
     # mlp_out_torch = silu_mul_out_torch
     silu_mul_out = mk.new_tensor(dims=(max_batch_size, intermediate_size), dtype=mi.bfloat16, name="silu_mul_out", io_category="cuda_tensor")
-    mk.silu_mul_layer(
-        input=mlp_mid,
-        output=silu_mul_out,
-        sync_mode=(2, 0, 0),
-        layout=layout.silu_mul_layout,
-        # grid_dim=(2, 4, 1), tile_dim=(128, 1, 1),
-        # sync_mode=(2, 0, 0),
-    )
-    if WITH_RESIDUAL:
-        mk.linear_with_residual_layer(
-            input=silu_mul_out,
-            weight=w_down_proj,
-            residual=x_residual,
-            output=mlp_out,
+    if ENABLE_PREFETCH:
+        prefetch_weight = w_down_proj
+        prefetch_layout = (layout.linear2_layout[0][0], 0, 0)
+        fused_layout = tuple(a + b for a, b in zip(layout.silu_mul_layout[0], prefetch_layout)), layout.silu_mul_layout[1]
+        print("fused_layout", fused_layout)
+        mk.silu_mul_layer(
+            input=mlp_mid,
+            output=silu_mul_out,
             sync_mode=(0, 0, 0),
-            layout=layout.linear2_layout,
+            layout=fused_layout,
+            fused_params=[99, 10, *prefetch_layout],
+            fused_tensor=prefetch_weight,
         )
     else:
-        mk.linear_layer(
-            input=silu_mul_out,
-            weight=w_down_proj,
-            output=mlp_out,
-            sync_mode=(0, 0, 0),
-            layout=layout.inear2_layout,
+        mk.silu_mul_layer(
+            input=mlp_mid,
+            output=silu_mul_out,
+            sync_mode=(2, 0, 0),
+            layout=layout.silu_mul_layout,
         )
+        
+    mk.linear_with_residual_layer(
+        input=silu_mul_out,
+        weight=w_down_proj,
+        residual=x_residual,
+        output=mlp_out,
+        sync_mode=(0, layout.silu_mul_layout[0][0], 0) if ENABLE_PREFETCH else (0, 0, 0),
+        layout=layout.linear2_layout,
+    )
 
-    layers.compile_load(is_no_compile=args.nc, output_dir=args.output_dir)
+    layers.compile_load(enable_prefetch=False, is_no_compile=args.nc, output_dir=args.output_dir)
     
     ###
     def ref_run():
-        if WITH_RESIDUAL:
-            return TorchRef.norm_mlp(x_torch[:batch_size], w_rms_norm_torch, w_gatedup_torch, w_down_proj_torch) + x_torch[:batch_size]
-        else:
-            return TorchRef.norm_mlp(x_torch[:batch_size], w_rms_norm_torch, w_gatedup_torch, w_down_proj_torch)
+        return TorchRef.norm_mlp(x_torch[:batch_size], w_rms_norm_torch, w_gatedup_torch, w_down_proj_torch) + x_torch[:batch_size]
 
     graph, ref_output = TorchRef.compile_capture(ref_run, is_compile=False)
     

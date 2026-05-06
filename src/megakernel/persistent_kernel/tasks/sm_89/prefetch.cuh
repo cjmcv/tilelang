@@ -13,7 +13,7 @@
 
 namespace kernel {
 
-template <typename T, int THREAD_NUM>
+template <typename T, int THREAD_NUM, int TYPE, int M, int N>
 __device__ __forceinline__ void prefetch_kernel(const int bx, const int by, const int bz,
                                             const int layer_id, 
                                             const void* __restrict__ weight_ptr) {

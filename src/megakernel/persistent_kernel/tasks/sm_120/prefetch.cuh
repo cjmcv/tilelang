@@ -13,12 +13,12 @@
 
 namespace kernel {
 
-template <typename T, int THREAD_NUM>
+template <typename T, int THREAD_NUM, int TYPE, int M, int N>
 __device__ __forceinline__ void debug_kernel(void *ptr) {
   printf("%lld,", ptr);  
 }
 
-template <typename T, int THREAD_NUM>
+template <typename T, int THREAD_NUM, int TYPE, int M, int N>
 __device__ __forceinline__ void prefetch_kernel(const int bx, const int by, const int bz,
                                                 uint64_t* mbarrier_mem, const CUtensorMap *A_desc, const CUtensorMap *B_desc, 
                                                 const void* __restrict__ residual_ptr, const CUtensorMap *C_desc, 
@@ -43,23 +43,23 @@ __device__ __forceinline__ void prefetch_kernel(const int bx, const int by, cons
   tl::fence_barrier_init();
   __syncthreads();
 
-  if (128 <= ((int)threadIdx.x)) {
-    tl::warpgroup_reg_dealloc<24>();
-    for (int k = 0; k < 1; ++k) {
-      mbarrier[((k % 3) + 3)].wait((((k % 6) / 3) ^ 1));
-      if (tl::tl_shuffle_elect<128>()) {
-        mbarrier[(k % 3)].expect_transaction(4096);
-        tl::fence_proxy_async();
-        tl::tma_load(*A_desc, mbarrier[(k % 3)], (&(((bfloat16_t*)buf_dyn_shmem)[(((k % 3) * 2048) + 24576)])), (k * 128), 0);
-        tl::tma_load(*A_desc, mbarrier[(k % 3)], (&(((bfloat16_t*)buf_dyn_shmem)[(((k % 3) * 2048) + 25600)])), ((k * 128) + 64), 0);
-        mbarrier[(k % 3)].expect_transaction(16384);
-        tl::fence_proxy_async();
-        tl::tma_load(*B_desc, mbarrier[(k % 3)], (&(((bfloat16_t*)buf_dyn_shmem)[((k % 3) * 8192)])), (k * 128), (((int)bx) * 64));
-        tl::tma_load(*B_desc, mbarrier[(k % 3)], (&(((bfloat16_t*)buf_dyn_shmem)[(((k % 3) * 8192) + 4096)])), ((k * 128) + 64), (((int)bx) * 64));
-      }
-      mbarrier[(k % 3)].arrive();
-    }
-  }
+  // if (128 <= ((int)threadIdx.x)) {
+  //   tl::warpgroup_reg_dealloc<24>();
+  //   for (int k = 0; k < 1; ++k) {
+  //     mbarrier[((k % 3) + 3)].wait((((k % 6) / 3) ^ 1));
+  //     if (tl::tl_shuffle_elect<128>()) {
+  //       mbarrier[(k % 3)].expect_transaction(4096);
+  //       tl::fence_proxy_async();
+  //       tl::tma_load(*A_desc, mbarrier[(k % 3)], (&(((bfloat16_t*)buf_dyn_shmem)[(((k % 3) * 2048) + 24576)])), (k * 128), 0);
+  //       tl::tma_load(*A_desc, mbarrier[(k % 3)], (&(((bfloat16_t*)buf_dyn_shmem)[(((k % 3) * 2048) + 25600)])), ((k * 128) + 64), 0);
+  //       mbarrier[(k % 3)].expect_transaction(16384);
+  //       tl::fence_proxy_async();
+  //       tl::tma_load(*B_desc, mbarrier[(k % 3)], (&(((bfloat16_t*)buf_dyn_shmem)[((k % 3) * 8192)])), (k * 128), (((int)bx) * 64));
+  //       tl::tma_load(*B_desc, mbarrier[(k % 3)], (&(((bfloat16_t*)buf_dyn_shmem)[(((k % 3) * 8192) + 4096)])), ((k * 128) + 64), (((int)bx) * 64));
+  //     }
+  //     mbarrier[(k % 3)].arrive();
+  //   }
+  // }
 }
 
 } // namespace kernel
