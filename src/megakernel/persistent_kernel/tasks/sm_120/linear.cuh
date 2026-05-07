@@ -3,6 +3,8 @@
 #ifdef ENABLE_QWEN3_06B
 #include "m1/linear_gemm_tl_1_6144_1024.cuh"
 #include "m1/linear_gemm_add_tl_1_1024_3072.cuh"
+// #include "m1/linear_gemm_tl_1_6144_1024_prefetch.cuh"
+// #include "m1/linear_gemm_add_tl_1_1024_3072_prefetch.cuh"
 // attn
 #include "m1/linear_gemm_tl_1_4096_1024.cuh"
 #include "m1/linear_gemm_add_tl_1_1024_2048.cuh"
