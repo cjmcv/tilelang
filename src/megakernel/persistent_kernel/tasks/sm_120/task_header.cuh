@@ -56,7 +56,6 @@ private:
 __host__ void create_linear_gemm_cutensor(int M, int N, int K,
                                           void* __restrict__ A, void* __restrict__ B, void* __restrict__ R, void* __restrict__ C,
                                           CUtensorMap* out_A_desc, CUtensorMap* out_B_desc, CUtensorMap* out_C_desc, CUtensorMap* out_R_desc, bool to_device) {
-#ifdef ENABLE_PREFETCH
   if (M==1) {
     // FUSE_RES == true
     if (N == 1024 && K == 3072) {
@@ -73,11 +72,9 @@ __host__ void create_linear_gemm_cutensor(int M, int N, int K,
       create_linear_gemm_tl_1_4096_1024((bfloat16_t*)A, (bfloat16_t*)B, (bfloat16_t*)C, out_A_desc, out_B_desc, out_C_desc, to_device);
     }
   }
-#endif 
 }
 
 __host__ inline void create_tma_desc_by_task(FullTaskDesc &task_desc) {
-#ifdef ENABLE_PREFETCH
   switch (task_desc.task_type) {
     case TASK_LINEAR_HOPPER:
     case TASK_LINEAR_WITH_RESIDUAL_HOPPER: {
@@ -113,7 +110,6 @@ __host__ inline void create_tma_desc_by_task(FullTaskDesc &task_desc) {
     default:
       printf("create_tma_desc_by_task: %d is not supported.\n", task_desc.task_type);
   }
-#endif 
 }
 
 } // runtime
