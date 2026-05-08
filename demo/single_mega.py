@@ -539,16 +539,17 @@ def test_prefetch_weight(mk, max_batch_size, batch_size, N, K, spec_layout):
     w_linear = mk.attach_input(torch_tensor=w_torch, name="w")
     linear_out = mk.attach_input(torch_tensor=out_torch, name="linear_out")
     
-    extra_layout = (96, 0, 0) # 即rms_norm后还剩下多少的sm可用于塞入预取
-    fused_layout = tuple(a + b for a, b in zip(layout.rmsnorm_layout[0], extra_layout)), layout.rmsnorm_layout[1]
+    prefetch_weight = w_linear
+    prefetch_layout = (layout.linear1_layout[0][0], 0, 0) # 即rms_norm后还剩下多少的sm可用于塞入预取
+    fused_layout = tuple(a + b for a, b in zip(layout.rmsnorm_layout[0], prefetch_layout)), layout.rmsnorm_layout[1]
     mk.rmsnorm_layer(
         input=x,
         weight=w_rms_norm,
         output=rms_out,
         sync_mode=(0, 0, 0),
         layout=fused_layout,
-        fused_params=[99, 11, *extra_layout],
-        fused_tensor=w_linear,
+        fused_params=[99, 11, *prefetch_layout],
+        fused_tensor=prefetch_weight,
     )
     
     # mk.rmsnorm_layer(
