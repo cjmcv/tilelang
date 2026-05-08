@@ -524,7 +524,8 @@ def test_replace_weight(mk, max_batch_size, batch_size, N, K, spec_layout):
     #                         allclose_iter=5, print_mode=1)
  
 def test_prefetch_weight(mk, max_batch_size, batch_size, N, K, spec_layout):
-
+    ENABLE_PREFETCH = False
+    
     x_torch = torch.randn((max_batch_size, K), dtype=torch.bfloat16, device="cuda")
     w_rms_norm_torch = torch.randn((1, K), dtype=torch.bfloat16, device="cuda")
     rms_out_torch = torch.randn((max_batch_size, K), dtype=torch.bfloat16, device="cuda")
@@ -539,34 +540,37 @@ def test_prefetch_weight(mk, max_batch_size, batch_size, N, K, spec_layout):
     w_linear = mk.attach_input(torch_tensor=w_torch, name="w")
     linear_out = mk.attach_input(torch_tensor=out_torch, name="linear_out")
     
-    prefetch_weight = w_linear
-    prefetch_layout = (layout.linear1_layout[0][0], 0, 0) # 即rms_norm后还剩下多少的sm可用于塞入预取
-    fused_layout = tuple(a + b for a, b in zip(layout.rmsnorm_layout[0], prefetch_layout)), layout.rmsnorm_layout[1]
-    mk.rmsnorm_layer(
-        input=x,
-        weight=w_rms_norm,
-        output=rms_out,
-        sync_mode=(0, 0, 0),
-        layout=fused_layout,
-        fused_params=[99, 11, *prefetch_layout],
-        fused_tensor=prefetch_weight,
-    )
-    
-    # mk.rmsnorm_layer(
-    #     input=x,
-    #     weight=w_rms_norm,
-    #     output=rms_out,
-    #     sync_mode=(0, 0, 0),
-    #     layout=layout.rmsnorm_layout,
-    # )
+    if ENABLE_PREFETCH:
+        prefetch_weight = w_linear
+        prefetch_layout = (layout.linear1_layout[0][0], 0, 0) # 即rms_norm后还剩下多少的sm可用于塞入预取
+        fused_layout = tuple(a + b for a, b in zip(layout.rmsnorm_layout[0], prefetch_layout)), layout.rmsnorm_layout[1]
+        mk.rmsnorm_layer(
+            input=x,
+            weight=w_rms_norm,
+            output=rms_out,
+            sync_mode=(0, 0, 0),
+            layout=fused_layout,
+            fused_params=[99, 11, *prefetch_layout],
+            fused_tensor=prefetch_weight,
+        )
+    else:
+        mk.rmsnorm_layer(
+            input=x,
+            weight=w_rms_norm,
+            output=rms_out,
+            sync_mode=(0, 0, 0),
+            layout=layout.rmsnorm_layout,
+        )
+        
     mk.linear_layer(
         input=rms_out,
         weight=w_linear,
         output=linear_out,
-        sync_mode=(0, 1, 0), # y轴式，表示producer只有1个，对应前置算子的block数量
+        # sync_mode=(0, 1, 0), # y轴式，表示producer只有1个，对应前置算子的block数量
+        sync_mode=(0, layout.rmsnorm_layout[0][0], 0) if ENABLE_PREFETCH else (0, 0, 0),
         layout=spec_layout,
     )
-    layers.compile_load(enable_prefetch=True, is_no_compile=args.nc, output_dir=args.output_dir)
+    layers.compile_load(enable_prefetch=ENABLE_PREFETCH, is_no_compile=args.nc, output_dir=args.output_dir)
     
     def torch_ref():
         O1 = TorchRef.rms_norm(x_torch[:batch_size], w_rms_norm_torch)

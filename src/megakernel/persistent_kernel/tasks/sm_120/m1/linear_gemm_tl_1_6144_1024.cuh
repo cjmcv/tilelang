@@ -184,4 +184,4 @@ extern "C" int create_linear_gemm_tl_1_6144_1024(bfloat16_t* __restrict__ A, bfl
 }
 
 
-// latency: 0 ms vs [ref-0 sim-0], idx: 45
+// latency: 0.01392 ms vs [ref-0 sim-0], idx: 45
