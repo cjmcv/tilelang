@@ -6,7 +6,7 @@ import megakernel as mi
 from common.pkt_util import TorchRef, PerfReporter, Qwen3Info
 from common.mk_layers import MkLayers
 
-ENABLE_PREFETCH = True
+ENABLE_PREFETCH = False
 
 if __name__ == "__main__":
     max_batch_size = 1
@@ -111,7 +111,7 @@ if __name__ == "__main__":
         mk.silu_mul_layer(
             input=mlp_mid,
             output=silu_mul_out,
-            sync_mode=(2, 0, 0),
+            sync_mode=(0, 0, 0), # (2, 0, 0)
             layout=layout.silu_mul_layout,
         )
         
@@ -145,3 +145,7 @@ if __name__ == "__main__":
         reporter.generate_report(target_func, torch_ref,
                                 warnup_iter=100, test_iter=200, 
                                 allclose_iter=5, print_mode=1)
+    else:
+        for i in range(100):
+            torch_ref()
+        target_func()

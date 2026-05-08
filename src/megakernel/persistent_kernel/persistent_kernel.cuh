@@ -37,21 +37,11 @@
 #include "tasks/sm_89/task_header.cuh"
 #endif
 
-// #ifdef MPK_ENABLE_TMA
-// #include "tma.cuh"
-// #endif
-
 #define LIKELY(x)       __builtin_expect(!!(x), 1)
 #define UNLIKELY(x)     __builtin_expect(!!(x), 0)
 
-// using bfloat16 = type::bfloat16_t;
 using namespace megakernel::runtime;
 using namespace kernel;
-// Configurations for the MPK runtime
-// #define MPK_MAX_NUM_BATCHED_REQUESTS 16
-// #define MPK_MAX_NUM_BATCHED_TOKENS 64
-// #define MPK_MAX_NUM_PAGES 1024
-// #define MPK_PAGE_SIZE 64
 
 #if defined(MEGAKERNEL_GRACE_HOPPER)
 #define WORKER_NUM_THREADS 256
@@ -122,19 +112,19 @@ void static_persistent_kernel(RuntimeConfig config) {
   for (int i = 0; i < task_num ; i++) {
     int task_idx = task_ids[i]; // worker_id * 9 + i;
     TaskDesc *task_desc = &config.all_tasks[task_idx];
-    size_t event_index = get_event_position_index(task_desc->dependent_event);
-    EventDesc *dep_event_desc = &config.all_events[event_index];
+    const EventId dependent_event_id = task_desc->dependent_event;
+    const EventId trigger_event_id = task_desc->trigger_event;
+
     // if ((task_desc->task_type != TASK_LINEAR_HOPPER && threadIdx.x == 0) || 
     //    (task_desc->task_type == TASK_LINEAR_HOPPER && threadIdx.x == 128) ) {
-    if (threadIdx.x == 0) {
-      // printf("step: %d.\n", *config.step);
-      if (task_desc->dependent_event != EVENT_INVALID_ID) {
+    if (dependent_event_id != EVENT_INVALID_ID) {
+      if (threadIdx.x == 0) {
+        // printf("%d.", dependent_event_id);
         // Wait until the event has been triggered enough times
-        EventId event_id = task_desc->dependent_event;
         #ifndef NDEBUG
-        assert(get_event_gpu_id(event_id) == config.my_gpu_id);
+        assert(get_event_gpu_id(dependent_event_id) == config.my_gpu_id);
         #endif
-        size_t event_index = get_event_position_index(event_id);
+        size_t event_index = get_event_position_index(dependent_event_id);
         
         EventCounter needed_counts = static_cast<EventCounter>(config.all_event_num_triggers[event_index]);
         EventCounter actual_counts = 0;
@@ -145,22 +135,9 @@ void static_persistent_kernel(RuntimeConfig config) {
           __nanosleep(2);
         }
       }
+      // 其他线程需要等到tid0拿到标志后才能往下执行。否则没拿到标志，即前置任务没算完，其他线程就抢跑了
+      __syncthreads();       
     }
-
-    // if (task_desc->task_type == TASK_LINEAR_HOPPER) {
-    //   // Linear层：只同步128-255号线程
-    //   // if (threadIdx.x >= 128) {
-    //   //   printf("1");
-    //   //   __syncwarp();
-    //   // }
-    //   // if (threadIdx.x >= 128) {
-    //   //   printf("2");
-    //   //   __threadfence_block();
-    //   // }
-    // } else {
-      // 其他任务：全block同步
-      __syncthreads();
-    // }
 
   #ifdef MPK_ENABLE_PROFILING
     if (task_desc->task_type != TASK_TERMINATE) {
@@ -175,16 +152,17 @@ void static_persistent_kernel(RuntimeConfig config) {
   #endif
 
     // Trigger event
-    if (threadIdx.x == 0) {
-      EventId event_id = task_desc->trigger_event;
-      // printf("event_id: %d, %d.\n", event_id, EVENT_INVALID_ID);
-      if (event_id != EVENT_INVALID_ID) {  
-        size_t event_index = get_event_position_index(event_id);
+    // 执行任务前有一个__syncthreads()确保真正就绪
+    if (trigger_event_id != EVENT_INVALID_ID) {  
+      if (threadIdx.x == 0) {
+        // printf("%d.", trigger_event_id);
+        size_t event_index = get_event_position_index(trigger_event_id);
         EventCounter count = atom_add_release_gpu_u64(&config.all_event_counters[event_index], 1);
         // printf("tri(%d):(%d), ", event_index, count);
       }
+      // tid0设置标志后需要等待其他线程都达到，这个标志才能真正起效。否则会出现其他线程滞后，导致任务实际上没算完
+      __syncthreads(); 
     }
-    __syncthreads();
   }
 }
 
@@ -408,7 +386,7 @@ extern "C" void init_persistent_kernel(int kernel_id,
     int wid = 0;
     for (int ei=0; ei<event_task_ids.size(); ei++) {
       int task_num = event_task_ids[ei].size();
-      printf("task_num: %d.\n", task_num);
+      // printf("task_num: %d.\n", task_num);
       if (task_num == 0) continue;
         
 #ifdef ENABLE_PREFETCH
@@ -436,28 +414,33 @@ extern "C" void init_persistent_kernel(int kernel_id,
       }
     }
 
-    // // TODO:
-    // // 找到第一个任务的trigger_event作为基准
-    // int base_trigger_event = all_tasks[event_task_ids[0][0]].trigger_event;
-    // int post_task_id = 22;  // 第一个post_task对应的task id
+    // 图结束event免置位: 直接取最后一个event，将对应的所有task的trigger_event，全部置为EVENT_INVALID_ID
+    for (int ei=event_task_ids.size()-1; ei>0; ei--) {
+      int task_num = event_task_ids[ei].size();
+      if (task_num == 0) continue;
 
-    // for (int ei = 0; ei < event_task_ids.size(); ei++) {
-    //   int task_num = event_task_ids[ei].size();
-    //   if (task_num == 0) continue;
+      for (int i=0; i<task_num; i++) {
+        int task_id = event_task_ids[ei][i];
+        // TaskDesc task_desc = all_tasks[task_id];
+        // printf("task_desc.trigger_event: %d.\n", task_desc.trigger_event);
+        all_tasks[task_id].trigger_event = EVENT_INVALID_ID;
+      }
+      break;
+    }
+    // 同worker同event的非首个任务，不需要等待depent。因为首个任务等待后，已满足依赖要求。
+    for (int i=0; i<num_workers; i++) {
+      int task_num = host_tasks_index[i][0]; // 0号是数量，1号开始才是id
+      for (int j=1; j<task_num; j++) {
+        int pre_id = host_tasks_index[i][j];
+        int cur_id = host_tasks_index[i][j+1];
+        if (all_tasks[pre_id].dependent_event == all_tasks[cur_id].dependent_event) {
+          // 确认是同一worker上的非首个相同依赖的task，则跳过判断dep
+          all_tasks[cur_id].dependent_event = EVENT_INVALID_ID;
+        }
+      }
+    }
 
-    //   for (int ti = 0; ti < task_num; ti++) {
-    //     int id = event_task_ids[ei][ti];
-    //     // 只过滤出trigger_event不同于基准的任务（即3-21）
-    //     if (all_tasks[id].trigger_event != base_trigger_event) {
-    //       all_tasks[id].post_task = &all_tasks[post_task_id];
-    //       post_task_id++;
-    //     }
-    //   }
-    // }
-
-    // 前置依赖免检标记
-    // TODO  
-
+    // 分组结果展示
     for (int i=0; i<all_tasks.size(); i++) {
       TaskDesc task_desc = all_tasks[i];
       printf("task_desc[%d]: type %d, block(%d,%d,%d), dep %d, tri %d, varid %d.\n", i, task_desc.task_type, task_desc.bx, task_desc.by, task_desc.bz, task_desc.dependent_event, task_desc.trigger_event, task_desc.variant_id);
@@ -478,7 +461,7 @@ extern "C" void init_persistent_kernel(int kernel_id,
       printf("worker[%d]-(%d): ", i, num);
       for (int j=0; j<num; j++) {
         int id = host_tasks_index[i][j+1];
-        printf("%d(%d-%d-<%lld-%lld>), ", id, all_tasks[id].task_type, all_tasks[id].bx, &all_tasks[id], all_tasks[id].post_task);
+        printf("%d(%d-%d)(%d=%d), ", id, all_tasks[id].task_type, all_tasks[id].bx, all_tasks[id].dependent_event, all_tasks[id].trigger_event);
       }
       printf("\n");
     }

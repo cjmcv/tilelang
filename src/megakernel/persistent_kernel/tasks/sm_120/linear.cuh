@@ -1,14 +1,18 @@
 #pragma once
 
 #ifdef ENABLE_QWEN3_06B
+#ifdef ENABLE_PREFETCH
+#include "m1/linear_gemm_tl_1_6144_1024_prefetch.cuh"
+#include "m1/linear_gemm_add_tl_1_1024_3072_prefetch.cuh"
+#else
 #include "m1/linear_gemm_tl_1_6144_1024.cuh"
 #include "m1/linear_gemm_add_tl_1_1024_3072.cuh"
-// #include "m1/linear_gemm_tl_1_6144_1024_prefetch.cuh"
-// #include "m1/linear_gemm_add_tl_1_1024_3072_prefetch.cuh"
+#endif // ENABLE_PREFETCH
+#else
 // attn
 #include "m1/linear_gemm_tl_1_4096_1024.cuh"
 #include "m1/linear_gemm_add_tl_1_1024_2048.cuh"
-#endif
+#endif // ENABLE_QWEN3_06B
 
 // #ifdef ENABLE_QWEN3_4B
 // #include "m1/linear_gemm_tl_1_19456_2560.cuh"
