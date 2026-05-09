@@ -74,7 +74,7 @@ template <typename T,
         tl::fence_proxy_async();
         tl::tma_load(*A_desc, mbarrier[(k % 3)], (&(((bfloat16_t*)buf_dyn_shmem)[(((k % 3) * 2048) + 24576)])), (k * 128), 0);
         tl::tma_load(*A_desc, mbarrier[(k % 3)], (&(((bfloat16_t*)buf_dyn_shmem)[(((k % 3) * 2048) + 25600)])), ((k * 128) + 64), 0);
-        if (k >= 3) {
+        if (k >= 1) {
           mbarrier[(k % 3)].expect_transaction(16384);
           tl::fence_proxy_async();
           tl::tma_load(*B_desc, mbarrier[(k % 3)], (&(((bfloat16_t*)buf_dyn_shmem)[((k % 3) * 8192)])), (k * 128), (((int)bx) * 64));

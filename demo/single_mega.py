@@ -524,7 +524,7 @@ def test_replace_weight(mk, max_batch_size, batch_size, N, K, spec_layout):
     #                         allclose_iter=5, print_mode=1)
  
 def test_prefetch_weight(mk, max_batch_size, batch_size, N, K, spec_layout):
-    ENABLE_PREFETCH = False
+    ENABLE_PREFETCH = True
     
     x_torch = torch.randn((max_batch_size, K), dtype=torch.bfloat16, device="cuda")
     w_rms_norm_torch = torch.randn((1, K), dtype=torch.bfloat16, device="cuda")
@@ -542,7 +542,7 @@ def test_prefetch_weight(mk, max_batch_size, batch_size, N, K, spec_layout):
     
     if ENABLE_PREFETCH:
         prefetch_weight = w_linear
-        prefetch_layout = (layout.linear1_layout[0][0], 0, 0) # 即rms_norm后还剩下多少的sm可用于塞入预取
+        prefetch_layout = (layout.linear1_layout[0][0], 0, 0) # 169 即rms_norm后还剩下多少的sm可用于塞入预取
         fused_layout = tuple(a + b for a, b in zip(layout.rmsnorm_layout[0], prefetch_layout)), layout.rmsnorm_layout[1]
         mk.rmsnorm_layer(
             input=x,
@@ -581,10 +581,12 @@ def test_prefetch_weight(mk, max_batch_size, batch_size, N, K, spec_layout):
         mk(batch_size)
         return out_torch[:batch_size]
         
+    # for i in range(100):
+    #     ref_output = torch_ref()
     # target_output = target_func()
-    # ref_output = torch_ref()
+  
     reporter.generate_report(target_func, torch_ref, 
-                            warnup_iter=100, test_iter=100, 
+                            warnup_iter=200, test_iter=200, 
                             allclose_iter=5, print_mode=1)
     print("w_torch.data_ptr: ", w_torch.data_ptr())
     

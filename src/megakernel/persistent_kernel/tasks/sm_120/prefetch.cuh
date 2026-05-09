@@ -44,17 +44,46 @@ __device__ __forceinline__ void prefetch_kernel_mlp_rms_norm(const int bx, const
   tl::fence_barrier_init();
   __syncthreads();
 
-  if (128 <= ((int)threadIdx.x)) {
-    tl::warpgroup_reg_dealloc<24>();
-    for (int k = 0; k < 3; ++k) {
-      if (tl::tl_shuffle_elect<128>()) {
-        mbarrier[(k % 3)].expect_transaction(16384);
-        tl::fence_proxy_async();
-        tl::tma_load(*B_desc, mbarrier[(k % 3)], (&(((bfloat16_t*)buf_dyn_shmem)[((k % 3) * 8192)])), (k * 128), (((int)bx) * 64));
-        tl::tma_load(*B_desc, mbarrier[(k % 3)], (&(((bfloat16_t*)buf_dyn_shmem)[(((k % 3) * 8192) + 4096)])), ((k * 128) + 64), (((int)bx) * 64));
+  if (bx < 96){
+    if (128 <= ((int)threadIdx.x)) {
+      tl::warpgroup_reg_dealloc<24>();
+      for (int k = 0; k < 1; ++k) {
+        if (tl::tl_shuffle_elect<128>()) {
+          mbarrier[(k % 3)].expect_transaction(16384);
+          tl::fence_proxy_async();
+          tl::tma_load(*B_desc, mbarrier[(k % 3)], (&(((bfloat16_t*)buf_dyn_shmem)[((k % 3) * 8192)])), (k * 128), (((int)bx) * 64));
+          tl::tma_load(*B_desc, mbarrier[(k % 3)], (&(((bfloat16_t*)buf_dyn_shmem)[(((k % 3) * 8192) + 4096)])), ((k * 128) + 64), (((int)bx) * 64));
+        }
       }
     }
   }
+  // else {
+  //   if (128 <= ((int)threadIdx.x)) {
+  //     tl::warpgroup_reg_dealloc<24>();
+  //     for (int k = 1; k < 3; ++k) {
+  //       if (tl::tl_shuffle_elect<128>()) {
+  //         mbarrier[(k % 3)].expect_transaction(16384);
+  //         tl::fence_proxy_async();
+  //         tl::tma_load<tl::CacheHintSm90::EVICT_FIRST>(*B_desc, mbarrier[(k % 3)], (&(((bfloat16_t*)buf_dyn_shmem)[((k % 3) * 8192)])), (k * 128), (((int)bx-73) * 64));
+  //         tl::tma_load<tl::CacheHintSm90::EVICT_FIRST>(*B_desc, mbarrier[(k % 3)], (&(((bfloat16_t*)buf_dyn_shmem)[(((k % 3) * 8192) + 4096)])), ((k * 128) + 64), (((int)bx-73) * 64));
+  //       }
+  //     }
+  //   }
+  //   else {
+  //     if (bx-96 >= 0) {
+  //       tl::warpgroup_reg_dealloc<24>();
+  //       for (int k = 1; k < 3; ++k) {
+  //         if (tl::tl_shuffle_elect<128>()) {
+  //           mbarrier[(k % 3)].expect_transaction(16384);
+  //           tl::fence_proxy_async();
+  //           tl::tma_load<tl::CacheHintSm90::EVICT_FIRST>(*B_desc, mbarrier[(k % 3)], (&(((bfloat16_t*)buf_dyn_shmem)[((k % 3) * 8192)])), (k * 128), (((int)bx-96) * 64));
+  //           tl::tma_load<tl::CacheHintSm90::EVICT_FIRST>(*B_desc, mbarrier[(k % 3)], (&(((bfloat16_t*)buf_dyn_shmem)[(((k % 3) * 8192) + 4096)])), ((k * 128) + 64), (((int)bx-96) * 64));
+  //         }
+  //       }        
+  //     }
+  //   }
+  // }
+
 }
 
 template <typename T, int THREAD_NUM>

@@ -49,7 +49,7 @@ pushd demo && python micro_test.py && popd
 pushd demo && python fused_mlp.py && popd
 
 # 指令
-scp -P 28819 root@connect.bjb2.seetacloud.com:/root/tilelang/qwen3.perfetto-trace ./
+scp -P 29735 root@connect.bjb2.seetacloud.com:/root/tilelang/qwen3.perfetto-trace ./
 nsys profile --trace=cuda,nvtx --output=my_nsys
 ncu --set full --section "SpeedOfLight_RooflineChart" -k "persistent_kernel" -o my_profile python...
 "kernel"

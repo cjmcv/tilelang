@@ -155,6 +155,10 @@ def _bench_with_cuda_events(
     return_mode: str,
 ) -> float | list[float]:
     """Benchmark using CUDA events for timing."""
+    # x = torch.randn((1, 4096), dtype=torch.bfloat16, device="cuda")
+    # w = torch.randn((4096, 4096), dtype=torch.bfloat16, device="cuda")
+    # torch.nn.functional.linear(x, w)
+    
     # Create timing events
     start_events = [torch.cuda.Event(enable_timing=True) for _ in range(n_repeat)]
     end_events = [torch.cuda.Event(enable_timing=True) for _ in range(n_repeat)]
