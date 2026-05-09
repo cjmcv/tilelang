@@ -26,16 +26,34 @@ HARD_CODE = """
 #include <cuda_runtime.h>
 
 static PyObject *init_func(PyObject *self, PyObject *args) {
-  PyObject *meta_list, *py_profiler_buffer;
+  PyObject *input_list, *meta_list, *py_profiler_buffer;
+  std::vector<void*> input_tensors;
   std::vector<void*> meta_tensors;
   int kernel_id, my_mpi_rank, num_workers, num_local_schedulers, num_remote_schedulers;
   void *profiler_buffer;
 
-  if (!PyArg_ParseTuple(args, "iOOiiii", &kernel_id, &meta_list, &py_profiler_buffer, &my_mpi_rank, &num_workers, &num_local_schedulers, &num_remote_schedulers)) {
+  if (!PyArg_ParseTuple(args, "iOOOiiii", &kernel_id, &input_list, &meta_list, &py_profiler_buffer, &my_mpi_rank, &num_workers, &num_local_schedulers, &num_remote_schedulers)) {
     PyErr_SetString(PyExc_TypeError, "Invalid parameters");
     return NULL;
   }
+  // inputs
+  if(!PyList_Check(input_list)) {
+    PyErr_SetString(PyExc_TypeError, "arg1 must be a list.");
+    return NULL;
+  }
 
+  Py_ssize_t inputs_size = PyList_Size(input_list);
+
+  for(Py_ssize_t i = 0; i < inputs_size; i++) {
+    PyObject *item = PyList_GetItem(input_list, i);
+    void* tensor = PyLong_AsVoidPtr(item);
+    if(!tensor) {
+      PyErr_Format(PyExc_TypeError, "Failed to convert item %d (inputs) to void pointer", i);
+      return NULL;
+    }
+    input_tensors.push_back(PyLong_AsVoidPtr(item));
+  }
+  // meta
   if(!PyList_Check(meta_list)) {
     PyErr_SetString(PyExc_TypeError, "arg1 must be a list.");
     return NULL;
@@ -54,7 +72,7 @@ static PyObject *init_func(PyObject *self, PyObject *args) {
   }
   profiler_buffer = PyLong_AsVoidPtr(py_profiler_buffer);
 
-  init_persistent_kernel(kernel_id, meta_tensors, profiler_buffer, my_mpi_rank, num_workers, num_local_schedulers, num_remote_schedulers);
+  init_persistent_kernel(kernel_id, input_tensors, meta_tensors, profiler_buffer, my_mpi_rank, num_workers, num_local_schedulers, num_remote_schedulers);
   Py_RETURN_NONE;
 }
 
@@ -773,7 +791,7 @@ class PersistentKernel:
         print("Finished megakernel compilation...")
         return so_path
 
-    def load_module(self, so_path, meta_tensors=list()):
+    def load_module(self, so_path, input_tensors=list(), meta_tensors=list()):
         import importlib.util
         spec = importlib.util.spec_from_file_location("__megakernel_launcher", so_path)
         mod = importlib.util.module_from_spec(spec)
@@ -782,6 +800,7 @@ class PersistentKernel:
         self.launch_func = getattr(mod, "launch_func")
         self.finalize_func = getattr(mod, "finalize_func")
 
+        input_tensors_ptr = [tensor.data_ptr() for tensor in input_tensors]
         meta_tensors_ptr = [tensor.data_ptr() for tensor in meta_tensors]
         profiler_buffer_ptr = (
             self.profiler_tensor.data_ptr() if self.profiler_tensor is not None else 0
@@ -791,6 +810,7 @@ class PersistentKernel:
         for kernel_id in range(self.kernel_num):
             self.init_func(
                 self.instance_id*self.kernel_num + kernel_id,
+                input_tensors_ptr,
                 meta_tensors_ptr,
                 profiler_buffer_ptr,
                 self.mpi_rank,

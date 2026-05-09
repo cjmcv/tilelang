@@ -52,6 +52,7 @@ if __name__ == "__main__":
     w_gatedup = mk.attach_input(torch_tensor=w_gatedup_torch, name="w_gatedup")
     w_down_proj = mk.attach_input(torch_tensor=w_down_proj_torch, name="w_down_proj")
     mlp_out = mk.attach_input(torch_tensor=out_torch, name="mlp_out")
+    input_tensors = [x_torch, w_rms_norm_torch, w_gatedup_torch, w_down_proj_torch, out_torch]
     
     x_residual = x
 
@@ -124,7 +125,7 @@ if __name__ == "__main__":
         layout=layout.linear2_layout,
     )
 
-    layers.compile_load(enable_prefetch=ENABLE_PREFETCH, is_no_compile=args.nc, output_dir=args.output_dir)
+    layers.compile_load(input_tensors=input_tensors, enable_prefetch=ENABLE_PREFETCH, is_no_compile=args.nc, output_dir=args.output_dir)
     
     ###
     def ref_run():

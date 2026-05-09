@@ -60,14 +60,14 @@ class MkLayers:
             self.mk.repl_weight_mapping[kernel_id] = []
         self.mk.repl_weight_mapping[kernel_id].append((base_weight, target_weight))
         
-    def compile_load(self, meta_tensors=list(), enable_prefetch=False, is_no_compile=False, output_dir="./gen"):
+    def compile_load(self, input_tensors=list(), meta_tensors=list(), enable_prefetch=False, is_no_compile=False, output_dir="./gen"):
         if is_no_compile is True:
             module_path = output_dir + "/test.cpython-38-x86_64-linux-gnu.so"
-            self.mk.load_module(module_path, meta_tensors)
+            self.mk.load_module(module_path, input_tensors, meta_tensors)
         else:
             module_path = self.mk.compile(enable_prefetch=enable_prefetch, output_dir=output_dir)
             print("module_path: ", module_path)
-            self.mk.load_module(module_path, meta_tensors)
+            self.mk.load_module(module_path, input_tensors, meta_tensors)
 
     @staticmethod
     def qwen3_alloc_torch_buffer(model_tag, layer_num, batch, q_seqlen, max_kv_seqlen=2048):

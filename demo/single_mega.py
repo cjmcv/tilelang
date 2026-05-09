@@ -21,6 +21,8 @@ def test_parallel_rms_norm(mk, layout, max_batch_size, batch_size, hidden_size):
     x = mk.attach_input(torch_tensor=x_torch, name="in")
     w_rms_norm = mk.attach_input(torch_tensor=w_rms_norm_torch, name="w_norm")
     rms_out = mk.attach_input(torch_tensor=out_torch, name="rms_out")
+    input_tensors = [x_torch, w_rms_norm_torch, out_torch]
+    
     mk.rmsnorm_layer(
         input=x,
         weight=w_rms_norm,
@@ -29,7 +31,7 @@ def test_parallel_rms_norm(mk, layout, max_batch_size, batch_size, hidden_size):
         layout=layout.merge_q_k_norm_layout,
     )
     
-    layers.compile_load(is_no_compile=args.nc, output_dir=args.output_dir)
+    layers.compile_load(input_tensors=input_tensors, is_no_compile=args.nc, output_dir=args.output_dir)
 
     def torch_ref():
         return TorchRef.rms_norm(x_torch[:batch_size], w_rms_norm_torch)
@@ -60,6 +62,7 @@ def test_rms_norm(mk, layout, max_batch_size, batch_size, hidden_size):
     x = mk.attach_input(torch_tensor=x_torch, name="in")
     w_rms_norm = mk.attach_input(torch_tensor=w_rms_norm_torch, name="w_norm")
     rms_out = mk.attach_input(torch_tensor=out_torch, name="rms_out")
+    input_tensors = [x_torch, w_rms_norm_torch, out_torch]
     mk.rmsnorm_layer(
         input=x,
         weight=w_rms_norm,
@@ -67,7 +70,7 @@ def test_rms_norm(mk, layout, max_batch_size, batch_size, hidden_size):
         sync_mode=(0, 0, 0),
         layout=layout.rmsnorm_layout,
     )
-    layers.compile_load(is_no_compile=args.nc, output_dir=args.output_dir)
+    layers.compile_load(input_tensors=input_tensors, is_no_compile=args.nc, output_dir=args.output_dir)
 
     def torch_ref():
         return TorchRef.rms_norm(x_torch[:batch_size], w_rms_norm_torch)
@@ -90,7 +93,8 @@ def test_linear(mk, max_batch_size, batch_size, N, K, spec_layout):
     x = mk.attach_input(torch_tensor=x_torch, name="in")
     w = mk.attach_input(torch_tensor=w_torch, name="w")
     linear_out = mk.attach_input(torch_tensor=out_torch, name="linear_out")
-
+    input_tensors = [x_torch, w_torch, out_torch]
+    
     # grid_dim, block_dim(实际是tile_dim), thread_num(实际是block_dim, 固定为threadIdx.x==128或256, 其他维度为1)
     
     mk.linear_layer(
@@ -100,7 +104,7 @@ def test_linear(mk, max_batch_size, batch_size, N, K, spec_layout):
         sync_mode=(0, 0, 0),
         layout=spec_layout,
     )
-    layers.compile_load(is_no_compile=args.nc, output_dir=args.output_dir)
+    layers.compile_load(input_tensors=input_tensors, is_no_compile=args.nc, output_dir=args.output_dir)
     
     def torch_ref():
         return TorchRef.linear(x_torch[:batch_size], w_torch)
@@ -121,13 +125,15 @@ def test_silu_mul(mk, layout, max_batch_size, batch_size, intermediate_size):
     
     x = mk.attach_input(torch_tensor=x_torch, name="in")
     silu_mul_out = mk.attach_input(torch_tensor=out_torch, name="silu_mul_out")
+    input_tensors = [x_torch, out_torch]
+    
     mk.silu_mul_layer(
         input=x,
         output=silu_mul_out,
         sync_mode=(0, 0, 0), # (2, 0, 0)
         layout=layout.silu_mul_layout,
     )
-    layers.compile_load(is_no_compile=args.nc, output_dir=args.output_dir)
+    layers.compile_load(input_tensors=input_tensors, is_no_compile=args.nc, output_dir=args.output_dir)
 
     def torch_ref():
         return TorchRef.silu_and_mul(x_torch[:batch_size])
@@ -152,7 +158,8 @@ def test_linear_residual(mk, max_batch_size, batch_size, N, K, spec_layout):
     x = mk.attach_input(torch_tensor=x_torch, name="in")
     w_down_proj = mk.attach_input(torch_tensor=w_down_proj_torch, name="w_down_proj")
     mlp_out = mk.attach_input(torch_tensor=out_torch, name="mlp_out")
-
+    input_tensors = [x_residual_torch, x_torch, w_down_proj_torch, out_torch]
+    
     mk.linear_with_residual_layer(
         input=x,
         weight=w_down_proj,
@@ -161,7 +168,7 @@ def test_linear_residual(mk, max_batch_size, batch_size, N, K, spec_layout):
         sync_mode=(0, 0, 0),
         layout=spec_layout,
     )
-    layers.compile_load(is_no_compile=args.nc, output_dir=args.output_dir)
+    layers.compile_load(input_tensors=input_tensors, is_no_compile=args.nc, output_dir=args.output_dir)
     
     def torch_ref():
         return TorchRef.linear(x_torch[:batch_size], w_down_proj_torch) + x_residual_torch
@@ -194,7 +201,8 @@ def test_rope(mk, layout, max_batch_size, batch, num_heads, num_kv_heads, head_d
     sin = mk.attach_input(torch_tensor=sin_torch, name="sin")
     q_out = mk.attach_input(torch_tensor=q_out_torch, name="q_out")
     k_out = mk.attach_input(torch_tensor=k_out_torch, name="k_out")
-
+    input_tensors = [q_torch, k_torch, cos_torch, sin_torch, q_out_torch, k_out_torch]
+    
     mk.rope_layer(
         q=q,
         k=k,
@@ -205,7 +213,7 @@ def test_rope(mk, layout, max_batch_size, batch, num_heads, num_kv_heads, head_d
         sync_mode=(0, 0, 0),
         layout=layout.rope_layout,
     )
-    layers.compile_load(is_no_compile=args.nc, output_dir=args.output_dir)
+    layers.compile_load(input_tensors=input_tensors, is_no_compile=args.nc, output_dir=args.output_dir)
     
     def target_func():
         mk(batch_size)
@@ -251,7 +259,8 @@ def test_rope_fused(mk, layout, max_batch_size, batch, num_heads, num_kv_heads, 
     sin = mk.attach_input(torch_tensor=sin_torch, name="sin")
     q_out = mk.attach_input(torch_tensor=q_out_torch, name="q_out")
     k_out = mk.attach_input(torch_tensor=k_out_torch, name="k_out")
-
+    input_tensors = [q_torch, k_torch, cos_torch, sin_torch, q_out_torch, k_out_torch]
+    
     layer_num = 10
     max_kv_seqlen = 8192
     key_cache_torch = torch.zeros(layer_num, batch, max_kv_seqlen, num_kv_heads, head_dim, device="cuda", dtype=torch.bfloat16)  # [B, N=seqlen_kv,  H=groups, D=dim]
@@ -281,7 +290,7 @@ def test_rope_fused(mk, layout, max_batch_size, batch, num_heads, num_kv_heads, 
     edge_torch[1].fill_(num_kv_heads*head_dim) # kvcache onestep_size
     edge_torch[2].fill_(batch*max_kv_seqlen*num_kv_heads*head_dim) # kvcache onelayer_size
     meta = [edge_torch, key_cache_torch, value_cache_torch, k_torch, value_cache_curstep_torch]
-    layers.compile_load(meta_tensors=meta, is_no_compile=args.nc, output_dir=args.output_dir)
+    layers.compile_load(input_tensors=input_tensors, meta_tensors=meta, is_no_compile=args.nc, output_dir=args.output_dir)
     
     print("ptr1", key_cache_torch[layer_id,:,step,:,:].data_ptr(), 
           value_cache_torch[layer_id,:,step,:,:].data_ptr(),
@@ -340,7 +349,8 @@ def test_gqa_decode(mk, layout, max_batch_size, batch, num_heads, num_kv_heads, 
     glse = mk.attach_input(torch_tensor=glse_torch, name="glse")
     out_partial = mk.attach_input(torch_tensor=out_partial_torch, name="out_partial")
     attn_out = mk.attach_input(torch_tensor=out_torch, name="attn_out")
-
+    input_tensors = [q_torch, k_torch, v_torch, edge_torch, mask_torch, glse_torch, out_partial_torch, out_torch]
+    
     mk.gqa_decode_layer(
         q=q,
         k_cache=k,
@@ -354,7 +364,7 @@ def test_gqa_decode(mk, layout, max_batch_size, batch, num_heads, num_kv_heads, 
         layout=layout.gqa_decode_layout_shortkv,
         # layout=((1, 8, 8), (64, 64, 8), (16, 1, 1), (64, 64, 8))
     )
-    layers.compile_load(meta_tensors=[edge_torch], is_no_compile=args.nc, output_dir=args.output_dir)
+    layers.compile_load(input_tensors=input_tensors, meta_tensors=[edge_torch], is_no_compile=args.nc, output_dir=args.output_dir)
     
     def target_func():
         mk(batch_size)
@@ -385,6 +395,7 @@ def test_gqa_decode(mk, layout, max_batch_size, batch, num_heads, num_kv_heads, 
                             allclose_iter=5, print_mode=0)
 
 def test_gqa_decode_multi_instance(mk, layout, max_batch_size, batch, num_heads, num_kv_heads, seqlen_kv, head_dim):
+    # TODO: 添加input_tensors后，未兼容
     split = 8 # TODO 自动配置
     glse_torch = torch.empty(batch, num_heads, split, device="cuda", dtype=torch.bfloat16)
     out_partial_torch = torch.empty(batch, num_heads, split, head_dim, device="cuda", dtype=torch.bfloat16)
@@ -406,7 +417,8 @@ def test_gqa_decode_multi_instance(mk, layout, max_batch_size, batch, num_heads,
     glse = mk.attach_input(torch_tensor=glse_torch, name="glse")
     out_partial = mk.attach_input(torch_tensor=out_partial_torch, name="out_partial")
     attn_out = mk.attach_input(torch_tensor=out_torch, name="attn_out")
-
+    input_tensors = [q_torch, k_torch, v_torch, edge_torch, mask_torch, glse_torch, out_partial_torch, out_torch]
+    
     mk.gqa_decode_layer(
         q=q,
         k_cache=k,
@@ -420,7 +432,7 @@ def test_gqa_decode_multi_instance(mk, layout, max_batch_size, batch, num_heads,
         layout=layout.gqa_decode_layout_shortkv,
         # layout=((1, 8, 8), (64, 64, 8), (16, 1, 1), (64, 64, 8))
     )
-    layers.compile_load(meta_tensors=[edge_torch], is_no_compile=args.nc, output_dir=args.output_dir)
+    layers.compile_load(input_tensors=input_tensors, meta_tensors=[edge_torch], is_no_compile=args.nc, output_dir=args.output_dir)
     
     ###########################################################################
     
@@ -445,10 +457,10 @@ def test_gqa_decode_multi_instance(mk, layout, max_batch_size, batch, num_heads,
         out_partial=out_partial,
         output=attn_out,
         sync_mode=(0, 0, 0),
-        layout=layout.gqa_decode_layout_1024,
+        layout=layout.gqa_decode_layout_shortkv,
         # layout=((1, 8, 8), (64, 64, 8), (16, 1, 1), (64, 64, 8))
     )
-    layers2.compile_load(meta_tensors=[edge_torch], is_no_compile=args.nc, output_dir=args.output_dir+"2")
+    layers2.compile_load(input_tensors=input_tensors, meta_tensors=[edge_torch], is_no_compile=args.nc, output_dir=args.output_dir+"2")
     
     valid_kv_seqlen1 = 64
     valid_kv_seqlen2 = 1024
@@ -469,9 +481,10 @@ def test_gqa_decode_multi_instance(mk, layout, max_batch_size, batch, num_heads,
         
     reporter.generate_report(target_func, torch_ref, 
                             warnup_iter=100, test_iter=100, 
-                            allclose_iter=5, print_mode=0)
+                            allclose_iter=5, print_mode=1)
    
 def test_replace_weight(mk, max_batch_size, batch_size, N, K, spec_layout):
+    # TODO: 添加input_tensors后，未兼容
     x_torch = torch.randn((max_batch_size, K), dtype=torch.bfloat16, device="cuda")
     
     w_torch = torch.randn((N, K), dtype=torch.bfloat16, device="cuda")
@@ -539,6 +552,7 @@ def test_prefetch_weight(mk, max_batch_size, batch_size, N, K, spec_layout):
     rms_out = mk.attach_input(torch_tensor=rms_out_torch, name="rms_out")
     w_linear = mk.attach_input(torch_tensor=w_torch, name="w")
     linear_out = mk.attach_input(torch_tensor=out_torch, name="linear_out")
+    input_tensors = [x_torch, w_rms_norm_torch, rms_out_torch, w_torch, out_torch]
     
     if ENABLE_PREFETCH:
         prefetch_weight = w_linear
@@ -570,7 +584,7 @@ def test_prefetch_weight(mk, max_batch_size, batch_size, N, K, spec_layout):
         sync_mode=(0, layout.rmsnorm_layout[0][0], 0) if ENABLE_PREFETCH else (0, 0, 0),
         layout=spec_layout,
     )
-    layers.compile_load(enable_prefetch=ENABLE_PREFETCH, is_no_compile=args.nc, output_dir=args.output_dir)
+    layers.compile_load(input_tensors=input_tensors, enable_prefetch=ENABLE_PREFETCH, is_no_compile=args.nc, output_dir=args.output_dir)
     
     def torch_ref():
         O1 = TorchRef.rms_norm(x_torch[:batch_size], w_rms_norm_torch)
@@ -636,17 +650,17 @@ if __name__ == "__main__":
     # test_linear_residual(mk, max_batch_size, batch_size, hidden_size, intermediate_size, layout.linear2_layout)
     
     # test_linear(mk, max_batch_size, batch_size, (num_heads+2*num_kv_heads)*head_dim, hidden_size, layout.qkv_proj_layout)
-    # test_rope(mk, layout, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim)
+    test_rope(mk, layout, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim)
     # test_gqa_decode(mk, layout, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, seqlen_kv=seqlen_kv, head_dim=head_dim)
     # test_linear_residual(mk, max_batch_size, batch_size, hidden_size, num_heads*head_dim, layout.o_proj_layout)
     
     #######################################
-    # test_replace_weight(mk, max_batch_size, batch_size, intermediate_size*2, hidden_size, layout.linear1_layout)
-    # test_gqa_decode_multi_instance(mk, layout, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, seqlen_kv=seqlen_kv, head_dim=head_dim)
-    # test_parallel_rms_norm(mk, layout, max_batch_size, batch_size, hidden_size)
-    # test_rope_fused(mk, layout, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim)
+    # test_replace_weight(mk, max_batch_size, batch_size, intermediate_size*2, hidden_size, layout.linear1_layout) # TODO
+    # test_gqa_decode_multi_instance(mk, layout, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, seqlen_kv=seqlen_kv, head_dim=head_dim) # TODO
+    # test_rope_fused(mk, layout, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim) # TODO
     
-    test_prefetch_weight(mk, max_batch_size, batch_size, intermediate_size*2, hidden_size, layout.linear1_layout)
+    # test_parallel_rms_norm(mk, layout, max_batch_size, batch_size, hidden_size)
+    # test_prefetch_weight(mk, max_batch_size, batch_size, intermediate_size*2, hidden_size, layout.linear1_layout)
     # print("Test single_mega completed.")
     # ncu --set full --section "SpeedOfLight_RooflineChart" -k "kernel" -o my_profile python demo/single_linear.py --nc
     # ncu --set full --section "SpeedOfLight_RooflineChart" -k "persistent_kernel" -o my_profile python demo/single_linear.py

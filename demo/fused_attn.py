@@ -167,6 +167,11 @@ if __name__ == "__main__":
     w_o_proj = mk.attach_input(torch_tensor=w_o_proj_torch, name="w_o_proj")
     o_proj_res_out = mk.attach_input(torch_tensor=out_torch, name="o_proj_res_out")
     
+    input_tensors = [x_torch, w_layernorm_torch, w_qkv_proj_torch, qkv_proj_out_torch, w_qk_norm_torch, qk_torch["2d"],
+                     q_torch["4d"], k_torch["4d"], w_cos_torch, w_sin_torch,
+                     q_torch["3d"], key_cache_5dim_torch, value_cache_5dim_torch, edge_torch,
+                     mask_torch, glse_torch, out_partial_torch, attn_out_3dim_torch, attn_out_2dim_torch, 
+                     w_o_proj_torch, out_torch]
     #########################################
     
     mk.rmsnorm_layer(
@@ -251,7 +256,7 @@ if __name__ == "__main__":
     edge_torch[1].fill_(num_kv_heads*head_dim) # kvcache onestep_size
     edge_torch[2].fill_(batch*max_kv_seqlen*num_kv_heads*head_dim) # kvcache onelayer_size
     meta = [edge_torch, key_cache_5dim_torch, value_cache_5dim_torch, k_torch["4d"], v_torch["4d"]]
-    layers.compile_load(meta_tensors=meta, is_no_compile=args.nc, output_dir=args.output_dir)
+    layers.compile_load(input_tensors=input_tensors, meta_tensors=meta, is_no_compile=args.nc, output_dir=args.output_dir)
 
     print(key_cache_5dim_torch[layer_id, 0, step, :, :].data_ptr(), value_cache_5dim_torch[layer_id, 0, step, :, :].data_ptr())
     mk(batch)

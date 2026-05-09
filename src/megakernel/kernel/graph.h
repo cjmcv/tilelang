@@ -841,21 +841,25 @@ private:
 
     code.e("void adjust_params_with_kernel_id(int kernel_id, std::map<std::string, void*> &all_tensors);");
     code.e("static void _init_persistent_kernel(int kernel_id,");
+    code.e("                                    std::vector<void *> input_tensors,");
     code.e("                                    std::vector<FullTaskDesc> &all_tasks,");
     code.e("                                    std::vector<EventDesc> &all_events,");
     code.e("                                    std::vector<TaskId> &first_tasks,");
     code.e("                                    int num_gpus,");
     code.e("                                    int my_gpu_id) {");
     code.e("assert(num_gpus = $);", num_gpus);
+    code.e("if (input_tensors.size() == 0) printf(\"Error: input_tensors.size() == 0!\");");
 
     if (use_json_format) {
       code.e("std::map<std::string, void*> all_tensors;");
     }
+    size_t index = 0;
     for (auto const &iter : io_configs) {
       IODesc desc = iter.second;
       switch (desc.type) {
         case IODesc::TorchTensor: {
-          code.e("char *$ = (char*)($);", desc.name, desc.torch_data_ptr);
+          // code.e("char *$ = (char*)($);", desc.name, desc.torch_data_ptr);
+          code.e("char *$ = (char*)input_tensors[$];", desc.name, index++); // desc.torch_data_pt
           if (use_json_format) {
             code.e("all_tensors[\"$\"] = $;", desc.name, desc.name);
           }
@@ -863,7 +867,8 @@ private:
         }
         case IODesc::FusedTorchTensor: {
           for (auto const &sdesc : desc.sub_descs) {
-            code.e("char *$ = (char*)($);", sdesc.name, sdesc.torch_data_ptr);
+            // code.e("char *$ = (char*)($);", sdesc.name, sdesc.torch_data_ptr);
+            code.e("char *$ = (char*)input_tensors[$];", desc.name, index++);
             if (use_json_format) {
               code.e("all_tensors[\"$\"] = $;", sdesc.name, sdesc.name);
             }
