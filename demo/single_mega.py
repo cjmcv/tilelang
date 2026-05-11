@@ -611,6 +611,68 @@ def test_prefetch_weight(mk, max_batch_size, batch_size, N, K, spec_layout):
                             allclose_iter=5, print_mode=1)
     print("w_torch.data_ptr: ", w_torch.data_ptr())
     
+def test_prefetch_weight_residual(mk, max_batch_size, batch_size, N, K, spec_layout):
+    ENABLE_PREFETCH = True
+    
+    x_torch = torch.randn((max_batch_size, K*2), dtype=torch.bfloat16, device="cuda")
+    silu_mul_out_torch = torch.zeros((max_batch_size, K), dtype=torch.bfloat16, device="cuda")
+    x_residual_torch = torch.randn((max_batch_size, N), dtype=torch.bfloat16, device="cuda")    
+    w_down_proj_torch = torch.randn((N, K), dtype=torch.bfloat16, device="cuda")
+    out_torch = torch.zeros((max_batch_size, N), dtype=torch.bfloat16, device="cuda")
+        
+    x = mk.attach_input(torch_tensor=x_torch, name="in")
+    silu_mul_out = mk.attach_input(torch_tensor=silu_mul_out_torch, name="silu_mul_out")
+    x_residual = mk.attach_input(torch_tensor=x_residual_torch, name="res")
+    w_down_proj = mk.attach_input(torch_tensor=w_down_proj_torch, name="w_down_proj")
+    mlp_out = mk.attach_input(torch_tensor=out_torch, name="mlp_out")
+    
+    input_tensors = [x_torch, silu_mul_out_torch, x_residual_torch, w_down_proj_torch, out_torch]
+    
+    if ENABLE_PREFETCH:
+        prefetch_weight = w_down_proj
+        prefetch_layout = (spec_layout[0][0], 0, 0) # 169 即rms_norm后还剩下多少的sm可用于塞入预取
+        fused_layout = tuple(a + b for a, b in zip(layout.silu_mul_layout[0], prefetch_layout)), layout.silu_mul_layout[1]
+        mk.silu_mul_layer(
+            input=x,
+            output=silu_mul_out,
+            sync_mode=(0, 0, 0), # (2, 0, 0)
+            layout=fused_layout,
+            fused_params=[99, 11, *prefetch_layout],
+            fused_tensor=prefetch_weight,
+        )
+    else:
+        mk.silu_mul_layer(
+            input=x,
+            output=silu_mul_out,
+            sync_mode=(0, 0, 0), # (2, 0, 0)
+            layout=layout.silu_mul_layout,
+        )
+    
+    mk.linear_with_residual_layer(
+        input=silu_mul_out,
+        weight=w_down_proj,
+        residual=x_residual,
+        output=mlp_out,
+        sync_mode=(0, layout.silu_mul_layout[0][0], 0) if ENABLE_PREFETCH else (0, 0, 0),
+        layout=spec_layout,
+    )
+    layers.compile_load(input_tensors=input_tensors, enable_prefetch=ENABLE_PREFETCH, is_no_compile=args.nc, output_dir=args.output_dir)
+    
+    def torch_ref():
+        silu_mul = TorchRef.silu_and_mul(x_torch[:batch_size])
+        return TorchRef.linear(silu_mul, w_down_proj_torch) + x_residual_torch
+
+    def target_func():
+        mk(batch_size)
+        return out_torch[:batch_size]
+        
+    target_output = target_func()    
+    ref_output = torch_ref()
+    reporter.generate_report(target_func, torch_ref, 
+                            warnup_iter=100, test_iter=100, 
+                            allclose_iter=5, print_mode=1)
+   
+   
 if __name__ == "__main__":
     max_batch_size = 1
     batch_size = 1
@@ -667,7 +729,8 @@ if __name__ == "__main__":
     # test_rope_fused(mk, layout, max_batch_size=1, batch=1, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim) # TODO
     
     # test_parallel_rms_norm(mk, layout, max_batch_size, batch_size, hidden_size)
-    test_prefetch_weight(mk, max_batch_size, batch_size, intermediate_size*2, hidden_size, layout.linear1_layout)
+    # test_prefetch_weight(mk, max_batch_size, batch_size, intermediate_size*2, hidden_size, layout.linear1_layout)
+    test_prefetch_weight_residual(mk, max_batch_size, batch_size, hidden_size, intermediate_size, layout.linear2_layout)
     # print("Test single_mega completed.")
     # ncu --set full --section "SpeedOfLight_RooflineChart" -k "kernel" -o my_profile python demo/single_linear.py --nc
     # ncu --set full --section "SpeedOfLight_RooflineChart" -k "persistent_kernel" -o my_profile python demo/single_linear.py
