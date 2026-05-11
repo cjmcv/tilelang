@@ -24,6 +24,7 @@ void adjust_params_with_kernel_id(int kernel_id, std::map<std::string, void*> &a
 HARD_CODE = """
 #include <Python.h>
 #include <cuda_runtime.h>
+#include <c10/cuda/CUDAStream.h>
 
 static PyObject *init_func(PyObject *self, PyObject *args) {
   PyObject *input_list, *meta_list, *py_profiler_buffer;
@@ -82,7 +83,9 @@ static PyObject *launch_func(PyObject *self, PyObject *args) {
     PyErr_SetString(PyExc_TypeError, "Invalid parameters");
     return NULL;
   }
-  launch_persistent_kernel(kernel_id, batch_size, layer_id);
+  
+  cudaStream_t stream = c10::cuda::getCurrentCUDAStream().stream();
+  launch_persistent_kernel(kernel_id, batch_size, layer_id, stream);
 
   Py_RETURN_NONE;
 }
@@ -161,6 +164,12 @@ def get_compile_command(
         # advance by 1 for the scheduler who are handling the not divisiable num_worker.
         max_worker_per_scheduler = (num_workers // min_schedulers) + 1
         
+    site_packages_path = sysconfig.get_path('purelib')
+    torch_pkg_path = os.path.join(site_packages_path, 'torch')
+    torch_include_path = os.path.join(torch_pkg_path, 'include')
+    torch_lib_path = os.path.join(torch_pkg_path, 'lib')
+    print("torch: ", torch_include_path, torch_lib_path)
+    
     common_cmd = [
         cc,
         file_name,
@@ -178,9 +187,10 @@ def get_compile_command(
         f"-I{os.path.join(megakernel_deps_path, 'cutlass/include')}",
         f"-I{os.path.join(megakernel_deps_path, 'cutlass/tools/util/include')}",
         f"-I{os.path.join(megakernel_deps_path, 'json/include')}",
+        f"-I{torch_include_path}",
         f"-DMAX_WORKER_PER_SCHEDULER={max_worker_per_scheduler}",
     ]
-
+    
     flags = [
         "-shared",
         "-std=c++17",
@@ -193,7 +203,8 @@ def get_compile_command(
         py_so_path,
     ]
     flags = flags + [f"-DMPK_TARGET_CC={target_cc}", "-DMEGAKERNEL_BACKEND_USE_CUDA"]
-
+    flags = flags + [f"-ltorch -lc10 -L{torch_lib_path}"]
+    
     if (model_tag == "qwen3_06b"):
         flags = flags + ["-DENABLE_QWEN3_06B"]
     elif (model_tag == "qwen3_4b"):
@@ -824,9 +835,6 @@ class PersistentKernel:
         # self.call_func = getattr(mod, "call_func")
         
     def __call__(self, batch_size, kernel_id=0, layer_id=0):
-        # stream = kwargs.get("stream", None)
-        # if stream is None:
-        #    stream = torch.cuda.default_stream()
         self.launch_func(self.instance_id*self.kernel_num + kernel_id, batch_size, layer_id)
         if self.profiler_tensor is not None:
             from .profiler_persistent import export_to_perfetto_trace

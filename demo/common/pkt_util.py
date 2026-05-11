@@ -38,6 +38,7 @@ class TorchRef:
         
         graph = torch.cuda.CUDAGraph()
         stream = torch.cuda.Stream()
+        # stream = torch.cuda.default_stream()
         with torch.cuda.stream(stream):
             with torch.cuda.graph(graph):
                 output = compiled_ref_fn()

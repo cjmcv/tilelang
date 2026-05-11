@@ -564,7 +564,7 @@ void print_smem_size() {
 
 // Entry point for C/C++
 // TODO: change launch config
-extern "C" void launch_persistent_kernel(int kernel_id, int batch_size, int layer_id) {
+extern "C" void launch_persistent_kernel(int kernel_id, int batch_size, int layer_id, cudaStream_t stream) {
   // printf("launch_persistent_kernel: %d.\n", kernel_id);
   // int device;
   // cudaGetDevice(&device);
@@ -572,12 +572,12 @@ extern "C" void launch_persistent_kernel(int kernel_id, int batch_size, int laye
   // cudaDeviceGetAttribute(&sm_count, cudaDevAttrMultiProcessorCount, device);
   // global_runtime_config[kernel_id].batch_size = batch_size;
   global_runtime_config[kernel_id].layer_id = layer_id;
-
-  cudaMemset(global_runtime_config[kernel_id].all_event_counters, 0, 
-    sizeof(EventCounter) * global_runtime_config[kernel_id].num_events);
+  cudaMemsetAsync(global_runtime_config[kernel_id].all_event_counters, 0, 
+    sizeof(EventCounter) * global_runtime_config[kernel_id].num_events, stream);
   static_persistent_kernel<<<dim3(global_runtime_config[kernel_id].num_workers, 1, 1),
       dim3(WORKER_NUM_THREADS, 1, 1),
-      MAX_DYNAMIC_SHARED_MEMORY_SIZE /*smem*/>>>(
+      MAX_DYNAMIC_SHARED_MEMORY_SIZE,
+      stream>>>(
       global_runtime_config[kernel_id]);      
 
   // cudaError_t err = cudaDeviceSynchronize();
