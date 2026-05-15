@@ -6,8 +6,24 @@ import tilelang.language as T
 from common.micro_base import BaseMicroKernel, HparamSelectMode
 from common.micro_config import get_arch, get_thread_num, get_target_str, is_megakernel_enabled, get_pass_configs
 
+######
+# 围绕head_dim进行，batch/seq_len/num_heads 都属于可并行维度。另外q和k都执行一样的操作。
+# def rope_apply(x, cos, sin):
+#     """
+#     x:   [batch, seq_len, num_heads, d]  输入张量
+#     cos: [seq_len, d]                    预计算的余弦值
+#     sin: [seq_len, d]                    预计算的正弦值
+#     """
+#     # 分离相邻维度
+#     x1, x2 = x[..., 0::2], x[..., 1::2]
+#     # 应用旋转
+#     out1 = x1 * cos - x2 * sin
+#     out2 = x1 * sin + x2 * cos
+#     # 合并并还原形状
+#     return torch.stack([out1, out2], dim=-1).flatten(-2)
+
 #####################################################################################################################
-#      overlap版本                                        #            parallel版本                                 #
+#      overlap版本                                        #            parallel版本 (good)                                 #
 #####################################################################################################################
 #   <<<layout-3D网格>>> - 索引简单                              <<<layout-1D扁平>>>，线程块更多
 # ┌────────────────────────────────────────────────────┐    ┌───────────────────────────────────────────────────┐

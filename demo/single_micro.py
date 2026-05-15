@@ -32,36 +32,7 @@ def test_code_gen():
         return rms_norm_load_B
 
     @tilelang.jit(out_idx=[-1], pass_configs={"tl.disable_tma_lower": True})
-    def kernel_main(M, N, BLOCK_M, BLOCK_N, threads, eps=1e-12, dtype="bfloat16", accum_dtype="float32"):
-        @T.prim_func
-        def rms_norm(A: T.Tensor((M, N), dtype), B_smem: T.Tensor((N,), dtype), C: T.Tensor((M, N), dtype)):
-            with T.Kernel(T.ceildiv(M, BLOCK_M), threads=threads) as bx:
-                A_shared = T.alloc_shared((BLOCK_M, N), dtype)
-                A_pow_local = T.alloc_fragment((BLOCK_M, N), accum_dtype)
-                A_local = T.alloc_fragment((BLOCK_M, N), accum_dtype)
-                A_powsum = T.alloc_fragment((BLOCK_M,), accum_dtype)
-                B_local = T.alloc_fragment((1, N), accum_dtype)
-
-                T.copy(A[bx * BLOCK_M : (bx + 1) * BLOCK_M, :], A_shared)
-
-                for i in T.Parallel(BLOCK_M, N):
-                    B_local[i % BLOCK_M, i // BLOCK_M] = B_smem[i]
-
-                T.copy(A_shared, A_local)
-
-                for i, j in T.Parallel(BLOCK_M, N):
-                    A_pow_local[i, j] = A_local[i, j] * A_local[i, j]
-                T.reduce_sum(A_pow_local, A_powsum, dim=1)
-                for i in T.Parallel(BLOCK_M):
-                    A_powsum[i] = T.rsqrt(A_powsum[i] / N + eps)
-                for i, j in T.Parallel(BLOCK_M, N):
-                    A_local[i, j] *= A_powsum[i] * B_local[i, j]
-                T.copy(A_local, C[bx * BLOCK_M : (bx + 1) * BLOCK_M, :])
-
-        return rms_norm
-    
-    @tilelang.jit(out_idx=[-1], pass_configs={"tl.disable_tma_lower": True})
-    def kernel_main_org(M, N, BLOCK_M, BLOCK_N, threads, eps=1e-12, dtype="bfloat16", accum_dtype="float32"):
+    def rms_kernel_main(M, N, BLOCK_M, BLOCK_N, threads, eps=1e-12, dtype="bfloat16", accum_dtype="float32"):
         @T.prim_func
         def rms_norm(A: T.Tensor((M, N), dtype), B: T.Tensor((1, N), dtype), C: T.Tensor((M, N), dtype)):
             with T.Kernel(T.ceildiv(M, BLOCK_M), threads=threads) as bx:
@@ -72,10 +43,13 @@ def test_code_gen():
                 B_shared = T.alloc_shared((1, N), dtype)
                 B_local = T.alloc_fragment((1, N), accum_dtype)
                 
-                T.copy(B[0:1, :], B_shared)
                 T.copy(A[bx * BLOCK_M : (bx + 1) * BLOCK_M, :], A_shared)
+                T.copy(B[0:1, :], B_shared)
                 
-                T.copy(A_shared, A_local)
+                # note: 在sm120, M=BLOCK_M=1, N=1024, threads=256时，下面的A拷贝需要加上“coalesced_width=1”转为标量处理才能正常生成kernel。
+                # 因为向量化读取使用 float4 = 4 × 32位 = 8 x bfloat16，N = 1024 x bfloat16，所需线程数 = 1024 / 8 = 128 个线程。
+                # coalesced_width=1时，转用uint32 = 2 x bfloat16，1024 / 2 = 512 可以满足。
+                T.copy(A_shared, A_local) #, coalesced_width=1
                 T.copy(B_shared, B_local)
                 
                 for i, j in T.Parallel(BLOCK_M, N):
@@ -89,16 +63,134 @@ def test_code_gen():
 
         return rms_norm
     
-    M = 32
-    N = 2560
-    a = torch.randn(M, N, dtype=torch.bfloat16, device="cuda")
-    b = torch.randn(1, N, dtype=torch.bfloat16, device="cuda")
-    kernel = kernel_main_org(M, N, 1, 1, 128)
-    print(kernel.get_kernel_source())
-    print(kernel(a,b)) 
+    @tilelang.jit(out_idx=[-1], pass_configs={"tl.disable_tma_lower": True})
+    def linear_kernel_main(M, N, K, BLOCK_M, BLOCK_N, BLOCK_K, split_k, num_stages, thread_num, policy, enable_rasteration, dtype=T.bfloat16, accum_dtype=T.float32):
+        
+        @T.prim_func
+        def linear(
+            A: T.Tensor((M, K), dtype),
+            B: T.Tensor((N, K), dtype),
+            C: T.Tensor((M, N), dtype),
+        ):
+            with T.Kernel(T.ceildiv(N, BLOCK_N), T.ceildiv(M, BLOCK_M), threads=thread_num) as (bx, by):
+                A_shared = T.alloc_shared((BLOCK_M, BLOCK_K), dtype)
+                B_shared = T.alloc_shared((BLOCK_N, BLOCK_K), dtype)
+                C_local = T.alloc_fragment((BLOCK_M, BLOCK_N), accum_dtype)
+                C_shared = T.alloc_shared((BLOCK_M, BLOCK_N), dtype)
+                T.use_swizzle(panel_size=10, enable=enable_rasteration)
+                T.annotate_layout({C_shared: tilelang.layout.make_swizzled_layout(C_shared)})
+                T.clear(C_local)
+                for k in T.Pipelined(T.ceildiv(K, BLOCK_K), num_stages=num_stages):
+                    T.copy(A[by * BLOCK_M, k * BLOCK_K], A_shared)
+                    T.copy(B[bx * BLOCK_N, k * BLOCK_K], B_shared)
+                    T.gemm(A_shared, B_shared, C_local, transpose_B=True, policy=policy)
+                    
+                T.copy(C_local, C_shared)
+                T.copy(C_shared, C[by * BLOCK_M, bx * BLOCK_N])
+
+        return linear
+ 
+ 
+ 
+ 
+        #  def rms_norm(A: T.Tensor((M, N), dtype), B: T.Tensor((1, N), dtype), C: T.Tensor((M, N), dtype)):
+        #     with T.Kernel(T.ceildiv(M, BLOCK_M), threads=threads) as bx:
+        #         A_shared = T.alloc_shared((BLOCK_M, N), dtype)
+        #         A_pow_local = T.alloc_fragment((BLOCK_M, N), accum_dtype)
+        #         A_local = T.alloc_fragment((BLOCK_M, N), accum_dtype)
+        #         A_powsum = T.alloc_fragment((BLOCK_M,), accum_dtype)
+        #         B_shared = T.alloc_shared((1, N), dtype)
+        #         B_local = T.alloc_fragment((1, N), accum_dtype)
+                
+        #         T.copy(A[0:1,:], A_local)
+        #         T.copy(B[0:1,:], B_local)
+
+        #         for i, j in T.Parallel(BLOCK_M, N):
+        #             A_pow_local[i, j] = A_local[i, j] * A_local[i, j]
+        #         T.reduce_sum(A_pow_local, A_powsum, dim=1)
+        #         for i in T.Parallel(BLOCK_M):
+        #             A_powsum[i] = T.rsqrt(A_powsum[i] / N + eps)
+        #         for i, j in T.Parallel(BLOCK_M, N):
+        #             A_local[i, j] *= A_powsum[i] * B_local[0, j]
+        #         T.copy(A_local, C[bx * BLOCK_M : (bx + 1) * BLOCK_M, :])
+                
+    @tilelang.jit(out_idx=[-1], pass_configs={"tl.disable_tma_lower": True})
+    def fuesed_linear_kernel_main(M, N, K, BLOCK_M, BLOCK_N, BLOCK_K, split_k, num_stages, thread_num, policy, enable_rasteration, dtype=T.bfloat16, accum_dtype=T.float32):
+        
+        @T.prim_func
+        def linear(
+            A: T.Tensor((M, K), dtype),
+            B1: T.Tensor((1, K), dtype),
+            B2: T.Tensor((N, K), dtype),
+            C: T.Tensor((M, N), dtype),
+        ):
+            RMS_BLOCK_M = 1
+            with T.Kernel(T.ceildiv(N, BLOCK_N), T.ceildiv(M, BLOCK_M), threads=thread_num) as (bx, by):
+                A_shared = T.alloc_shared((BLOCK_M, BLOCK_K), dtype)
+                B2_shared = T.alloc_shared((BLOCK_N, BLOCK_K), dtype)
+                C_local = T.alloc_fragment((BLOCK_M, BLOCK_N), accum_dtype)
+
+                T.use_swizzle(panel_size=10, enable=enable_rasteration)
+                T.clear(C_local)
+
+                A1_shared = T.alloc_shared((RMS_BLOCK_M, K), dtype)
+                A_pow_local = T.alloc_fragment((RMS_BLOCK_M, K), accum_dtype)
+                A_local = T.alloc_fragment((RMS_BLOCK_M, K), accum_dtype)
+                A_powsum = T.alloc_fragment((RMS_BLOCK_M,), accum_dtype)
+                B1_local = T.alloc_fragment((1, K), accum_dtype)
+                
+                T.copy(A[0:1,:], A_local)
+                T.copy(B1[0:1,:], B1_local)
+                
+                for i, j in T.Parallel(RMS_BLOCK_M, K):
+                    A_pow_local[i, j] = A_local[i, j] * A_local[i, j]
+                T.reduce_sum(A_pow_local, A_powsum, dim=1)
+                for i in T.Parallel(RMS_BLOCK_M):
+                    A_powsum[i] = T.rsqrt(A_powsum[i] / K + 1e-12)
+                for j in T.Parallel(K):
+                    A_local[0, j] *= A_powsum[0] * B1_local[0, j]
+                T.copy(A_local, A1_shared)
+                
+                for k in T.Pipelined(T.ceildiv(K, BLOCK_K), num_stages=num_stages):
+                    T.copy(A1_shared[0, k * BLOCK_K], A_shared)
+                    T.copy(B2[bx * BLOCK_N, k * BLOCK_K], B2_shared)
+                    T.gemm(A_shared, B2_shared, C_local, transpose_B=True, policy=policy)
+                    
+                T.copy(C_local, C[by * BLOCK_M, bx * BLOCK_N])
+
+        return linear
+       
+    M = 1
+    N = 6144
+    K = 1024
+    a = torch.randn(M, K, dtype=torch.bfloat16, device="cuda")
+    w1 = torch.randn(1, K, dtype=torch.bfloat16, device="cuda")
+    w2 = torch.randn(N, K, dtype=torch.bfloat16, device="cuda")
+    rms_kernel = rms_kernel_main(M, K, 1, 1, 128)
+    # print(rms_kernel.get_kernel_source())
+    # c = rms_kernel(a, w1)
+
+    linear_kernel = linear_kernel_main(M, N, K, 16, 64, 128, 1, 0, 128, 0, False)
+    # print(linear_kernel.get_kernel_source())
+    # c2 = linear_kernel(c, w2)
+    # print(c2)
     
-    kernel2 = kernel_load_B(M, N, 1, 1, 128)
-    print(kernel2.get_kernel_source())
+    fused_kernel = fuesed_linear_kernel_main(M, N, K, 16, 64, 128, 1, 0, 128, 0, False)
+    # print(fused_kernel.get_kernel_source())
+    # c3 = fused_kernel(a, w1, w2)
+    # print(c3)
+    
+    def ref():
+        c = rms_kernel(a, w1)
+        c2 = linear_kernel(c, w2)
+        return c2
+    def target():
+        return fused_kernel(a, w1, w2)
+    
+    profile(target, ref)
+    
+    # kernel2 = kernel_load_B(M, N, 1, 1, 128)
+    # print(kernel2.get_kernel_source())
     
 def profile(target_func, torch_ref_func):
     reporter = PerfReporter() 
@@ -292,11 +384,11 @@ if __name__ == "__main__":
     # test_gqa_decode(num_heads, num_kv_heads, head_dim)
     # test_rope(num_heads, num_kv_heads, head_dim)
 
-    # test_code_gen()
+    test_code_gen()
     
-    gen = MicroAutoGen(model_tag, batch_size=1, hidden_size=hidden_size, intermediate_size=intermediate_size, 
-                       max_kv_seqlen=8192, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim)
-    gen.gen_qwen3_ops(layer_id=99, mode=HparamSelectMode.HEURISTIC) # HEURISTIC, TUNING, TUNED
+    # gen = MicroAutoGen(model_tag, batch_size=1, hidden_size=hidden_size, intermediate_size=intermediate_size, 
+    #                    max_kv_seqlen=8192, num_heads=num_heads, num_kv_heads=num_kv_heads, head_dim=head_dim)
+    # gen.gen_qwen3_ops(layer_id=99, mode=HparamSelectMode.HEURISTIC) # HEURISTIC, TUNING, TUNED
     # print(">> Finish gen_qwen3_ops.")
     # print("Test single_micro completed.")
     

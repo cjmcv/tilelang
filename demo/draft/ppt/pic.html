@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RMS Norm + Linear Fusion</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: #1a1a2e;
+    color: #eee;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+  }
+  h1 {
+    font-size: 1.8rem;
+    color: #00d4ff;
+    margin-bottom: 10px;
+  }
+  .subtitle {
+    color: #888;
+    margin-bottom: 40px;
+  }
+  .wave-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    align-items: center;
+  }
+  .col {
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);
+    gap: 8px;
+  }
+  .col-label {
+    text-align: center;
+    font-size: 1rem;
+    color: #aaa;
+    margin-bottom: 8px;
+  }
+  .block {
+    width: 70px;
+    height: 50px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: bold;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .block.empty {
+    background: #16213e;
+    border: 1px dashed #333;
+  }
+  .block.rms {
+    background: linear-gradient(135deg, #00d4ff, #0099cc);
+    box-shadow: 0 4px 15px rgba(0,212,255,0.4);
+  }
+  .block.linear {
+    background: linear-gradient(135deg, #e94560, #c23a51);
+    box-shadow: 0 4px 15px rgba(233,69,96,0.4);
+  }
+  .block.smem {
+    background: linear-gradient(135deg, #00ff88, #00cc6a);
+    box-shadow: 0 4px 15px rgba(0,255,136,0.4);
+  }
+  .block.l2 {
+    background: linear-gradient(135deg, #ffd700, #ccaa00);
+    box-shadow: 0 4px 15px rgba(255,215,0,0.4);
+  }
+  .block:hover {
+    transform: scale(1.08);
+  }
+  .info {
+    margin-top: 40px;
+    display: flex;
+    gap: 30px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .info-item {
+    background: #16213e;
+    padding: 20px 30px;
+    border-radius: 10px;
+    border: 1px solid #0f3460;
+    text-align: center;
+  }
+  .info-item h3 {
+    margin-bottom: 8px;
+  }
+  .info-item.rms h3 { color: #00d4ff; }
+  .info-item.linear h3 { color: #e94560; }
+  .info-item p {
+    color: #aaa;
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+  .legend {
+    margin-top: 30px;
+    display: flex;
+    gap: 30px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .legend-block {
+    width: 24px;
+    height: 14px;
+    border-radius: 3px;
+  }
+  .legend-rms { background: linear-gradient(135deg, #00d4ff, #0099cc); }
+  .legend-linear { background: linear-gradient(135deg, #e94560, #c23a51); }
+  .legend-smem { background: linear-gradient(135deg, #00ff88, #00cc6a); }
+  .legend-l2 { background: linear-gradient(135deg, #ffd700, #ccaa00); }
+  .info-item.smem h3 { color: #00ff88; }
+  .info-item.l2 h3 { color: #ffd700; }
+  /* Timeline styles */
+  .timeline-section {
+    margin-top: 60px;
+    text-align: center;
+  }
+  .timeline-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+    align-items: center;
+  }
+  .timeline-label {
+    color: #ffd700;
+    font-size: 1.1rem;
+    margin-bottom: 10px;
+  }
+  .timeline-bar {
+    display: block;
+    height: 40px;
+    border-radius: 6px;
+    overflow: visible;
+    width: 500px;
+    position: relative;
+    background: rgba(255,255,255,0.05);
+  }
+  .timeline-segment {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: #fff;
+    position: absolute;
+    height: 100%;
+  }
+  .serial-bar {
+    display: flex;
+    overflow: hidden;
+  }
+  .parallel-bar {
+    display: block;
+  }
+  .rms-segment { background: linear-gradient(135deg, #00d4ff, #0099cc); left: 0; }
+  .linear-segment { background: linear-gradient(135deg, #e94560, #c23a51); }
+  .timeline-total {
+    margin-top: 10px;
+    color: #888;
+    font-size: 0.9rem;
+  }
+  .speedup {
+    margin-top: 20px;
+    color: #aaa;
+    font-size: 1rem;
+  }
+</style>
+</head>
+<body>
+  <h1>RMS Norm + Linear Kernel Fusion</h1>
+  <p class="subtitle">Block分配：Wave1 (RMS Norm) | Wave2 (Linear)</p>
+
+  <div class="wave-grid">
+    <!-- Wave 1: 上 -->
+    <div>
+      <div class="col-label">Wave 1 - RMS Norm</div>
+      <div class="col">
+        <div class="block rms">RMS</div>
+        <div class="block smem">SMEM</div>
+        <div class="block smem">SMEM</div>
+        <div class="block smem">SMEM</div>
+        <div class="block smem">SMEM</div>
+        <div class="block smem">SMEM</div>
+        <div class="block smem">SMEM</div>
+        <div class="block l2">L2</div>
+        <div class="block l2">L2</div>
+        <div class="block l2">L2</div>
+      </div>
+    </div>
+    <!-- Wave 2: 下 -->
+    <div>
+      <div class="col-label">Wave 2 - Linear</div>
+      <div class="col">
+        <div class="block empty"></div>
+        <div class="block linear">L</div>
+        <div class="block linear">L</div>
+        <div class="block linear">L</div>
+        <div class="block linear">L</div>
+        <div class="block linear">L</div>
+        <div class="block linear">L</div>
+        <div class="block empty"></div>
+        <div class="block empty"></div>
+        <div class="block empty"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="info-item rms">
+      <h3>RMS Norm</h3>
+      <p>占用第一列1个Block<br>Wave 1执行</p>
+    </div>
+    <div class="info-item linear">
+      <h3>Linear</h3>
+      <p>占用第二列第2-7行6个Block<br>Wave 2执行</p>
+    </div>
+    <div class="info-item smem">
+      <h3>SMEM Prefetch</h3>
+      <p>Wave 1第2-7行6个Block<br>共享内存预取</p>
+    </div>
+    <div class="info-item l2">
+      <h3>L2 Prefetch</h3>
+      <p>Wave 1第8-10行3个Block<br>L2缓存预取</p>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item">
+      <div class="legend-block legend-rms"></div>
+      <span>RMS Norm Kernel</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-block legend-linear"></div>
+      <span>Linear Kernel</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-block legend-smem"></div>
+      <span>SMEM Prefetch</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-block legend-l2"></div>
+      <span>L2 Prefetch</span>
+    </div>
+  </div>
+
+  <!-- Timeline Section -->
+  <div class="timeline-section">
+    <h2 style="color:#ffd700; margin-top:50px; margin-bottom:20px;">融合效果对比</h2>
+    <div class="timeline-grid">
+      <!-- Serial -->
+      <div>
+        <div class="timeline-label">串行 (Serial)</div>
+        <div class="timeline-bar serial-bar">
+          <div class="timeline-segment rms-segment" style="width:10%;">RMS 1μs</div>
+          <div class="timeline-segment linear-segment" style="width:90%;">Linear 9μs</div>
+        </div>
+        <div class="timeline-total">总计: 10μs</div>
+      </div>
+      <!-- Parallel -->
+      <div>
+        <div class="timeline-label">并行 (Parallel)</div>
+        <div class="timeline-bar parallel-bar">
+          <div class="timeline-segment rms-segment" style="width:10%;">RMS 1μs</div>
+          <div class="timeline-segment linear-segment" style="width:90%; left:5%;">Linear 9μs</div>
+        </div>
+        <div class="timeline-total">重叠 0.5μs | 总计: 9.5μs</div>
+      </div>
+    </div>
+    <div class="speedup">加速比: <span style="color:#00ff88;">1.05x</span></div>
+  </div>
+</body>
+</html>

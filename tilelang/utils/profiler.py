@@ -165,7 +165,8 @@ def _bench_with_cuda_events(
 
     # Run benchmark iterations
     for i in range(n_repeat):
-        cache.zero_()  # Clear L2 cache
+        # cache.zero_()  # Clear L2 cache
+        cache.random_()
         start_events[i].record()
         fn()
         end_events[i].record()

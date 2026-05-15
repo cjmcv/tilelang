@@ -17,6 +17,10 @@ from common.micro_config import get_arch, get_thread_num, get_target_str, is_meg
 # 优化重点        减少固定开销           隐藏内存延迟           短序列的固定开销占比大，长序列内存问题突出
 #####################################################################################################
 
+# 双kernel拆分的实现方式又叫flashdecoding，在seq_q很小的时候使用，对seq_k的序列维度上进行拆分。
+# batch/seq_q维度天然可并行，但在seq_q小时，占不满sm，拆分seq_k会很合适方式 (seq_v不需要拆分处理)。
+# 对应到gemm里，就是split-k。分开算完后，需要一个额外的kernel，对k维度进行reduce汇总。
+
 # ┌──────────────────────────────────────────┐
 # │  Step 1: Q × K^T                         │
 # │  - 矩阵乘法: [seq_q, dim] × [dim, seq_k]  │

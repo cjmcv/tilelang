@@ -658,18 +658,29 @@ def test_prefetch_weight_residual(mk, max_batch_size, batch_size, N, K, spec_lay
     )
     layers.compile_load(input_tensors=input_tensors, enable_prefetch=ENABLE_PREFETCH, is_no_compile=args.nc, output_dir=args.output_dir)
     
+    def ref_core():
+        O1 = TorchRef.silu_and_mul(x_torch[:batch_size])
+        O2 = TorchRef.linear(O1, w_down_proj_torch) + x_residual_torch
+        return O2
+    ref_graph, ref_output = TorchRef.compile_capture(ref_core, is_compile=False)
     def torch_ref():
-        silu_mul = TorchRef.silu_and_mul(x_torch[:batch_size])
-        return TorchRef.linear(silu_mul, w_down_proj_torch) + x_residual_torch
-
-    def target_func():
+        ref_graph.replay()
+        return ref_output
+    #
+    def target_core():
         mk(batch_size)
-        return out_torch[:batch_size]
-        
-    target_output = target_func()    
-    ref_output = torch_ref()
-    reporter.generate_report(target_func, torch_ref, 
-                            warnup_iter=100, test_iter=100, 
+        return out_torch[:batch_size] 
+    graph2, ref_output2 = TorchRef.compile_capture(target_core, is_compile=False)
+    def target_func():
+        graph2.replay()
+        return ref_output2
+    ref_output2.zero_()    
+    # 
+     
+    # target_output = target_func()    
+    # ref_output = torch_ref()
+    reporter.generate_report(target_core, torch_ref, 
+                            warnup_iter=200, test_iter=200, 
                             allclose_iter=5, print_mode=1)
    
    
